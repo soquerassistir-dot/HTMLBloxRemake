@@ -1,0 +1,166 @@
+/* ============================================================
+   HTMLBLOX — style.css
+   ============================================================ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a0f;
+  font-family: Verdana, Geneva, Tahoma, Arial, sans-serif;
+  color: #fff;
+  user-select: none;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: crosshair;
+}
+
+/* ============================================================
+   HUD
+   ============================================================ */
+#hud {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  padding: 10px 14px;
+  min-width: 190px;
+  background: rgba(0, 0, 0, 0.42);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.95);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.hud-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.hud-key {
+  color: #cfcfcf;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+#hud-fps { color: #8ef08e; font-weight: bold; }
+#hud-players { color: #ffd166; font-weight: bold; }
+#hud-user { color: #ffe97a; font-weight: bold; }
+#hud-game { color: #8ac6ff; font-weight: bold; }
+
+#hud-conn {
+  font-weight: bold;
+  letter-spacing: 0.6px;
+}
+.conn-on  { color: #6fe36f; }
+.conn-off { color: #ff6b6b; }
+.conn-wait{ color: #ffd166; }
+
+.hud-sep {
+  height: 1px;
+  margin: 6px 0;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.hud-controls {
+  font-size: 11px;
+  color: #b9c4cf;
+  line-height: 1.6;
+}
+.hud-controls b { color: #ffffff; }
+
+/* ============================================================
+   Crosshair
+   ============================================================ */
+#crosshair {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  display: none;
+  pointer-events: none;
+  z-index: 9;
+}
+
+/* ============================================================
+   Chat
+   ============================================================ */
+#chat {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  width: 380px;
+  max-width: calc(100vw - 28px);
+  font-size: 13px;
+  z-index: 12;
+  pointer-events: none;
+}
+
+#chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.chat-msg {
+  background: rgba(0, 0, 0, 0.45);
+  border-left: 3px solid rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+  padding: 3px 8px;
+  color: #eaeaea;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.95);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  animation: chatFade 0.22s ease-out;
+}
+
+@keyframes chatFade {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.chat-name { font-weight: bold; }
+
+#chat-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: 1px 1px 2px #000;
+  pointer-events: none;
+}
+#chat-hint b { color: #ffe97a; }
+
+#chat-input {
+  display: none;
+  width: 100%;
+  padding: 7px 10px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+  pointer-events: auto;
+}
+#chat-input:focus { border-color: #ffe97a; }
+
+#chat.open #chat-hint { display: none; }
+#chat.open #chat-input { display: block; }
