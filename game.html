@@ -421,8 +421,8 @@
 <script type="module" src="game.js"></script>
 <script>
 /* Anti-inspect */
-(function(){
-  const block=document.getElementById('no-inspect');let triggered=false;
+/*(function(){
+ const block=document.getElementById('no-inspect');let triggered=false;
   const trigger=()=>{if(triggered)return;triggered=true;block.classList.add('show');try{document.body.innerHTML=''}catch(e){}try{window.location.replace('about:blank')}catch(e){}setTimeout(()=>{try{window.close()}catch(e){}},100)};
   document.addEventListener('keydown',(e)=>{const k=(e.key||'').toLowerCase();
     if(e.key==='F12'){e.preventDefault();trigger();return false}
