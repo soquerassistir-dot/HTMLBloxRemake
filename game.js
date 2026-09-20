@@ -412,31 +412,75 @@ let __studBase = null;
 let __studLoaded = false;
 const __studReadyCallbacks = [];
 
+function __makeProceduralStudTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 64, 64);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.arc(32, 33, 12, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.beginPath(); ctx.arc(32, 31, 12, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.arc(32, 30, 10, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.beginPath(); ctx.arc(32, 32, 8, 0, Math.PI * 2); ctx.fill();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 8;
+  console.log('[studio] using procedural stud texture (fallback)');
+  return tex;
+}
+
 (function preloadStud() {
-  __texLoader.load(
-    'stud.png',
-    (tex) => {
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.magFilter = THREE.LinearFilter;
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
-      tex.generateMipmaps = true;
-      tex.anisotropy = 8;
-      __studBase = tex;
-      __studLoaded = true;
-      for (const cb of __studReadyCallbacks) cb();
-      __studReadyCallbacks.length = 0;
-      console.log('[game] stud.png loaded');
-    },
-    undefined,
-    (err) => {
-      console.warn('[game] stud.png failed to load:', err);
-      __studBase = null;
-      __studLoaded = true;
-      for (const cb of __studReadyCallbacks) cb();
-      __studReadyCallbacks.length = 0;
-    }
-  );
+  const candidates = ['stud.png', 'Stud.png', 'STUD.png', '/stud.png'];
+  let idx = 0;
+
+  function useFallback() {
+    console.warn('[studio] stud.png not found, using procedural fallback');
+    __studBase = __makeProceduralStudTexture();
+    __studLoaded = true;
+    for (const cb of __studReadyCallbacks) cb();
+    __studReadyCallbacks.length = 0;
+  }
+
+  function tryNext() {
+    if (idx >= candidates.length) return useFallback();
+    const url = candidates[idx++];
+    console.log('[studio] → trying:', url);
+    __texLoader.load(
+      url,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.magFilter = THREE.LinearFilter;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = true;
+        tex.anisotropy = 8;
+        __studBase = tex;
+        __studLoaded = true;
+        console.log('[studio] ✅ stud loaded from:', url);
+        for (const cb of __studReadyCallbacks) cb();
+        __studReadyCallbacks.length = 0;
+      },
+      undefined,
+      () => {
+        console.warn('[studio] ✗ failed:', url);
+        tryNext();
+      }
+    );
+  }
+
+  tryNext();
 })();
 
 function getStudTexture(repeatX, repeatY) {
