@@ -185,6 +185,114 @@
   #no-inspect{position:fixed;inset:0;background:#0a0a0f;color:#ff5555;z-index:99999;display:none;align-items:center;justify-content:center;font-family:'Arial Black',sans-serif;font-size:22px;text-align:center;padding:40px}
   #no-inspect.show{display:flex}
 
+  /* ============================================================
+     HOME — Welcome banner + Friends row
+     ============================================================ */
+  .home-welcome{
+    background:linear-gradient(135deg,#2a5fa8 0%,#1a3d70 100%);
+    border:1px solid #0a2450;
+    border-radius:8px;
+    padding:22px 26px;
+    display:flex;
+    align-items:center;
+    gap:26px;
+    margin-bottom:16px;
+    color:#fff;
+    box-shadow:0 4px 20px rgba(0,0,0,.15);
+    flex-wrap:wrap;
+  }
+  .home-welcome-avatar{
+    width:120px;height:120px;flex-shrink:0;
+    border-radius:50%;
+    overflow:hidden;
+    border:4px solid #ffdd00;
+    background:linear-gradient(180deg,#87ceeb,#d6ecff);
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+    position:relative;
+  }
+  .home-welcome-avatar canvas{width:100%;height:100%;display:block}
+  .home-welcome-info{flex:1;min-width:220px}
+  .home-welcome-label{
+    font-size:12px;letter-spacing:3px;
+    text-transform:uppercase;opacity:.8;font-weight:bold;
+  }
+  .home-welcome-name{
+    font-family:'Arial Black',Arial,sans-serif;
+    font-size:30px;font-weight:900;letter-spacing:-1px;
+    margin-top:4px;
+    text-shadow:2px 2px 0 rgba(0,0,0,.3);
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .home-welcome-stats{
+    margin-top:10px;font-size:12px;opacity:.9;
+    display:flex;gap:16px;flex-wrap:wrap;
+  }
+  .home-welcome-stats b{color:#ffdd00}
+
+  .home-friends-row{
+    display:flex;gap:18px;overflow-x:auto;
+    padding:6px 4px 16px;
+    scrollbar-width:thin;
+  }
+  .home-friend{
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    cursor:pointer;transition:transform .12s;
+    flex-shrink:0;width:96px;background:transparent;border:none;
+    font-family:inherit;padding:0;
+  }
+  .home-friend:hover{transform:translateY(-3px)}
+  .home-friend-avatar-wrap{
+    width:88px;height:88px;border-radius:50%;
+    overflow:hidden;position:relative;
+    border:3px solid #4a7ab8;
+    background:linear-gradient(180deg,#87ceeb,#d6ecff);
+    box-shadow:0 4px 14px rgba(0,0,0,.18);
+    transition:border-color .12s;
+  }
+  .home-friend:hover .home-friend-avatar-wrap{border-color:#ffdd00}
+  .home-friend-avatar-wrap canvas{width:100%;height:100%;display:block}
+  .home-friend-name{
+    font-size:11px;font-weight:bold;color:#003366;
+    text-align:center;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:96px;width:100%;
+  }
+  .home-friend-online{
+    position:absolute;bottom:4px;right:4px;
+    width:14px;height:14px;border-radius:50%;
+    background:#4a9948;border:2px solid #fff;
+    box-shadow:0 0 6px rgba(74,153,72,.7);
+    z-index:3;
+  }
+  .home-friend-add .home-friend-avatar-wrap{
+    border:3px dashed #4a7ab8;background:#f0f6ff;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .home-friend-add .home-friend-avatar-wrap::before{
+    content:'+';font-size:44px;font-weight:900;color:#4a7ab8;
+    line-height:1;margin-top:-4px;
+  }
+  .home-friend-add:hover .home-friend-avatar-wrap{
+    border-color:#ffdd00;background:#fffbe0;
+  }
+  .home-friend-add .home-friend-name{color:#4a7ab8}
+
+  /* Player profile modal */
+  #player-modal{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
+  #player-modal.open{display:flex}
+  .player-modal-box{background:#fff;border:3px solid #1f4d8f;border-radius:10px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+  .player-modal-header{background:linear-gradient(180deg,#1f4d8f,#16407a);padding:12px 16px;display:flex;align-items:center;color:#fff}
+  .player-modal-header .t{flex:1;font-family:'Arial Black',sans-serif;font-size:15px;letter-spacing:-.3px}
+  .player-modal-header .close{background:#c0392b;color:#fff;border:2px outset #e74c3c;width:26px;height:26px;border-radius:3px;cursor:pointer;font-weight:bold;font-size:15px;line-height:1}
+  .player-modal-body{padding:22px;text-align:center}
+  .player-modal-avatar{width:180px;height:240px;margin:0 auto 16px;border-radius:12px;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #c8c8c8;overflow:hidden}
+  .player-modal-avatar canvas{width:100%;height:100%;display:block}
+  .player-modal-name{font-family:'Arial Black',sans-serif;font-size:22px;color:#003366;letter-spacing:-.5px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .player-modal-id{font-family:monospace;color:#888;margin-top:4px;font-size:12px}
+  .player-modal-status{margin-top:14px;padding:12px 14px;background:#f0f6ff;border:1px solid #cfe0f5;border-radius:6px;font-size:12px;color:#333;line-height:1.6}
+  .player-modal-status .online{color:#2e7d32;font-weight:bold}
+  .player-modal-status .offline{color:#999;font-weight:bold}
+  .player-modal-status .playing a{color:#1a4a9c;font-weight:bold;text-decoration:underline;cursor:pointer}
+
   @media(max-width:780px){
     .header{padding:8px 10px;gap:8px}
     .logo{font-size:18px}
@@ -201,13 +309,19 @@
     .editor-layout,.game-detail{grid-template-columns:1fr}
     .overlay-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:150}
     .overlay-backdrop.show{display:block}
+    .home-welcome{padding:16px;gap:16px}
+    .home-welcome-avatar{width:88px;height:88px;border-width:3px}
+    .home-welcome-name{font-size:22px}
+    .home-friend{width:80px}
+    .home-friend-avatar-wrap{width:72px;height:72px}
+    .home-friend-name{font-size:10px;max-width:80px}
   }
   @media(max-width:420px){.game-grid,.friends-grid,.requests-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
-<div id="no-inspect"><div><b>ACESSO NEGADO</b><br><br>Ferramentas de desenvolvedor detectadas.<br>Feche-as para continuar.</div></div>
+<div id="no-inspect"><div><b>ACCESS DENIED</b><br><br>Developer tools detected.<br>Close them to continue.</div></div>
 
 <div id="loading-screen">
   <img src="logo.png" class="logo-big" onerror="this.style.display='none'" alt="" />
@@ -311,6 +425,29 @@
     <main class="content" id="content">
 
       <div class="page active" id="page-home">
+        <div class="home-welcome">
+          <div class="home-welcome-avatar" id="home-welcome-avatar"></div>
+          <div class="home-welcome-info">
+            <div class="home-welcome-label">Welcome back</div>
+            <div class="home-welcome-name" id="home-welcome-name">@username</div>
+            <div class="home-welcome-stats" id="home-welcome-stats">
+              <span><b id="home-friends-stat">0</b> friends</span>
+              <span><b id="home-games-stat">0</b> games</span>
+              <span><b id="home-online-stat">0</b> online now</span>
+            </div>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">
+            Friends
+            <span class="panel-count" id="home-friends-count">0 friends</span>
+          </div>
+          <div class="panel-body">
+            <div class="home-friends-row" id="home-friends-row"></div>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="panel-title">Featured <span class="panel-count" id="home-count">0 games</span></div>
           <div class="panel-body"><div class="game-grid" id="home-game-grid"></div></div>
@@ -343,7 +480,7 @@
                 </div>
                 <p class="game-detail-desc" id="detail-desc">...</p>
                 <div>
-                  <button class="btn-back" id="detail-back">← Voltar</button>
+                  <button class="btn-back" id="detail-back">← Back</button>
                   <button class="btn-play-lg" id="detail-play">▶ PLAY</button>
                 </div>
               </div>
@@ -354,27 +491,27 @@
 
       <div class="page" id="page-friends">
         <section class="panel">
-          <div class="panel-title">Adicionar Amigo <span class="panel-count">envia pedido</span></div>
+          <div class="panel-title">Add Friend <span class="panel-count">send a request</span></div>
           <div class="panel-body">
             <div class="friend-add-row">
-              <input type="text" id="friend-username" placeholder="Digite o username (ex: Edge)" maxlength="20" autocomplete="off" />
-              <button id="friend-add-btn">Enviar Pedido</button>
+              <input type="text" id="friend-username" placeholder="Enter username (e.g. Edge)" maxlength="20" autocomplete="off" />
+              <button id="friend-add-btn">Send Request</button>
             </div>
           </div>
         </section>
 
         <section class="panel">
-          <div class="panel-title">Pedidos Recebidos <span class="panel-count" id="requests-count">0</span></div>
+          <div class="panel-title">Incoming Requests <span class="panel-count" id="requests-count">0</span></div>
           <div class="panel-body"><div class="requests-grid" id="incoming-requests"></div></div>
         </section>
 
         <section class="panel">
-          <div class="panel-title">Pedidos Enviados <span class="panel-count" id="outgoing-count">0</span></div>
+          <div class="panel-title">Sent Requests <span class="panel-count" id="outgoing-count">0</span></div>
           <div class="panel-body"><div class="requests-grid" id="outgoing-requests"></div></div>
         </section>
 
         <section class="panel">
-          <div class="panel-title">Meus Amigos <span class="panel-count" id="friends-count">0</span></div>
+          <div class="panel-title">My Friends <span class="panel-count" id="friends-count">0</span></div>
           <div class="panel-body"><div class="friends-grid" id="friends-grid"></div></div>
         </section>
       </div>
@@ -405,11 +542,11 @@
 
       <div class="page" id="page-avatar">
         <section class="panel">
-          <div class="panel-title">Edit Avatar <span class="panel-count">arraste para girar</span></div>
+          <div class="panel-title">Edit Avatar <span class="panel-count">drag to rotate</span></div>
           <div class="panel-body">
             <div class="editor-layout">
               <div class="editor-preview" id="edit-avatar-3d">
-                <div class="editor-preview-hint">Arraste para girar</div>
+                <div class="editor-preview-hint">Drag to rotate</div>
               </div>
               <div>
                 <div class="color-picker-row"><label>Head</label><input type="color" id="edit-head" value="#f5cd30" /><span class="hex" id="hex-head">#f5cd30</span></div>
@@ -429,6 +566,21 @@
       </div>
 
     </main>
+  </div>
+</div>
+
+<div id="player-modal">
+  <div class="player-modal-box">
+    <div class="player-modal-header">
+      <span class="t" id="player-modal-title">Player</span>
+      <button class="close" id="player-modal-close">×</button>
+    </div>
+    <div class="player-modal-body">
+      <div class="player-modal-avatar" id="player-modal-avatar"></div>
+      <div class="player-modal-name" id="player-modal-name">...</div>
+      <div class="player-modal-id" id="player-modal-id">#0</div>
+      <div class="player-modal-status" id="player-modal-status">Loading...</div>
+    </div>
   </div>
 </div>
 
@@ -468,6 +620,7 @@ const state = {
   user: null, profile: null, currentPage: 'home',
   playerCount: 0,
   gameCounts: {},                 // slug -> count
+  presenceByUser: {},             // user_id -> { username, game, online_at }
   presenceChannel: null,
   gamesCache: [], friendsCache: [], incomingCache: [], outgoingCache: [],
   avatarViewers: new Map(),
@@ -494,7 +647,6 @@ function normalizeAvatarColors(a){
 }
 function admBadge(cls){return '<span class="adm-badge'+(cls?' '+cls:'')+'">ADM</span>'}
 
-/* Escapa string para uso seguro dentro de url("...") em CSS */
 function cssUrlSafe(url){
   return String(url).replace(/["\\\n\r]/g, ch => ({
     '"': '%22', '\\': '%5C', '\n': '', '\r': ''
@@ -505,8 +657,9 @@ function cssUrlSafe(url){
    AVATAR 3D
    ============================================================ */
 async function mountAvatar3D(container,colors,opts={}){
+  if(!container) return null;
   const prev=state.avatarViewers.get(container);
-  if(prev){prev.dispose();state.avatarViewers.delete(container)}
+  if(prev){try{prev.dispose()}catch(e){}state.avatarViewers.delete(container)}
   const THREE=await import('three');
   container.innerHTML='';
   const canvas=document.createElement('canvas');
@@ -570,34 +723,34 @@ $('su-username').addEventListener('input',()=>{
   clearTimeout(_userCheckTimer);
   const hint=$('su-username-hint'),v=$('su-username').value.trim();
   if(v.length<3){hint.textContent='Letters, numbers, _ and - only';hint.className='hint';return}
-  if(!/^[a-zA-Z0-9_-]{3,20}$/.test(v)){hint.textContent='Apenas letras, números, _ e - (3-20 chars)';hint.className='hint bad';return}
-  hint.textContent='Verificando...';hint.className='hint';
+  if(!/^[a-zA-Z0-9_-]{3,20}$/.test(v)){hint.textContent='Only letters, numbers, _ and - (3-20 chars)';hint.className='hint bad';return}
+  hint.textContent='Checking...';hint.className='hint';
   _userCheckTimer=setTimeout(async()=>{
     const{data}=await sb.from('profiles').select('id').ilike('username',v).limit(1);
-    if(data&&data.length){hint.textContent='Username já está em uso';hint.className='hint bad'}
-    else{hint.textContent='Username disponível';hint.className='hint ok'}
+    if(data&&data.length){hint.textContent='Username already taken';hint.className='hint bad'}
+    else{hint.textContent='Username available';hint.className='hint ok'}
   },350);
 });
 
 $('signup-form').addEventListener('submit',async(e)=>{
   e.preventDefault();clearAuthError();
   const username=$('su-username').value.trim(),email=$('su-email').value.trim(),birthdate=$('su-birthdate').value,password=$('su-password').value,password2=$('su-password2').value;
-  if(!/^[a-zA-Z0-9_-]{3,20}$/.test(username))return showAuthError('Username inválido');
-  if(password.length<6)return showAuthError('Senha muito curta');
-  if(password!==password2)return showAuthError('Senhas não coincidem');
-  if(!birthdate)return showAuthError('Informe a data de nascimento');
+  if(!/^[a-zA-Z0-9_-]{3,20}$/.test(username))return showAuthError('Invalid username');
+  if(password.length<6)return showAuthError('Password too short');
+  if(password!==password2)return showAuthError('Passwords do not match');
+  if(!birthdate)return showAuthError('Please enter your birthdate');
   const age=(Date.now()-new Date(birthdate).getTime())/(1000*60*60*24*365.25);
-  if(age<5)return showAuthError('Idade mínima: 5 anos');
+  if(age<5)return showAuthError('Minimum age: 5 years');
   const{data:taken}=await sb.from('profiles').select('id').ilike('username',username).limit(1);
-  if(taken&&taken.length)return showAuthError('Username já está em uso');
+  if(taken&&taken.length)return showAuthError('Username already taken');
   const btn=$('su-submit');btn.disabled=true;btn.textContent='Creating account...';
   const{data,error}=await sb.auth.signUp({email,password,options:{data:{username,birthdate}}});
   btn.disabled=false;btn.textContent='Create Account';
-  if(error){if(/already.*registered/i.test(error.message))return showAuthError('Este email já está cadastrado');return showAuthError(error.message)}
+  if(error){if(/already.*registered/i.test(error.message))return showAuthError('This email is already registered');return showAuthError(error.message)}
   if(data.session){await onLoggedIn(data.user);return}
   const login=await sb.auth.signInWithPassword({email,password});
   if(!login.error&&login.data.user){await onLoggedIn(login.data.user);return}
-  showAuthError('Conta criada! Confirme seu email e faça login.',true);
+  showAuthError('Account created! Check your email and log in.',true);
   $$('.auth-tab').forEach(t=>t.classList.toggle('active',t.dataset.authTab==='login'));
   $('signup-form').style.display='none';$('login-form').style.display='block';
 });
@@ -636,6 +789,7 @@ async function onLoggedIn(user){
   navigate('home');
   await loadGameCards();
   await refreshFriendsData();
+  await renderHome();
   joinPresence();
 }
 
@@ -644,7 +798,7 @@ $('logout-btn').addEventListener('click',async()=>{
   await sb.auth.signOut();
   if(state.presenceChannel){try{await sb.removeChannel(state.presenceChannel)}catch{}state.presenceChannel=null}
   state.user=null;state.profile=null;
-  state.avatarViewers.forEach(v=>v.dispose());state.avatarViewers.clear();
+  state.avatarViewers.forEach(v=>{try{v.dispose()}catch(e){}});state.avatarViewers.clear();
   $('app').classList.remove('active');
   $('auth-screen').classList.add('active');
   $$('.auth-tab').forEach(t=>t.classList.toggle('active',t.dataset.authTab==='login'));
@@ -679,6 +833,7 @@ function navigate(page){
   $$('.sidebar-menu button').forEach(b=>b.classList.toggle('active',b.dataset.nav===page));
   $$('.header-nav button').forEach(b=>b.classList.toggle('active',b.dataset.nav===page));
   $('sidebar').classList.remove('open');$('overlay-backdrop').classList.remove('show');
+  if(page==='home')renderHome();
   if(page==='profile')renderProfilePage();
   if(page==='avatar')renderAvatarEditor();
   if(page==='friends')renderFriendsPage();
@@ -698,9 +853,6 @@ async function loadGameCards(){
   const{data,error}=await sb.from('games').select('*').order('created_at');
   if(!error&&data)games=data;
 
-  // Filtra visibilidade:
-  // - Jogos públicos (is_public !== false) aparecem pra todos
-  // - Jogos privados só aparecem pro próprio autor
   const myId = state.user ? state.user.id : null;
   if (myId) {
     games = games.filter(g => g.is_public !== false || g.author_id === myId);
@@ -718,7 +870,7 @@ async function loadGameCards(){
   if(state.user){
     const mine=games.filter(g=>g.author_id===state.user.id);
     if(mine.length)mine.forEach(g=>profileGrid.appendChild(buildGameCard(g)));
-    else profileGrid.innerHTML='<div style="color:#888;font-size:12px">Você ainda não criou jogos.</div>';
+    else profileGrid.innerHTML='<div style="color:#888;font-size:12px">You haven\'t created any games yet.</div>';
   }
   $('home-count').textContent = list.length + (list.length === 1 ? ' game' : ' games');
   $('games-count').textContent = games.length + (games.length === 1 ? ' game' : ' games');
@@ -779,16 +931,12 @@ function drawGamePreview(canvas){
 }
 
 function updatePlayerCounts() {
-  // Cada card tem data-game="slug"
   document.querySelectorAll('[data-online-count]').forEach(el => {
     const slug = el.dataset.game;
     const c = (slug && state.gameCounts[slug]) || 0;
     el.textContent = c === 1 ? '1 online' : c + ' online';
-    // Cor verde se tiver gente, cinza se vazio
     el.style.color = c > 0 ? '#4a9948' : '#999';
   });
-
-  // Página de detalhe
   const dp = $('detail-online');
   if (dp) {
     const g = state.currentGameDetail;
@@ -812,7 +960,7 @@ function openGameDetail(game){
   $('detail-author').textContent=game.author_name||'unknown';
   $('detail-genre').textContent=game.genre||'Sandbox';
   $('detail-created').textContent=game.created_at?new Date(game.created_at).getFullYear():'—';
-  $('detail-desc').textContent=game.description||'Sem descrição.';
+  $('detail-desc').textContent=game.description||'No description.';
   const _c = state.gameCounts[game.slug] || 0;
   $('detail-players').textContent = _c;
   $('detail-online').textContent = _c === 1 ? '1 online' : _c + ' online';
@@ -933,7 +1081,7 @@ async function renderFriendsPage(){
   const incEl=$('incoming-requests');
   $('requests-count').textContent=state.incomingCache.length;
   if(!state.incomingCache.length){
-    incEl.innerHTML='<div class="empty-note">Nenhum pedido pendente.</div>';
+    incEl.innerHTML='<div class="empty-note">No pending requests.</div>';
   } else {
     incEl.innerHTML='';
     for(const r of state.incomingCache){
@@ -941,17 +1089,18 @@ async function renderFriendsPage(){
       const card=document.createElement('div');
       card.className='request-card';
       card.innerHTML=
-        '<div class="request-avatar-3d"></div>'+
+        '<div class="request-avatar-3d" style="cursor:pointer"></div>'+
         '<div class="request-info">'+
           '<div class="request-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div>'+
           '<div class="request-id">#'+(f.display_id||'0')+'</div>'+
         '</div>'+
         '<div class="request-actions">'+
-          '<button class="req-accept" data-id="'+r.id+'">Aceitar</button>'+
-          '<button class="req-reject" data-id="'+r.id+'">Recusar</button>'+
+          '<button class="req-accept" data-id="'+r.id+'">Accept</button>'+
+          '<button class="req-reject" data-id="'+r.id+'">Decline</button>'+
         '</div>';
       incEl.appendChild(card);
       mountAvatar3D(card.querySelector('.request-avatar-3d'),f.avatar_colors,{autoRotate:true});
+      card.querySelector('.request-avatar-3d').addEventListener('click',()=>showPlayerProfile(f.id));
       card.querySelector('.req-accept').addEventListener('click',()=>respondRequest(r.id,true));
       card.querySelector('.req-reject').addEventListener('click',()=>respondRequest(r.id,false));
     }
@@ -960,7 +1109,7 @@ async function renderFriendsPage(){
   const outEl=$('outgoing-requests');
   $('outgoing-count').textContent=state.outgoingCache.length;
   if(!state.outgoingCache.length){
-    outEl.innerHTML='<div class="empty-note">Nenhum pedido enviado.</div>';
+    outEl.innerHTML='<div class="empty-note">No sent requests.</div>';
   } else {
     outEl.innerHTML='';
     for(const r of state.outgoingCache){
@@ -968,16 +1117,17 @@ async function renderFriendsPage(){
       const card=document.createElement('div');
       card.className='request-card';
       card.innerHTML=
-        '<div class="request-avatar-3d"></div>'+
+        '<div class="request-avatar-3d" style="cursor:pointer"></div>'+
         '<div class="request-info">'+
           '<div class="request-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div>'+
           '<div class="request-id">#'+(f.display_id||'0')+'</div>'+
         '</div>'+
         '<div class="request-actions">'+
-          '<button class="req-cancel" data-id="'+r.id+'">Cancelar</button>'+
+          '<button class="req-cancel" data-id="'+r.id+'">Cancel</button>'+
         '</div>';
       outEl.appendChild(card);
       mountAvatar3D(card.querySelector('.request-avatar-3d'),f.avatar_colors,{autoRotate:true});
+      card.querySelector('.request-avatar-3d').addEventListener('click',()=>showPlayerProfile(f.id));
       card.querySelector('.req-cancel').addEventListener('click',()=>cancelRequest(r.id));
     }
   }
@@ -985,7 +1135,7 @@ async function renderFriendsPage(){
   const fEl=$('friends-grid');
   $('friends-count').textContent=state.friendsCache.length;
   if(!state.friendsCache.length){
-    fEl.innerHTML='<div class="empty-note">Você ainda não tem amigos. Envie um pedido acima.</div>';
+    fEl.innerHTML='<div class="empty-note">You have no friends yet. Send a request above.</div>';
   } else {
     fEl.innerHTML='';
     for(const r of state.friendsCache){
@@ -993,18 +1143,19 @@ async function renderFriendsPage(){
       const card=document.createElement('div');
       card.className='friend-card';
       card.innerHTML=
-        '<button class="friend-remove" title="Remover amigo" data-id="'+f.id+'">×</button>'+
-        '<div class="friend-avatar-3d"></div>'+
+        '<button class="friend-remove" title="Remove friend" data-id="'+f.id+'">×</button>'+
+        '<div class="friend-avatar-3d" style="cursor:pointer"></div>'+
         '<div class="friend-info">'+
           '<div class="friend-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div>'+
           '<div class="friend-id">#'+(f.display_id||'0')+'</div>'+
         '</div>';
       fEl.appendChild(card);
       mountAvatar3D(card.querySelector('.friend-avatar-3d'),f.avatar_colors,{autoRotate:true});
+      card.querySelector('.friend-avatar-3d').addEventListener('click',()=>showPlayerProfile(f.id));
       card.querySelector('.friend-remove').addEventListener('click',async()=>{
-        if(!confirm('Remover '+f.username+' dos seus amigos?'))return;
+        if(!confirm('Remove '+f.username+' from your friends?'))return;
         await sb.rpc('remove_friend',{other_id:f.id});
-        showToast('Amigo removido');
+        showToast('Friend removed');
         renderFriendsPage();
       });
     }
@@ -1013,33 +1164,208 @@ async function renderFriendsPage(){
 
 async function respondRequest(id,accept){
   const{data,error}=await sb.rpc('respond_friend_request',{req_id:id,accept});
-  if(error)return showToast('Erro: '+error.message,'error');
-  showToast(accept?'Pedido aceito!':'Pedido recusado',accept?'success':'');
+  if(error)return showToast('Error: '+error.message,'error');
+  showToast(accept?'Request accepted!':'Request declined',accept?'success':'');
   renderFriendsPage();
 }
 async function cancelRequest(id){
   const{error}=await sb.rpc('cancel_friend_request',{req_id:id});
-  if(error)return showToast('Erro: '+error.message,'error');
-  showToast('Pedido cancelado');
+  if(error)return showToast('Error: '+error.message,'error');
+  showToast('Request canceled');
   renderFriendsPage();
 }
 
 $('friend-add-btn').addEventListener('click',async()=>{
   const input=$('friend-username'),username=input.value.trim(),btn=$('friend-add-btn');
-  if(!username){showToast('Digite um username','error');return}
-  btn.disabled=true;btn.textContent='Enviando...';
+  if(!username){showToast('Enter a username','error');return}
+  btn.disabled=true;btn.textContent='Sending...';
   const{data,error}=await sb.rpc('send_friend_request',{target_username:username});
-  btn.disabled=false;btn.textContent='Enviar Pedido';
-  if(error){showToast('Erro: '+error.message,'error');return}
+  btn.disabled=false;btn.textContent='Send Request';
+  if(error){showToast('Error: '+error.message,'error');return}
   if(data&&data.error){
-    const map={user_not_found:'Usuário não encontrado',cannot_add_self:'Você não pode se adicionar',already_friends:'Vocês já são amigos',already_pending:'Já existe um pedido pendente',not_authenticated:'Não autenticado'};
+    const map={user_not_found:'User not found',cannot_add_self:"You can't add yourself",already_friends:'You are already friends',already_pending:'A request is already pending',not_authenticated:'Not authenticated'};
     showToast(map[data.error]||data.error,'error');return;
   }
   input.value='';
-  showToast('Pedido enviado!','success');
+  showToast('Request sent!','success');
   renderFriendsPage();
 });
 $('friend-username').addEventListener('keydown',(e)=>{if(e.key==='Enter'){e.preventDefault();$('friend-add-btn').click()}});
+
+/* ============================================================
+   HOME — welcome banner + friends row
+   ============================================================ */
+function updateHomeOnlineStat() {
+  const el = $('home-online-stat');
+  if (el) el.textContent = String(state.playerCount || 0);
+}
+
+async function renderHome() {
+  if (!state.profile) return;
+
+  // Avatar + name
+  const avEl = $('home-welcome-avatar');
+  if (avEl) {
+    state.avatarViewers.get(avEl)?.dispose?.();
+    state.avatarViewers.delete(avEl);
+    await mountAvatar3D(avEl, state.profile.avatar_colors, { autoRotate: true, interactive: true });
+  }
+
+  const nameEl = $('home-welcome-name');
+  if (nameEl) {
+    nameEl.innerHTML = '@' + esc(state.profile.username) +
+      (state.profile.is_adm ? ' ' + admBadge('lg') : '');
+  }
+
+  const friendsStat = $('home-friends-stat');
+  if (friendsStat) friendsStat.textContent = String(state.friendsCache.length);
+
+  const gamesStat = $('home-games-stat');
+  if (gamesStat) {
+    const mine = state.gamesCache.filter(g => g.author_id === state.user?.id);
+    gamesStat.textContent = String(mine.length);
+  }
+
+  updateHomeOnlineStat();
+
+  // Friends row
+  const row = $('home-friends-row');
+  if (!row) return;
+  row.innerHTML = '';
+
+  const countEl = $('home-friends-count');
+  if (countEl) countEl.textContent = state.friendsCache.length === 1
+    ? '1 friend'
+    : state.friendsCache.length + ' friends';
+
+  // "Add friend" circle first
+  const addBtn = document.createElement('button');
+  addBtn.className = 'home-friend home-friend-add';
+  addBtn.type = 'button';
+  addBtn.innerHTML = '<div class="home-friend-avatar-wrap"></div><div class="home-friend-name">Add Friend</div>';
+  addBtn.addEventListener('click', () => {
+    navigate('friends');
+    setTimeout(() => {
+      const inp = $('friend-username');
+      if (inp) inp.focus();
+    }, 80);
+  });
+  row.appendChild(addBtn);
+
+  // Friend circles
+  for (const f of state.friendsCache) {
+    const prof = f.profile;
+    if (!prof) continue;
+
+    const btn = document.createElement('button');
+    btn.className = 'home-friend';
+    btn.type = 'button';
+    btn.title = prof.username;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'home-friend-avatar-wrap';
+
+    const isOnline = !!state.presenceByUser[prof.id];
+    if (isOnline) {
+      const dot = document.createElement('div');
+      dot.className = 'home-friend-online';
+      wrap.appendChild(dot);
+    }
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'home-friend-name';
+    nameEl.textContent = prof.username;
+
+    btn.appendChild(wrap);
+    btn.appendChild(nameEl);
+    row.appendChild(btn);
+
+    mountAvatar3D(wrap, prof.avatar_colors, { autoRotate: true });
+
+    btn.addEventListener('click', () => showPlayerProfile(prof.id));
+  }
+}
+
+/* ============================================================
+   PLAYER PROFILE MODAL
+   ============================================================ */
+async function showPlayerProfile(userId) {
+  const modal = $('player-modal');
+  const title = $('player-modal-title');
+  const avEl = $('player-modal-avatar');
+  const nameEl = $('player-modal-name');
+  const idEl = $('player-modal-id');
+  const statusEl = $('player-modal-status');
+
+  modal.classList.add('open');
+  title.textContent = 'Player';
+  nameEl.textContent = '...';
+  idEl.textContent = '';
+  statusEl.innerHTML = 'Loading...';
+
+  state.avatarViewers.get(avEl)?.dispose?.();
+  state.avatarViewers.delete(avEl);
+  avEl.innerHTML = '';
+
+  const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
+  if (!prof) {
+    nameEl.textContent = 'Unknown';
+    statusEl.innerHTML = '<span class="offline">Player not found.</span>';
+    return;
+  }
+  prof.avatar_colors = normalizeAvatarColors(prof.avatar_colors);
+
+  title.textContent = prof.username;
+  nameEl.innerHTML = esc(prof.username) + (prof.is_adm ? ' ' + admBadge() : '');
+  idEl.textContent = '#' + (prof.display_id || '0');
+
+  await mountAvatar3D(avEl, prof.avatar_colors, { autoRotate: true, interactive: true });
+
+  const pres = state.presenceByUser[userId];
+  let html = '';
+  if (pres) {
+    html += '<div class="online">● ONLINE</div>';
+    if (pres.game) {
+      const g = state.gamesCache.find(x => x.slug === pres.game);
+      const gameLabel = g ? esc(g.name) : esc(pres.game);
+      html += `<div class="playing" style="margin-top:8px">Playing: <a id="player-modal-golink">${gameLabel}</a></div>`;
+    } else {
+      html += '<div style="margin-top:8px">On the website</div>';
+    }
+  } else {
+    html += '<div class="offline">○ OFFLINE</div>';
+  }
+  statusEl.innerHTML = html;
+
+  const link = $('player-modal-golink');
+  if (link && pres && pres.game) {
+    link.addEventListener('click', () => {
+      const g = state.gamesCache.find(x => x.slug === pres.game);
+      if (g) {
+        closePlayerModal();
+        openGameDetail(g);
+      }
+    });
+  }
+}
+
+function closePlayerModal() {
+  const modal = $('player-modal');
+  const avEl = $('player-modal-avatar');
+  state.avatarViewers.get(avEl)?.dispose?.();
+  state.avatarViewers.delete(avEl);
+  modal.classList.remove('open');
+}
+
+$('player-modal-close').addEventListener('click', closePlayerModal);
+$('player-modal').addEventListener('click', (e) => {
+  if (e.target.id === 'player-modal') closePlayerModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('player-modal').classList.contains('open')) {
+    closePlayerModal();
+  }
+});
 
 /* ============================================================
    PRESENCE
@@ -1053,24 +1379,26 @@ function joinPresence() {
     .on('presence', { event: 'sync' }, () => {
       const p = state.presenceChannel.presenceState();
       const counts = {};
+      const byUser = {};
       let total = 0;
       for (const key in p) {
         const metas = p[key];
         if (!Array.isArray(metas)) continue;
         for (const m of metas) {
           total++;
+          byUser[key] = m;
           const g = m && m.game;
           if (g) counts[g] = (counts[g] || 0) + 1;
         }
       }
       state.playerCount = total;
       state.gameCounts = counts;
+      state.presenceByUser = byUser;
       updatePlayerCounts();
+      updateHomeOnlineStat();
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        // O usuario esta no site (nao em um jogo), entao game fica null.
-        // Assim nao aparece no contador de nenhum jogo enquanto navega no site.
         try {
           await state.presenceChannel.track({
             username: state.profile?.username || 'unknown',
