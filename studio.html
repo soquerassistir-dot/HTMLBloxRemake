@@ -245,6 +245,58 @@
     color:#fff;font-size:11px;text-shadow:1px 1px 2px rgba(0,0,0,.6);
     margin-bottom:8px;overflow:hidden
   }
+    .pub-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .pub-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 18px;
+    background: linear-gradient(180deg, #4a7ab8 0%, #356198 100%);
+    border: 2px outset #6b9cd8;
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 4px;
+    text-shadow: 1px 1px 0 rgba(0,0,0,.4);
+    transition: .1s;
+  }
+  .pub-upload-btn:hover { filter: brightness(1.1); }
+  .pub-upload-btn:active { border-style: inset; }
+  .pub-upload-btn svg { width: 14px; height: 14px; }
+  .pub-upload-name {
+    font-size: 11px;
+    color: #666;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pub-upload-name.has-file { color: #006600; font-weight: bold; }
+  .pub-upload-clear {
+    display: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #c0392b;
+    color: #fff;
+    border: none;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .pub-upload-clear:hover { background: #e74c3c; }
+  
   .load-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;padding:2px}
   .load-item{
     display:flex;gap:12px;padding:10px;cursor:pointer;
@@ -528,13 +580,32 @@ print("Done!")</pre>
     <div class="modal-body">
 
       <div class="pub-field">
-        <label>Thumbnail URL</label>
-        <input id="pub-thumb" type="url" placeholder="https://example.com/image.png" />
-        <div class="pub-hint">Cole a URL de uma imagem (jpg/png). Deixe vazio para usar a padrão.</div>
-        <div class="pub-preview" id="pub-preview">Preview</div>
+        <label>Thumbnail</label>
+        <input type="file" id="pub-file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" style="display:none" />
+        <div class="pub-upload-row">
+          <button type="button" class="pub-upload-btn" id="pub-file-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Choose file from PC
+          </button>
+          <span class="pub-upload-name" id="pub-file-name">No file chosen</span>
+          <button type="button" class="pub-upload-clear" id="pub-file-clear" title="Remove file">×</button>
+        </div>
+        <div class="pub-hint">PNG, JPG, WEBP or GIF — max 5 MB. Recommended 1280×720 (16:9).</div>
       </div>
 
       <div class="pub-field">
+        <label>Or paste an image URL</label>
+        <input id="pub-thumb" type="url" placeholder="https://example.com/image.png" />
+        <div class="pub-hint">If you upload a file above, the URL is ignored.</div>
+      </div>
+
+      <div class="pub-preview" id="pub-preview">Preview</div>
+
+      <div class="pub-field" style="margin-top:14px">
         <label>Game Name *</label>
         <input id="pub-name" type="text" maxlength="50" placeholder="My Game" />
       </div>
@@ -566,7 +637,6 @@ print("Done!")</pre>
     </div>
   </div>
 </div>
-
 <!-- ============ LOAD MODAL ============ -->
 <div class="overlay" id="load-modal">
   <div class="modal" style="max-width:680px">
