@@ -1,6 +1,5 @@
 /* ============================================================
    HTMLBLOX ENGINE — game.js
-
    ============================================================ */
 
 import * as THREE from 'three';
@@ -420,19 +419,15 @@ function __makeProceduralStudTexture() {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 64, 64);
 
-  // Shadow under the stud
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.arc(32, 33, 12, 0, Math.PI * 2); ctx.fill();
 
-  // Outer ring
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.beginPath(); ctx.arc(32, 31, 12, 0, Math.PI * 2); ctx.fill();
 
-  // Main stud body
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.beginPath(); ctx.arc(32, 30, 10, 0, Math.PI * 2); ctx.fill();
 
-  // Center depression
   ctx.fillStyle = 'rgba(0,0,0,0.08)';
   ctx.beginPath(); ctx.arc(32, 32, 8, 0, Math.PI * 2); ctx.fill();
 
@@ -510,6 +505,121 @@ function makeStuddedMaterials(colorNum, sx, sz, transparency) {
     topMat.transparent = true;  topMat.opacity = 1 - transparency;
   }
   return [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+}
+
+/* ============================================================
+   GEOMETRY HELPERS — cria a geometria correta por kind de Part
+   ============================================================ */
+function makeGeometryForPart(p) {
+  const kind = p.kind || 'Part';
+  const sx = p.sx, sy = p.sy, sz = p.sz;
+
+  if (kind === 'Sphere') {
+    return new THREE.SphereGeometry(Math.min(sx, sy, sz) / 2, 24, 16);
+  }
+
+  if (kind === 'Cylinder') {
+    return new THREE.CylinderGeometry(sx / 2, sx / 2, sy, 24);
+  }
+
+  if (kind === 'Wedge') {
+    const w = sx / 2, h = sy / 2, d = sz / 2;
+    const g = new THREE.BufferGeometry();
+    const v = new Float32Array([
+      -w,-h, d,  w,-h, d, -w, h, d,
+      -w,-h, d,  w,-h, d,  w,-h,-d,
+      -w,-h, d,  w,-h,-d, -w,-h,-d,
+      -w,-h, d, -w, h, d, -w,-h,-d,
+      -w,-h,-d,  w,-h,-d, -w, h, d,
+       w,-h,-d,  w,-h, d, -w, h, d,
+       w,-h, d,  w,-h,-d, -w, h, d,
+      -w, h, d,  w,-h, d,  w,-h,-d
+    ]);
+    g.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    g.computeVertexNormals();
+    return g;
+  }
+
+  if (kind === 'CornerWedge') {
+    const w = sx / 2, h = sy / 2, d = sz / 2;
+    const g = new THREE.BufferGeometry();
+    const v = new Float32Array([
+      -w,-h, d,  w,-h, d, -w,-h,-d,
+      -w,-h, d,  w,-h, d, -w, h, d,
+      -w,-h, d, -w, h, d, -w,-h,-d,
+       w,-h, d, -w, h, d,  w,-h,-d,
+       w,-h, d,  w,-h,-d, -w,-h,-d,
+      -w, h, d,  w,-h, d,  w,-h,-d
+    ]);
+    g.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    g.computeVertexNormals();
+    return g;
+  }
+
+  // Part (Box) por padrão
+  return new THREE.BoxGeometry(sx, sy, sz);
+}
+
+/* Materiais corretos por kind — studs só onde faz sentido */
+function buildMaterialsForPart(p, colorNum, transparency) {
+  const kind = p.kind || 'Part';
+  const sx = p.sx, sy = p.sy, sz = p.sz;
+
+  const sideMat = new THREE.MeshLambertMaterial({ color: colorNum });
+  const topTex = getStudTexture(sx, sz);
+  const topMat = topTex
+    ? new THREE.MeshLambertMaterial({ color: colorNum, map: topTex })
+    : new THREE.MeshLambertMaterial({ color: colorNum });
+
+  if (transparency && transparency > 0) {
+    sideMat.transparent = true; sideMat.opacity = 1 - transparency;
+    topMat.transparent = true;  topMat.opacity = 1 - transparency;
+  }
+
+  if (kind === 'Sphere') return sideMat;
+  if (kind === 'Cylinder') return [sideMat, topMat, sideMat];
+  if (kind === 'Wedge' || kind === 'CornerWedge') return sideMat;
+  return [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
+}
+
+/* AABB de uma caixa rotacionada — para física correta */
+function computeRotatedAABB(sx, sy, sz, rx, ry, rz) {
+  const rxr = THREE.MathUtils.degToRad(rx || 0);
+  const ryr = THREE.MathUtils.degToRad(ry || 0);
+  const rzr = THREE.MathUtils.degToRad(rz || 0);
+  const euler = new THREE.Euler(rxr, ryr, rzr, 'XYZ');
+  const quat = new THREE.Quaternion().setFromEuler(euler);
+
+  const hx = sx / 2, hy = sy / 2, hz = sz / 2;
+  const corners = [
+    new THREE.Vector3(-hx, -hy, -hz),
+    new THREE.Vector3( hx, -hy, -hz),
+    new THREE.Vector3(-hx,  hy, -hz),
+    new THREE.Vector3( hx,  hy, -hz),
+    new THREE.Vector3(-hx, -hy,  hz),
+    new THREE.Vector3( hx, -hy,  hz),
+    new THREE.Vector3(-hx,  hy,  hz),
+    new THREE.Vector3( hx,  hy,  hz)
+  ];
+
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+  for (const c of corners) {
+    c.applyQuaternion(quat);
+    if (c.x < minX) minX = c.x;
+    if (c.y < minY) minY = c.y;
+    if (c.z < minZ) minZ = c.z;
+    if (c.x > maxX) maxX = c.x;
+    if (c.y > maxY) maxY = c.y;
+    if (c.z > maxZ) maxZ = c.z;
+  }
+
+  return {
+    sx: maxX - minX,
+    sy: maxY - minY,
+    sz: maxZ - minZ
+  };
 }
 
 /* ============================================================
@@ -714,8 +824,11 @@ const GENERATORS = {
         ? p.color
         : parseInt(String(p.color).replace('#', ''), 16);
 
-      const geo = new THREE.BoxGeometry(p.sx, p.sy, p.sz);
-      const mats = makeStuddedMaterials(colorNum, p.sx, p.sz, p.transparency || 0);
+      /* Geometria correta por kind (Cylinder, Sphere, Wedge, Box) */
+      const geo = makeGeometryForPart(p);
+      /* Materiais corretos (studs só no topo de boxes/cylinders) */
+      const mats = buildMaterialsForPart(p, colorNum, p.transparency || 0);
+
       const mesh = new THREE.Mesh(geo, mats);
       mesh.position.set(p.x, p.y, p.z);
       if (p.rx) mesh.rotation.x = THREE.MathUtils.degToRad(p.rx);
@@ -724,9 +837,17 @@ const GENERATORS = {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       scene.add(mesh);
-      if (p.anchored !== false) physics.addBox(p.x, p.y, p.z, p.sx, p.sy, p.sz);
 
-      /* ---------- DECALS ---------- */
+      /* Física com AABB rotacionado — segue a rotação real da Part */
+      if (p.anchored !== false) {
+        const aabb = computeRotatedAABB(
+          p.sx, p.sy, p.sz,
+          p.rx || 0, p.ry || 0, p.rz || 0
+        );
+        physics.addBox(p.x, p.y, p.z, aabb.sx, aabb.sy, aabb.sz);
+      }
+
+      /* ---------- DECALS (children do mesh, herdam a rotação) ---------- */
       if (Array.isArray(p.decals) && p.decals.length) {
         const sz = { x: p.sx, y: p.sy, z: p.sz };
         const off = 0.02;
@@ -2034,7 +2155,7 @@ class Game {
   const statusEl = document.getElementById('loading-status');
 
   try {
-    /* ⭐ ESPERA a textura do stud carregar (ou fallback) ANTES de criar o Game */
+    /* ESPERA a textura do stud carregar (ou fallback) ANTES de criar o Game */
     statusEl.textContent = 'Loading textures...';
     await __studReadyPromise;
 
