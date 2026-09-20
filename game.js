@@ -29,6 +29,14 @@ const CONFIG = {
     distance: 16, minDistance: 2.6, maxDistance: 34,
     targetHeight: 4.2, sensitivity: 0.0024,
     minPitch: -0.95, maxPitch: 1.45, smooth: 20
+  },
+  health: {
+    max: 100,
+    deathThreshold: 10,
+    regenDelay: 6,
+    regenRate: 4,
+    respawnDelay: 3.2,
+    restartRespawnDelay: 1.5
   }
 };
 
@@ -290,6 +298,14 @@ class Character {
     this.targetYaw = 0;
     this.walkPhase = 0;
     this.group = new THREE.Group();
+
+    /* ---------- VIDA ---------- */
+    this.maxHealth = CONFIG.health.max;
+    this.health = this.maxHealth;
+    this.dead = false;
+    this.lastDamageTime = -Infinity;
+    this.idleTime = Math.random() * 10; // dessincroniza o idle entre players
+
     this._buildBody();
     this._buildNameTag(subtitle, subtitleColor);
   }
@@ -345,20 +361,56 @@ class Character {
     this.group.position.copy(this.body.pos);
   }
   setYaw(y) { this.visualYaw = y; this.targetYaw = y; this.group.rotation.y = y; }
+  setVisible(v) { this.group.visible = v; }
+
+  /* ---------- VIDA ---------- */
+  takeDamage(amount) {
+    if (this.dead) return false;
+    const amt = Number(amount) || 0;
+    if (amt <= 0) return false;
+    this.health = Math.max(0, this.health - amt);
+    this.lastDamageTime = performance.now() / 1000;
+    if (this.health <= CONFIG.health.deathThreshold) {
+      this.health = 0;
+      return true; // morreu
+    }
+    return false;
+  }
+  heal(amount) {
+    if (this.dead) return;
+    const amt = Number(amount) || 0;
+    if (amt <= 0) return;
+    this.health = Math.min(this.maxHealth, this.health + amt);
+  }
+  resetHealth() {
+    this.health = this.maxHealth;
+    this.dead = false;
+    this.lastDamageTime = -Infinity;
+  }
+
+  /* ---------- ANIMAÇÃO ---------- */
   updateVisual(dt, horizontalSpeed) {
     const diff = shortAngleDist(this.visualYaw, this.targetYaw);
     this.visualYaw += diff * Math.min(1, dt * 12);
     this.group.rotation.y = this.visualYaw;
+
     const grounded = this.body.grounded;
     const moving = horizontalSpeed > 0.8 && grounded;
     const speedRatio = Math.min(1, horizontalSpeed / CONFIG.runSpeed);
+
     if (!grounded) {
+      this.torsoMesh.position.y = 3;
+      this.headMesh.position.y = 4.625;
       this.armL.rotation.x = damp(this.armL.rotation.x, -2.3, 12, dt);
       this.armR.rotation.x = damp(this.armR.rotation.x, -2.3, 12, dt);
+      this.armL.rotation.z = damp(this.armL.rotation.z, 0, 12, dt);
+      this.armR.rotation.z = damp(this.armR.rotation.z, 0, 12, dt);
       this.legL.rotation.x = damp(this.legL.rotation.x, 0.38, 12, dt);
       this.legR.rotation.x = damp(this.legR.rotation.x, -0.26, 12, dt);
       this.walkPhase = 0;
     } else if (moving) {
+      this.torsoMesh.position.y = 3;
+      this.headMesh.position.y = 4.625;
       this.walkPhase += dt * (7 + speedRatio * 9);
       const amp = 0.55 + speedRatio * 0.45;
       const s = Math.sin(this.walkPhase);
@@ -366,15 +418,144 @@ class Character {
       this.legR.rotation.x = -s * amp;
       this.armL.rotation.x = -s * amp * 0.9;
       this.armR.rotation.x = s * amp * 0.9;
+      this.armL.rotation.z = damp(this.armL.rotation.z, 0, 8, dt);
+      this.armR.rotation.z = damp(this.armR.rotation.z, 0, 8, dt);
     } else {
-      this.legL.rotation.x = damp(this.legL.rotation.x, 0, 12, dt);
-      this.legR.rotation.x = damp(this.legR.rotation.x, 0, 12, dt);
-      this.armL.rotation.x = damp(this.armL.rotation.x, 0, 12, dt);
-      this.armR.rotation.x = damp(this.armR.rotation.x, 0, 12, dt);
+      /* ---------- IDLE ---------- */
+      this.idleTime += dt;
+      const breath = Math.sin(this.idleTime * 1.9) * 0.05;
+      const swayX  = Math.sin(this.idleTime * 0.8) * 0.07;
+      const swayZ  = Math.sin(this.idleTime * 1.3 + 1.2) * 0.04;
+
+      this.torsoMesh.position.y = 3 + breath;
+      this.headMesh.position.y  = 4.625 + breath * 1.15;
+
+      this.legL.rotation.x = damp(this.legL.rotation.x, 0, 8, dt);
+      this.legR.rotation.x = damp(this.legR.rotation.x, 0, 8, dt);
+      this.armL.rotation.x = damp(this.armL.rotation.x,  swayX, 4, dt);
+      this.armR.rotation.x = damp(this.armR.rotation.x, -swayX, 4, dt);
+      this.armL.rotation.z = damp(this.armL.rotation.z, -swayZ, 4, dt);
+      this.armR.rotation.z = damp(this.armR.rotation.z,  swayZ, 4, dt);
     }
     this.group.position.copy(this.body.pos);
   }
-  setVisible(v) { this.group.visible = v; }
+}
+
+/* ============================================================
+   4.5 RAGDOLL — partes soltas com colisão simples
+   ============================================================ */
+class Ragdoll {
+  constructor(character, scene, physics) {
+    this.scene = scene;
+    this.physics = physics;
+    this.parts = [];
+    this.life = 0;
+
+    character.group.updateMatrixWorld(true);
+
+    const entries = [];
+    if (character.torsoMesh) entries.push({ mesh: character.torsoMesh, sy: 2, sx: 2, sz: 1 });
+    if (character.headMesh)  entries.push({ mesh: character.headMesh,  sy: 1.25, sx: 1.25, sz: 1.25 });
+    if (character.legL?.children[0]) entries.push({ mesh: character.legL.children[0], sy: 2, sx: 1, sz: 1 });
+    if (character.legR?.children[0]) entries.push({ mesh: character.legR.children[0], sy: 2, sx: 1, sz: 1 });
+    if (character.armL?.children[0]) entries.push({ mesh: character.armL.children[0], sy: 2, sx: 1, sz: 1 });
+    if (character.armR?.children[0]) entries.push({ mesh: character.armR.children[0], sy: 2, sx: 1, sz: 1 });
+
+    const wp = new THREE.Vector3();
+    const wq = new THREE.Quaternion();
+    const ws = new THREE.Vector3();
+
+    for (const e of entries) {
+      e.mesh.matrixWorld.decompose(wp, wq, ws);
+
+      const clone = e.mesh.clone();
+      clone.position.copy(wp);
+      clone.quaternion.copy(wq);
+      clone.scale.copy(ws);
+      clone.castShadow = true;
+      clone.receiveShadow = true;
+      scene.add(clone);
+
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 8,
+        2.5 + Math.random() * 4.5,
+        (Math.random() - 0.5) * 8
+      );
+      const ang = new THREE.Vector3(
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 10
+      );
+
+      this.parts.push({
+        mesh: clone,
+        vel, ang,
+        halfY: e.sy / 2,
+        resting: false
+      });
+    }
+  }
+
+  _groundY(x, z, fromY) {
+    if (!this.physics) return -Infinity;
+    const dist = this.physics.raycast(
+      new THREE.Vector3(x, fromY, z),
+      new THREE.Vector3(0, -1, 0),
+      200
+    );
+    if (dist >= 199.9) return -Infinity;
+    return fromY - dist;
+  }
+
+  update(dt) {
+    this.life += dt;
+    for (const p of this.parts) {
+      if (p.resting) continue;
+
+      p.vel.y -= 62 * dt;
+      if (p.vel.y < -48) p.vel.y = -48;
+
+      p.mesh.position.x += p.vel.x * dt;
+      p.mesh.position.z += p.vel.z * dt;
+      p.mesh.position.y += p.vel.y * dt;
+
+      const gy = this._groundY(p.mesh.position.x, p.mesh.position.z, p.mesh.position.y);
+      if (gy > -1e6) {
+        const bottom = p.mesh.position.y - p.halfY;
+        if (bottom <= gy) {
+          p.mesh.position.y = gy + p.halfY;
+          if (p.vel.y < -1.5) {
+            p.vel.y = -p.vel.y * 0.3;
+            p.vel.x *= 0.65;
+            p.vel.z *= 0.65;
+            p.ang.multiplyScalar(0.6);
+          } else {
+            p.vel.y = 0;
+            p.vel.x *= 0.8;
+            p.vel.z *= 0.8;
+            p.ang.multiplyScalar(0.65);
+            if (Math.abs(p.vel.x) < 0.15 && Math.abs(p.vel.z) < 0.15 && p.ang.length() < 0.4) {
+              p.vel.set(0, 0, 0);
+              p.ang.set(0, 0, 0);
+              p.resting = true;
+            }
+          }
+        }
+      }
+
+      p.mesh.rotation.x += p.ang.x * dt;
+      p.mesh.rotation.y += p.ang.y * dt;
+      p.mesh.rotation.z += p.ang.z * dt;
+    }
+  }
+
+  dispose() {
+    for (const p of this.parts) {
+      this.scene.remove(p.mesh);
+      p.mesh.geometry?.dispose?.();
+    }
+    this.parts = [];
+  }
 }
 
 /* ============================================================
@@ -569,11 +750,9 @@ function makeGeometryForPart(p) {
     return g;
   }
 
-  // Part (Box) por padrão
   return new THREE.BoxGeometry(sx, sy, sz);
 }
 
-/* Materiais corretos por kind — studs só onde faz sentido */
 function buildMaterialsForPart(p, colorNum, transparency) {
   const kind = p.kind || 'Part';
   const sx = p.sx, sy = p.sy, sz = p.sz;
@@ -595,7 +774,6 @@ function buildMaterialsForPart(p, colorNum, transparency) {
   return [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
 }
 
-/* AABB de uma caixa rotacionada — para física correta */
 function computeRotatedAABB(sx, sy, sz, rx, ry, rz) {
   const rxr = THREE.MathUtils.degToRad(rx || 0);
   const ryr = THREE.MathUtils.degToRad(ry || 0);
@@ -812,7 +990,6 @@ const GENERATORS = {
   },
 
   custom_build(scene, physics, data) {
-    /* ---------- BASEPLATE (respeita noBaseplate) ---------- */
     const skipBP = data && data.noBaseplate === true;
     if (!skipBP) {
       const BP = 256;
@@ -830,16 +1007,13 @@ const GENERATORS = {
       physics.addBox(0, -1, 0, BP, 2, BP);
     }
 
-    /* ---------- PARTS ---------- */
     const parts = (data && data.parts) || [];
     for (const p of parts) {
       const colorNum = typeof p.color === 'number'
         ? p.color
         : parseInt(String(p.color).replace('#', ''), 16);
 
-      /* Geometria correta por kind (Cylinder, Sphere, Wedge, Box) */
       const geo = makeGeometryForPart(p);
-      /* Materiais corretos (studs só no topo de boxes/cylinders) */
       const mats = buildMaterialsForPart(p, colorNum, p.transparency || 0);
 
       const mesh = new THREE.Mesh(geo, mats);
@@ -851,7 +1025,6 @@ const GENERATORS = {
       mesh.receiveShadow = true;
       scene.add(mesh);
 
-      /* Física com AABB rotacionado — segue a rotação real da Part */
       if (p.anchored !== false) {
         const aabb = computeRotatedAABB(
           p.sx, p.sy, p.sz,
@@ -860,7 +1033,6 @@ const GENERATORS = {
         physics.addBox(p.x, p.y, p.z, aabb.sx, aabb.sy, aabb.sz);
       }
 
-      /* ---------- DECALS (children do mesh, herdam a rotação) ---------- */
       if (Array.isArray(p.decals) && p.decals.length) {
         const sz = { x: p.sx, y: p.sy, z: p.sz };
         const off = 0.02;
@@ -905,7 +1077,6 @@ const GENERATORS = {
       }
     }
 
-    /* ---------- SOUNDS ---------- */
     if (Array.isArray(data.sounds) && data.sounds.length) {
       try {
         const listener = new THREE.AudioListener();
@@ -943,10 +1114,13 @@ const GENERATORS = {
                 if (sd.autoplay) {
                   const tryPlay = () => {
                     try {
-                      if (audio.context.state === 'suspended') {
-                        audio.context.resume().then(() => audio.play().catch(() => {}));
+                      if (typeof audio.play !== 'function') return;
+                      if (audio.context && audio.context.state === 'suspended') {
+                        audio.context.resume().then(() => {
+                          try { audio.play(); } catch (_) {}
+                        }).catch(() => {});
                       } else {
-                        audio.play().catch(() => {});
+                        try { audio.play(); } catch (_) {}
                       }
                     } catch (e) {
                       console.warn('[game] autoplay failed:', sd.name, e);
@@ -993,12 +1167,18 @@ class RemotePlayer {
     this.targetYaw = info.yaw || 0;
     this.hSpeed = 0;
     this.grounded = true;
+
+    /* vida remota (não é fonte de verdade, apenas espelho visual) */
+    this.health = this.character.maxHealth;
+    this.dead = false;
   }
   applyState(s) {
     this.targetPos.set(s.x, s.y, s.z);
     this.targetYaw = s.yaw;
     this.hSpeed = s.hs || 0;
     this.grounded = s.g !== false;
+    if (typeof s.hp === 'number') this.health = s.hp;
+    if (typeof s.dead === 'boolean') this.dead = s.dead;
   }
   update(dt) {
     const c = this.character, body = c.body;
@@ -1151,7 +1331,9 @@ class Network {
       yaw: +this.game.player.visualYaw.toFixed(3),
       vy: +p.vel.y.toFixed(1),
       hs: +Math.hypot(p.vel.x, p.vel.z).toFixed(2),
-      g: p.grounded
+      g: p.grounded,
+      hp: Math.round(this.game.player.health),
+      dead: !!this.game.player.dead
     });
   }
   sendChat(text) { this._send({ type: 'chat', text }); }
@@ -1170,7 +1352,7 @@ class Network {
 }
 
 /* ============================================================
-   10. CHAT
+   10. CHAT (com suporte a comandos)
    ============================================================ */
 class ChatSystem {
   constructor() {
@@ -1178,20 +1360,34 @@ class ChatSystem {
     this.messagesEl = document.getElementById('chat-messages');
     this.inputEl = document.getElementById('chat-input');
     this.maxMessages = 9;
-    this.onOpen = null; this.onClose = null; this.onPlayerMessage = null;
+    this.onOpen = null;
+    this.onClose = null;
+    this.onPlayerMessage = null;
+    this.onCommand = null;
+
     this.inputEl.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
         const text = this.inputEl.value.trim();
         if (text) {
-          const name = window.__playerName || 'Player';
-          this.addMessage(name, text, '#ffe97a');
-          if (this.onPlayerMessage) this.onPlayerMessage(text);
+          if (text.startsWith('/')) {
+            this.addMessage('>', text, '#8ac6ff');
+            if (this.onCommand) {
+              const parts = text.slice(1).split(/\s+/).filter(Boolean);
+              if (parts.length) this.onCommand(parts[0].toLowerCase(), parts.slice(1));
+            }
+          } else {
+            const name = window.__playerName || 'Player';
+            this.addMessage(name, text, '#ffe97a');
+            if (this.onPlayerMessage) this.onPlayerMessage(text);
+          }
         }
         this.close();
       } else if (e.key === 'Escape') {
-        e.preventDefault(); this.inputEl.value = ''; this.close();
+        e.preventDefault();
+        this.inputEl.value = '';
+        this.close();
       }
     });
   }
@@ -1256,12 +1452,13 @@ class HUD {
     this.connEl = document.getElementById('hud-conn');
     this.gameEl = document.getElementById('hud-game');
   }
-  setFPS(v) { this.fpsEl.textContent = String(v); }
-  setPlayers(v) { this.playersEl.textContent = String(v); }
-  setUser(name) { this.userEl.textContent = name; }
-  setGame(name) { this.gameEl.textContent = name; }
+  setFPS(v) { if (this.fpsEl) this.fpsEl.textContent = String(v); }
+  setPlayers(v) { if (this.playersEl) this.playersEl.textContent = String(v); }
+  setUser(name) { if (this.userEl) this.userEl.textContent = name; }
+  setGame(name) { if (this.gameEl) this.gameEl.textContent = name; }
   setConnection(state) {
     const el = this.connEl;
+    if (!el) return;
     el.classList.remove('conn-on', 'conn-off', 'conn-wait');
     if (state === 'online') { el.textContent = 'ONLINE'; el.classList.add('conn-on'); }
     else if (state === 'connecting') { el.textContent = 'CONNECTING'; el.classList.add('conn-wait'); }
@@ -1520,6 +1717,8 @@ class TouchControls {
     const chatBtn   = document.getElementById('btn-chat');
     const menuBtn   = document.getElementById('btn-menu');
 
+    if (!joyZone || !camZone || !baseEl || !knobEl || !jumpBtn) return;
+
     this.baseEl = baseEl;
     this.knobEl = knobEl;
 
@@ -1605,10 +1804,11 @@ class TouchControls {
     const jumpDown = (e) => {
       e.preventDefault();
       if (isMenuOpen()) return;
+      if (this.game.player && this.game.player.dead) return;
       this.game.input.jumpHeld = true;
       this.game.input.jumpQueued = true;
     };
-    const jumpUp = (e) => {
+    const jumpUp = () => {
       this.game.input.jumpHeld = false;
     };
     jumpBtn.addEventListener('pointerdown', jumpDown);
@@ -1617,18 +1817,22 @@ class TouchControls {
     jumpBtn.addEventListener('pointerleave', jumpUp);
     jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    chatBtn.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      if (isMenuOpen()) return;
-      this.game.chat.open();
-    });
-    chatBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    if (chatBtn) {
+      chatBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (isMenuOpen()) return;
+        this.game.chat.open();
+      });
+      chatBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
 
-    menuBtn.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      if (this.game.escMenu) this.game.escMenu.toggle();
-    });
-    menuBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    if (menuBtn) {
+      menuBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (this.game.escMenu) this.game.escMenu.toggle();
+      });
+      menuBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
   }
 
   _applyJoy() {
@@ -1697,6 +1901,10 @@ class Game {
     this._particles = [];
     this._restartLock = false;
 
+    this.ragdoll = null;
+    this._respawnTimer = null;
+    this._lastRegenTick = 0;
+
     this._build();
   }
 
@@ -1709,10 +1917,12 @@ class Game {
     this._setupPresence();
     this._setupTouch();
     this._setupEvents();
+    this._setupHealthBar();
     this.escMenu = new EscMenu(this);
     this.hud.setUser(this.username);
     this.hud.setGame(this.gameRow.name || 'Game');
     this._updateHudPlayers();
+    this._updateHealthBar();
   }
 
   _setupLights() {
@@ -1822,6 +2032,7 @@ class Game {
     this.chat.onOpen = () => { this.input.clear(); };
     this.chat.onClose = () => {};
     this.chat.onPlayerMessage = (text) => this.network.sendChat(text);
+    this.chat.onCommand = (cmd, args) => this._handleChatCommand(cmd, args);
     this.network.connect();
   }
 
@@ -1865,6 +2076,165 @@ class Game {
     this.hud.setPlayers(1 + remote);
   }
 
+  /* ============================================================
+     HEALTH BAR (criada dinamicamente, estilo Roblox)
+     ============================================================ */
+  _setupHealthBar() {
+    if (document.getElementById('health-bar')) {
+      this.healthFill = document.getElementById('health-fill');
+      this.healthVal  = document.getElementById('health-val');
+      return;
+    }
+    const bar = document.createElement('div');
+    bar.id = 'health-bar';
+    bar.style.cssText = [
+      'position:fixed',
+      'left:18px',
+      'bottom:18px',
+      'width:250px',
+      'padding:8px 12px 10px',
+      'background:rgba(0,20,40,.55)',
+      'border:2px solid rgba(255,255,255,.25)',
+      'border-radius:8px',
+      'font-family:Verdana,Arial,sans-serif',
+      'color:#fff',
+      'z-index:60',
+      'pointer-events:none',
+      'box-shadow:0 4px 12px rgba(0,0,0,.4)',
+      'user-select:none',
+      'backdrop-filter:blur(3px)'
+    ].join(';');
+
+    bar.innerHTML =
+      '<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;letter-spacing:1.5px;opacity:.85;margin-bottom:4px">' +
+        '<span>HEALTH</span><span id="health-val">100 / 100</span>' +
+      '</div>' +
+      '<div style="height:14px;background:rgba(0,0,0,.55);border-radius:3px;overflow:hidden;border:1px solid rgba(0,0,0,.6)">' +
+        '<div id="health-fill" style="height:100%;width:100%;' +
+          'background:linear-gradient(180deg,#7ce87c 0%,#3fa13f 100%);' +
+          'transition:width .18s ease-out;border-radius:2px"></div>' +
+      '</div>';
+
+    document.body.appendChild(bar);
+    this.healthFill = bar.querySelector('#health-fill');
+    this.healthVal  = bar.querySelector('#health-val');
+  }
+
+  _updateHealthBar() {
+    if (!this.healthFill || !this.player) return;
+    const pct = Math.max(0, (this.player.health / this.player.maxHealth) * 100);
+    this.healthFill.style.width = pct + '%';
+    this.healthVal.textContent = Math.round(this.player.health) + ' / ' + this.player.maxHealth;
+    if (pct > 60)      this.healthFill.style.background = 'linear-gradient(180deg,#7ce87c 0%,#3fa13f 100%)';
+    else if (pct > 30) this.healthFill.style.background = 'linear-gradient(180deg,#ffd166 0%,#c9a020 100%)';
+    else               this.healthFill.style.background = 'linear-gradient(180deg,#ff7b7b 0%,#b02020 100%)';
+  }
+
+  /* ============================================================
+     BURST de partículas
+     ============================================================ */
+  _spawnBurst(pos, count = 40) {
+    const colors = [0xf5cd30, 0x0d69ac, 0x4b974b, 0xa3a2a5, 0xff4444];
+    for (let i = 0; i < count; i++) {
+      const size = 0.3 + Math.random() * 0.7;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const mat = new THREE.MeshLambertMaterial({ color });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
+      m.position.copy(pos);
+      m.castShadow = false;
+      this.scene.add(m);
+      const dir = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        Math.random() * 1.8 + 0.2,
+        (Math.random() - 0.5) * 2
+      ).normalize();
+      this._particles.push({
+        mesh: m,
+        vel: dir.multiplyScalar(14 + Math.random() * 16),
+        life: 1.4, maxLife: 1.4, gravity: 28
+      });
+    }
+  }
+
+  /* ============================================================
+     DANO / MORTE / RESPAWN
+     ============================================================ */
+  damagePlayer(amount) {
+    if (!this.player || this.player.dead) return;
+    const died = this.player.takeDamage(amount);
+    this._updateHealthBar();
+    if (died) this._onPlayerDeath();
+  }
+
+  _onPlayerDeath() {
+    if (!this.player || this.player.dead) return;
+    this.player.dead = true;
+    this.input.clear();
+
+    if (this.ragdoll) { try { this.ragdoll.dispose(); } catch(_) {} this.ragdoll = null; }
+    this.ragdoll = new Ragdoll(this.player, this.scene, this.physics);
+
+    this.player.setVisible(false);
+
+    const p = this.player.body.pos.clone();
+    p.y += 3;
+    this._spawnBurst(p, 50);
+
+    this.chat.addMessage('SYSTEM', `${this.player.name} morreu!`, '#ff5555');
+
+    clearTimeout(this._respawnTimer);
+    this._respawnTimer = setTimeout(() => this._respawnPlayer(), CONFIG.health.respawnDelay * 1000);
+  }
+
+  _respawnPlayer() {
+    if (this.ragdoll) { try { this.ragdoll.dispose(); } catch(_) {} this.ragdoll = null; }
+
+    this.player.resetHealth();
+    this.player.setPosition(0, 3, 12);
+    this.player.setYaw(Math.PI);
+    this.player.body.vel.set(0, 0, 0);
+    this.player.setVisible(true);
+
+    this.camTarget = null;
+    this.camYaw = 0;
+    this.camPitch = 0.28;
+    this.camDistance = CONFIG.camera.distance;
+
+    this._updateHealthBar();
+    this.chat.addMessage('SYSTEM', `${this.player.name} respawnou.`, '#6fe36f');
+    this._requestLock();
+  }
+
+  /* ============================================================
+     Comandos de chat
+     ============================================================ */
+  _handleChatCommand(cmd, args) {
+    if (cmd === 'damage' || cmd === 'dmg') {
+      const amt = parseFloat(args[0]);
+      if (!isNaN(amt)) {
+        this.damagePlayer(amt);
+        this.chat.addMessage('SYSTEM', `-${amt} HP`, '#ffd166');
+      } else {
+        this.chat.addMessage('SYSTEM', 'Uso: /damage <quantidade>', '#ff8888');
+      }
+    } else if (cmd === 'kill') {
+      this.damagePlayer(this.player.maxHealth + 1000);
+    } else if (cmd === 'heal') {
+      this.player.resetHealth();
+      this._updateHealthBar();
+      this.chat.addMessage('SYSTEM', 'Vida cheia.', '#6fe36f');
+    } else if (cmd === 'respawn' || cmd === 'r') {
+      if (this.player.dead) {
+        clearTimeout(this._respawnTimer);
+        this._respawnPlayer();
+      } else {
+        this.chat.addMessage('SYSTEM', 'Você não está morto.', '#ff8888');
+      }
+    } else {
+      this.chat.addMessage('SYSTEM', `Comando desconhecido: /${cmd}`, '#ff8888');
+    }
+  }
+
   _setupEvents() {
     window.addEventListener('keydown', (e) => this._onKeyDown(e));
     window.addEventListener('keyup', (e) => this._onKeyUp(e));
@@ -1900,10 +2270,14 @@ class Game {
     }
     if (e.code === 'KeyV') {
       this.firstPerson = !this.firstPerson;
-      document.getElementById('crosshair').style.display = this.firstPerson ? 'block' : 'none';
+      const ch = document.getElementById('crosshair');
+      if (ch) ch.style.display = this.firstPerson ? 'block' : 'none';
       return;
     }
-    if (e.code === 'Space') { e.preventDefault(); this.input.jumpQueued = true; }
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!this.player.dead) this.input.jumpQueued = true;
+    }
     this.input.keys.add(e.code);
     if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
       e.preventDefault();
@@ -1982,14 +2356,14 @@ class Game {
     this.camDistanceSmooth = damp(this.camDistanceSmooth, desired, 22, dt);
     const finalDist = Math.min(desired, this.camDistanceSmooth);
 
-    if (this.firstPerson) {
+    if (this.firstPerson && !this.player.dead) {
       this.player.setVisible(false);
       const head = new THREE.Vector3(p.x, p.y + 4.6, p.z);
       this.camera.position.copy(head);
       const look = new THREE.Vector3(-dir.x, -dir.y, -dir.z);
       this.camera.lookAt(head.x + look.x, head.y + look.y, head.z + look.z);
     } else {
-      this.player.setVisible(true);
+      if (!this.player.dead) this.player.setVisible(true);
       this.camera.position.set(
         this.camTarget.x + dir.x * finalDist,
         this.camTarget.y + dir.y * finalDist,
@@ -2000,7 +2374,7 @@ class Game {
   }
 
   _updatePlayer(dt) {
-    if (this._restartLock) return;
+    if (this._restartLock || !this.player || this.player.dead) return;
     const body = this.player.body;
 
     let ix = 0, iz = 0;
@@ -2045,41 +2419,38 @@ class Game {
     if (len > 0.01) this.player.targetYaw = Math.atan2(moveX, moveZ);
   }
 
+  /* Regeneração passiva de vida */
+  _updateHealthRegen(dt) {
+    if (!this.player || this.player.dead) return;
+    if (this.player.health >= this.player.maxHealth) return;
+    const now = performance.now() / 1000;
+    if (now - this.player.lastDamageTime < CONFIG.health.regenDelay) return;
+    this.player.heal(CONFIG.health.regenRate * dt);
+    this._updateHealthBar();
+  }
+
   restartPlayer() {
     if (this._restartLock) return;
     this._restartLock = true;
     this.input.clear();
+
+    if (this.ragdoll) { try { this.ragdoll.dispose(); } catch(_) {} this.ragdoll = null; }
+    if (this.player && !this.player.dead) {
+      this.ragdoll = new Ragdoll(this.player, this.scene, this.physics);
+      this.player.dead = true;
+    }
     this.player.setVisible(false);
 
     const p = this.player.body.pos.clone();
     p.y += 2;
+    this._spawnBurst(p, 40);
 
-    const colors = [0xf5cd30, 0x0d69ac, 0x4b974b, 0xa3a2a5];
-    for (let i = 0; i < 40; i++) {
-      const size = 0.3 + Math.random() * 0.7;
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const mat = new THREE.MeshLambertMaterial({ color });
-      const m = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
-      m.position.copy(p);
-      m.castShadow = false;
-      this.scene.add(m);
-      const dir = new THREE.Vector3(
-        (Math.random() - 0.5) * 2,
-        Math.random() * 1.8 + 0.2,
-        (Math.random() - 0.5) * 2
-      ).normalize();
-      this._particles.push({
-        mesh: m,
-        vel: dir.multiplyScalar(14 + Math.random() * 16),
-        life: 1.4,
-        maxLife: 1.4,
-        gravity: 28
-      });
-    }
+    this.chat.addMessage('SYSTEM', 'Reiniciando personagem...', '#ffd166');
 
-    this.chat.addMessage('SYSTEM', 'Restarting character...', '#ffd166');
-
-    setTimeout(() => {
+    clearTimeout(this._respawnTimer);
+    this._respawnTimer = setTimeout(() => {
+      if (this.ragdoll) { try { this.ragdoll.dispose(); } catch(_) {} this.ragdoll = null; }
+      this.player.resetHealth();
       this.player.setPosition(0, 3, 12);
       this.player.setYaw(Math.PI);
       this.player.body.vel.set(0, 0, 0);
@@ -2089,9 +2460,10 @@ class Game {
       this.camPitch = 0.28;
       this.camDistance = CONFIG.camera.distance;
       this._restartLock = false;
-      this.chat.addMessage('SYSTEM', 'Character respawned.', '#6fe36f');
+      this._updateHealthBar();
+      this.chat.addMessage('SYSTEM', 'Personagem respawnou.', '#6fe36f');
       this._requestLock();
-    }, 900);
+    }, CONFIG.health.restartRespawnDelay * 1000);
   }
 
   _updateParticles(dt) {
@@ -2147,10 +2519,17 @@ class Game {
     }
     if (steps === CONFIG.maxSubSteps) this.accumulator = 0;
 
+    this._updateHealthRegen(dt);
     this._updateParticles(dt);
 
-    const pv = this.player.body.vel;
-    this.player.updateVisual(dt, Math.hypot(pv.x, pv.z));
+    if (this.ragdoll) {
+      try { this.ragdoll.update(dt); } catch (e) { console.warn(e); }
+    }
+
+    if (this.player && !this.player.dead) {
+      const pv = this.player.body.vel;
+      this.player.updateVisual(dt, Math.hypot(pv.x, pv.z));
+    }
 
     this.network.update(dt);
 
@@ -2168,7 +2547,6 @@ class Game {
   const statusEl = document.getElementById('loading-status');
 
   try {
-    /* ESPERA a textura do stud carregar (ou fallback) ANTES de criar o Game */
     statusEl.textContent = 'Loading textures...';
     await __studReadyPromise;
 
