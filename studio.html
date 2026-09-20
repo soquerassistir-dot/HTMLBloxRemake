@@ -245,7 +245,9 @@
     color:#fff;font-size:11px;text-shadow:1px 1px 2px rgba(0,0,0,.6);
     margin-bottom:8px;overflow:hidden
   }
-    .pub-upload-row {
+
+  /* Upload row */
+  .pub-upload-row {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -266,19 +268,25 @@
     border-radius: 4px;
     text-shadow: 1px 1px 0 rgba(0,0,0,.4);
     transition: .1s;
+    white-space: nowrap;
   }
   .pub-upload-btn:hover { filter: brightness(1.1); }
   .pub-upload-btn:active { border-style: inset; }
-  .pub-upload-btn svg { width: 14px; height: 14px; }
+  .pub-upload-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
   .pub-upload-name {
     font-size: 11px;
-    color: #666;
+    color: #888;
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-style: italic;
   }
-  .pub-upload-name.has-file { color: #006600; font-weight: bold; }
+  .pub-upload-name.has-file {
+    color: #006600;
+    font-weight: bold;
+    font-style: normal;
+  }
   .pub-upload-clear {
     display: none;
     width: 22px;
@@ -294,9 +302,10 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    padding: 0;
   }
   .pub-upload-clear:hover { background: #e74c3c; }
-  
+
   .load-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;padding:2px}
   .load-item{
     display:flex;gap:12px;padding:10px;cursor:pointer;
@@ -512,7 +521,7 @@
         • <b>W/E/R/Q</b> — Translate / Rotate / Scale / Select<br>
         • <b>Ctrl+D</b> — Duplicate · <b>Del</b> — Delete<br>
         • <b>F5</b> — Play. All scripts inside Workspace run automatically.<br>
-        • Click <b>Publish</b> to set name, description, thumbnail and visibility.
+        • Click <b>Publish</b> to set name, description, thumbnail (upload from PC) and visibility.
       </div>
     </div>
     <div class="modal-footer">
@@ -637,6 +646,7 @@ print("Done!")</pre>
     </div>
   </div>
 </div>
+
 <!-- ============ LOAD MODAL ============ -->
 <div class="overlay" id="load-modal">
   <div class="modal" style="max-width:680px">
@@ -675,6 +685,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 
 let __currentGameId = null;
 let __currentGameSlug = null;
+let __pendingThumbFile = null;
 
 function cloudToast(msg, color = '#2e7d32') {
   const t = document.getElementById('cloud-toast');
@@ -683,6 +694,12 @@ function cloudToast(msg, color = '#2e7d32') {
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function cssUrlSafe(url) {
+  return String(url).replace(/["\\\n\r]/g, ch => ({
+    '"': '%22', '\\': '%5C', '\n': '', '\r': ''
+  })[ch] || ch);
 }
 
 /* ============================================================
@@ -875,7 +892,7 @@ class CommandStack {
 const cmdStack = new CommandStack();
 
 /* ============================================================
-   INSTANCE
+   INSTANCE (base)
    ============================================================ */
 let __id = 1;
 class Instance {
@@ -3122,7 +3139,7 @@ const Studio = {
       clearWorkspaceParts();
       __currentGameId = null;
       __currentGameSlug = null;
-      // Recria baseplate automaticamente num jogo novo
+      __pendingThumbFile = null;
       Studio._buildBaseplate();
       Studio.refreshExplorer();
       cloudToast('New game started.', '#4a7ab8');
@@ -3134,17 +3151,76 @@ const Studio = {
     document.getElementById('publish-cancel').addEventListener('click', closePublish);
     document.getElementById('publish-confirm').addEventListener('click', doPublish);
 
-    document.getElementById('pub-thumb').addEventListener('input', (e) => {
-      const url = e.target.value.trim();
+    /* ---------- UPLOAD DE IMAGEM DO PC ---------- */
+    document.getElementById('pub-file-btn').addEventListener('click', () => {
+      document.getElementById('pub-file').click();
+    });
+
+    document.getElementById('pub-file').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (file.size > 5 * 1024 * 1024) {
+        cloudToast('File too large. Max 5 MB.', '#c0392b');
+        e.target.value = '';
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        cloudToast('File must be an image.', '#c0392b');
+        e.target.value = '';
+        return;
+      }
+
+      __pendingThumbFile = file;
+
+      const nameEl = document.getElementById('pub-file-name');
+      nameEl.textContent = file.name;
+      nameEl.classList.add('has-file');
+      document.getElementById('pub-file-clear').style.display = 'inline-flex';
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const pv = document.getElementById('pub-preview');
+        pv.style.backgroundImage = `url("${ev.target.result}")`;
+        pv.textContent = '';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('pub-file-clear').addEventListener('click', (e) => {
+      e.stopPropagation();
+      __pendingThumbFile = null;
+      document.getElementById('pub-file').value = '';
+
+      const nameEl = document.getElementById('pub-file-name');
+      nameEl.textContent = 'No file chosen';
+      nameEl.classList.remove('has-file');
+      document.getElementById('pub-file-clear').style.display = 'none';
+
+      const url = document.getElementById('pub-thumb').value.trim();
       const pv = document.getElementById('pub-preview');
       if (url) {
-        pv.style.backgroundImage = `url("${url}")`;
+        pv.style.backgroundImage = `url("${cssUrlSafe(url)}")`;
         pv.textContent = '';
       } else {
         pv.style.backgroundImage = '';
         pv.textContent = 'Preview';
       }
     });
+
+    document.getElementById('pub-thumb').addEventListener('input', (e) => {
+      if (__pendingThumbFile) return;
+      const url = e.target.value.trim();
+      const pv = document.getElementById('pub-preview');
+      if (url) {
+        pv.style.backgroundImage = `url("${cssUrlSafe(url)}")`;
+        pv.textContent = '';
+      } else {
+        pv.style.backgroundImage = '';
+        pv.textContent = 'Preview';
+      }
+    });
+
     document.getElementById('pub-desc').addEventListener('input', (e) => {
       document.getElementById('pub-desc-count').textContent = e.target.value.length;
     });
@@ -3158,7 +3234,7 @@ const Studio = {
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const meshes = [];
     this.scene.traverse(o => {
-      if (o.isMesh && o.userData.instance && !o.userData._isBaseplateEditor) {
+      if (o.isMesh && o.userData.instance) {
         if (o.userData.instance._isInWorkspace() || o.userData.instance === this.tree.workspace) {
           meshes.push(o);
         }
@@ -3425,23 +3501,32 @@ function openPublishModal() {
   const pubVis = document.getElementById('pub-vis');
   const pubMaxp = document.getElementById('pub-maxp');
   const pv = document.getElementById('pub-preview');
+  const fileNameEl = document.getElementById('pub-file-name');
+  const fileClearEl = document.getElementById('pub-file-clear');
+  const fileInput = document.getElementById('pub-file');
+
+  __pendingThumbFile = null;
+  fileInput.value = '';
+  fileNameEl.textContent = 'No file chosen';
+  fileNameEl.classList.remove('has-file');
+  fileClearEl.style.display = 'none';
 
   if (__currentGameId) {
     sb.from('games').select('*').eq('id', __currentGameId).maybeSingle().then(({ data }) => {
-      if (data) {
-        pubName.value = data.name || '';
-        pubDesc.value = data.description || '';
-        pubThumb.value = data.thumbnail_url || '';
-        pubVis.value = (data.is_public === false) ? 'private' : 'public';
-        pubMaxp.value = data.max_players || 50;
-        if (data.thumbnail_url) {
-          pv.style.backgroundImage = `url("${data.thumbnail_url}")`;
-          pv.textContent = '';
-        } else {
-          pv.style.backgroundImage = '';
-          pv.textContent = 'Preview';
-        }
+      if (!data) return;
+      pubName.value = data.name || '';
+      pubDesc.value = data.description || '';
+      pubThumb.value = data.thumbnail_url || '';
+      pubVis.value = (data.is_public === false) ? 'private' : 'public';
+      pubMaxp.value = data.max_players || 50;
+      if (data.thumbnail_url) {
+        pv.style.backgroundImage = `url("${cssUrlSafe(data.thumbnail_url)}")`;
+        pv.textContent = '';
+      } else {
+        pv.style.backgroundImage = '';
+        pv.textContent = 'Preview';
       }
+      document.getElementById('pub-desc-count').textContent = (data.description || '').length;
     });
   } else {
     pubName.value = 'My Game';
@@ -3451,8 +3536,9 @@ function openPublishModal() {
     pubMaxp.value = 50;
     pv.style.backgroundImage = '';
     pv.textContent = 'Preview';
+    document.getElementById('pub-desc-count').textContent = '0';
   }
-  document.getElementById('pub-desc-count').textContent = pubDesc.value.length;
+
   document.getElementById('publish-modal').classList.add('open');
 }
 
@@ -3468,18 +3554,44 @@ async function doPublish() {
   if (!name) { cloudToast('Name is required.', '#c0392b'); return; }
 
   const desc = document.getElementById('pub-desc').value.trim();
-  const thumb = document.getElementById('pub-thumb').value.trim() || null;
   const vis = document.getElementById('pub-vis').value === 'public';
   const maxp = Math.max(1, Math.min(200, parseInt(document.getElementById('pub-maxp').value) || 50));
 
-  const parts = collectWorkspaceParts();
-  const hasBP = hasBaseplateInWorkspace();
-  const payload = { parts, noBaseplate: !hasBP };
-
   const btn = document.getElementById('publish-confirm');
-  btn.disabled = true; btn.textContent = 'Publishing...';
+  btn.disabled = true;
 
   try {
+    let thumbUrl = document.getElementById('pub-thumb').value.trim() || null;
+
+    if (__pendingThumbFile) {
+      btn.textContent = 'Uploading image...';
+
+      const file = __pendingThumbFile;
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const safeExt = ['png','jpg','jpeg','webp','gif'].includes(ext) ? ext : 'png';
+      const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${safeExt}`;
+
+      const { error: upErr } = await sb.storage
+        .from('thumbnails')
+        .upload(path, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || 'image/png'
+        });
+
+      if (upErr) throw new Error('Upload failed: ' + upErr.message);
+
+      const { data: urlData } = sb.storage.from('thumbnails').getPublicUrl(path);
+      thumbUrl = urlData.publicUrl;
+      console.log('[studio] Thumbnail uploaded:', thumbUrl);
+    }
+
+    btn.textContent = 'Publishing...';
+
+    const parts = collectWorkspaceParts();
+    const hasBP = hasBaseplateInWorkspace();
+    const payload = { parts, noBaseplate: !hasBP };
+
     if (!__currentGameId) {
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Math.random().toString(36).slice(2, 6);
       const { data: prof } = await sb.from('profiles').select('username').eq('id', session.user.id).single();
@@ -3493,7 +3605,7 @@ async function doPublish() {
         generator: 'custom_build',
         data: payload,
         featured: false,
-        thumbnail_url: thumb,
+        thumbnail_url: thumbUrl,
         is_public: vis,
         max_players: maxp
       }).select().single();
@@ -3507,7 +3619,7 @@ async function doPublish() {
       const { error } = await sb.from('games').update({
         name,
         description: desc || null,
-        thumbnail_url: thumb,
+        thumbnail_url: thumbUrl,
         is_public: vis,
         max_players: maxp,
         data: payload
@@ -3518,12 +3630,15 @@ async function doPublish() {
       cloudToast('Game updated.');
     }
 
+    __pendingThumbFile = null;
     closePublish();
   } catch (err) {
+    console.error(err);
     cloudToast('Error: ' + err.message, '#c0392b');
     Studio.log('Publish error: ' + err.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Publish';
+    btn.disabled = false;
+    btn.textContent = 'Publish';
   }
 }
 
@@ -3554,7 +3669,7 @@ async function openLoadModal() {
     const item = document.createElement('div');
     item.className = 'load-item';
     const thumbBg = g.thumbnail_url
-      ? `background-image:url("${g.thumbnail_url}")`
+      ? `background-image:url("${cssUrlSafe(g.thumbnail_url)}")`
       : '';
     const visBadge = g.is_public === false
       ? '<span class="load-badge private">PRIVATE</span>'
