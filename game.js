@@ -691,7 +691,10 @@ const GENERATORS = {
     box(60, 8, 0, 2, 16, 122, boundColor);
   },
 
-  custom_build(scene, physics, data) {
+custom_build(scene, physics, data) {
+  const skipBP = data && data.noBaseplate === true;
+
+  if (!skipBP) {
     const BP = 256;
     const bpTex = getStudTexture(BP, BP);
     const bpSide = new THREE.MeshLambertMaterial({ color: 0xcfcfcf });
@@ -705,9 +708,10 @@ const GENERATORS = {
     baseplate.castShadow = false;
     scene.add(baseplate);
     physics.addBox(0, -1, 0, BP, 2, BP);
+  }
 
-    const parts = (data && data.parts) || [];
-    for (const p of parts) {
+  const parts = (data && data.parts) || [];
+  for (const p of parts) {
       const colorNum = typeof p.color === 'number'
         ? p.color
         : parseInt(String(p.color).replace('#', ''), 16);
