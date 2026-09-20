@@ -1594,85 +1594,87 @@ class BlokSignal {
 
 /* ---------- LEXER ---------- */
 function blokLex(src){
-  const toks=[]; let i=0; const len=src.length;
+  const toks=[]; let i=0; const len=src.length; let line=1;
   const kws=new Set(['and','break','do','else','elseif','end','false','for','function','if','in','local','nil','not','or','repeat','return','then','true','until','while']);
+  const push=(t)=>{ t.line=line; toks.push(t); return t; };
   while(i<len){
     const c=src[i];
-    if(c===' '||c==='\t'||c==='\r'||c==='\n'){ i++; continue; }
-    // comments
+    if(c==='\n'){ line++; i++; continue; }
+    if(c===' '||c==='\t'||c==='\r'){ i++; continue; }
     if(c==='-'&&src[i+1]==='-'){
       i+=2;
       if(src[i]==='['){
         let j=i+1,eq=0; while(src[j]==='='){eq++;j++;}
         if(src[j]==='['){
           const close=']'+'='.repeat(eq)+']';
-          const end=src.indexOf(close,j+1); i=end>=0?end+close.length:len; continue;
+          const end=src.indexOf(close,j+1);
+          if(end>=0){ for(let k=i;k<end;k++) if(src[k]==='\n') line++; i=end+close.length; }
+          else i=len;
+          continue;
         }
       }
       while(i<len&&src[i]!=='\n') i++;
       continue;
     }
-    // long string [[...]]
     if(c==='['&&(src[i+1]==='['||src[i+1]==='=')){
       let j=i+1,eq=0; while(src[j]==='='){eq++;j++;}
       if(src[j]==='['){
         const close=']'+'='.repeat(eq)+']';
         const end=src.indexOf(close,j+1);
         const str=src.slice(j+1,end>=0?end:len);
+        for(let k=i;k<(end>=0?end:len);k++) if(src[k]==='\n') line++;
         i=end>=0?end+close.length:len;
-        toks.push({type:'str',value:str}); continue;
+        push({type:'str',value:str}); continue;
       }
     }
-    // strings
     if(c==='"'||c==="'"){
-      const q=c; i++; let s='';
+      const q=c; i++; let str='';
       while(i<len&&src[i]!==q){
         if(src[i]==='\\'){
           const n=src[i+1];
-          if(n==='x'){ s+=String.fromCharCode(parseInt(src.substr(i+2,2),16)||0); i+=4; continue; }
-          if(n==='u'){ s+=String.fromCharCode(parseInt(src.substr(i+2,4),16)||0); i+=6; continue; }
+          if(n==='x'){ str+=String.fromCharCode(parseInt(src.substr(i+2,2),16)||0); i+=4; continue; }
+          if(n==='u'){ str+=String.fromCharCode(parseInt(src.substr(i+2,4),16)||0); i+=6; continue; }
           const esc={n:'\n',t:'\t',r:'\r',a:'\x07',b:'\b',f:'\f',v:'\v','\\':'\\','"':'"',"'":"'",'\n':''};
-          s += esc[n]!==undefined?esc[n]:n; i+=2;
-        } else { s+=src[i]; i++; }
+          str += esc[n]!==undefined?esc[n]:n; i+=2;
+          if(n==='\n') line++;
+        } else { str+=src[i]; i++; }
       }
-      i++; toks.push({type:'str',value:s}); continue;
+      if(i<len) i++;
+      push({type:'str',value:str}); continue;
     }
-    // numbers
     if(/[0-9]/.test(c)||(c==='.'&&/[0-9]/.test(src[i+1]))){
       if(c==='0'&&(src[i+1]==='x'||src[i+1]==='X')){
-        let s=src.substr(i,2); i+=2;
-        while(i<len&&/[0-9a-fA-F]/.test(src[i])) s+=src[i++];
-        toks.push({type:'num',value:parseInt(s,16)}); continue;
+        let str=src.substr(i,2); i+=2;
+        while(i<len&&/[0-9a-fA-F]/.test(src[i])) str+=src[i++];
+        push({type:'num',value:parseInt(str,16)}); continue;
       }
-      let s='';
-      while(i<len&&/[0-9]/.test(src[i])) s+=src[i++];
-      if(src[i]==='.'){ s+=src[i++]; while(i<len&&/[0-9]/.test(src[i])) s+=src[i++]; }
-      if(src[i]==='e'||src[i]==='E'){ s+=src[i++];
-        if(src[i]==='+'||src[i]==='-') s+=src[i++];
-        while(i<len&&/[0-9]/.test(src[i])) s+=src[i++]; }
-      toks.push({type:'num',value:parseFloat(s)}); continue;
+      let str='';
+      while(i<len&&/[0-9]/.test(src[i])) str+=src[i++];
+      if(src[i]==='.'){ str+=src[i++]; while(i<len&&/[0-9]/.test(src[i])) str+=src[i++]; }
+      if(src[i]==='e'||src[i]==='E'){ str+=src[i++];
+        if(src[i]==='+'||src[i]==='-') str+=src[i++];
+        while(i<len&&/[0-9]/.test(src[i])) str+=src[i++]; }
+      push({type:'num',value:parseFloat(str)}); continue;
     }
-    // identifiers
     if(/[A-Za-z_]/.test(c)){
-      let s=''; while(i<len&&/[A-Za-z0-9_]/.test(src[i])) s+=src[i++];
-      toks.push(kws.has(s)?{type:'kw',value:s}:{type:'name',value:s}); continue;
+      let str=''; while(i<len&&/[A-Za-z0-9_]/.test(src[i])) str+=src[i++];
+      push(kws.has(str)?{type:'kw',value:str}:{type:'name',value:str}); continue;
     }
-    // operators
-    if(src.substr(i,3)==='...'){ toks.push({type:'op',value:'...'}); i+=3; continue; }
+    if(src.substr(i,3)==='...'){ push({type:'op',value:'...'}); i+=3; continue; }
     const two=src.substr(i,2);
-    if(['==','~=','<=','>=','..','::','//'].includes(two)){ toks.push({type:'op',value:two}); i+=2; continue; }
-    if('+-*/%^#<>=(){}[].,;:'.includes(c)){ toks.push({type:'op',value:c}); i++; continue; }
-    throw new Error(`Unexpected character '${c}'`);
+    if(['==','~=','<=','>=','..','::','//'].includes(two)){ push({type:'op',value:two}); i+=2; continue; }
+    if('+-*/%^#<>=(){}[].,;:'.includes(c)){ push({type:'op',value:c}); i++; continue; }
+    throw new Error(`Unexpected character '${c}' (line ${line})`);
   }
-  toks.push({type:'eof',value:null});
+  push({type:'eof',value:null});
   return toks;
 }
 
 /* ---------- PARSER ---------- */
 class BlokParser {
-  constructor(t){ this.t=t; this.p=0; }
+  constructor(t){ this.t=t; this.p=0; this.curLine=1; }
   peek(k=0){ return this.t[this.p+k]||{type:'eof'}; }
-  adv(){ return this.t[this.p++]; }
+  adv(){ const t=this.t[this.p++]; if(t&&t.line) this.curLine=t.line; return t; }
   is(t,v){ const x=this.peek(); return x.type===t && (v===undefined||x.value===v); }
   acc(t,v){ if(this.is(t,v)) return this.adv(); return null; }
   exp(t,v){ if(!this.is(t,v)) throw new Error(`Expected ${v||t}, got '${this.peek().value}'`); return this.adv(); }
@@ -1761,17 +1763,19 @@ class BlokParser {
     while(true){
       if(this.is('op','.')){
         this.adv(); const n=this.exp('name').value;
-        e={type:'Idx',obj:e,key:{type:'Lit',value:n},dot:true};
+        e={type:'Idx',obj:e,key:{type:'Lit',value:n},dot:true,line:this.curLine};
       } else if(this.is('op','[')){
         this.adv(); const k=this.parseExpr(); this.exp('op',']');
-        e={type:'Idx',obj:e,key:k};
+        e={type:'Idx',obj:e,key:k,line:this.curLine};
       } else if(this.is('op',':')){
+        const l=this.peek().line;
         this.adv(); const n=this.exp('name').value;
         const args=this.parseArgs();
-        e={type:'Method',obj:e,method:n,args};
+        e={type:'Method',obj:e,method:n,args,line:l};
       } else if(this.is('op','(')||this.is('str')||this.is('op','{')){
+        const l=this.peek().line;
         const args=this.parseArgs();
-        e={type:'Call',fn:e,args};
+        e={type:'Call',fn:e,args,line:l};
       } else break;
     }
     return e;
@@ -1989,6 +1993,20 @@ async function bCallMethod(obj,name,args,rt){
 }
 
 /* ---------- EVALUATOR ---------- */
+function describeExpr(e){
+  if(!e) return '';
+  if(e.type==='Ident') return e.name;
+  if(e.type==='Lit') return JSON.stringify(e.value);
+  if(e.type==='Idx'){
+    const key=e.key&&e.key.value!==undefined?e.key.value:'?';
+    const dot=e.dot?'.':'';
+    return describeExpr(e.obj)+dot+key;
+  }
+  if(e.type==='Method') return describeExpr(e.obj)+':'+e.method+'(...)';
+  if(e.type==='Call') return describeExpr(e.fn)+'(...)';
+  return '';
+}
+
 async function bEval(e,env,rt){
   if(rt&&rt.stopped) throw new BlokStop();
   switch(e.type){
@@ -2008,10 +2026,33 @@ async function bEval(e,env,rt){
     case 'Call': {
       const fn=await bEval(e.fn,env,rt);
       const args=[]; for(const a of e.args) args.push(await bEval(a,env,rt));
+      if(fn===null||fn===undefined){
+        const where=e.line?` (line ${e.line})`:'';
+        const desc=describeExpr(e.fn);
+        throw new Error(`Attempt to call a nil value${where}${desc?`\n  → expression: ${desc}`:''}`);
+      }
       return await bCall(fn,args,rt);
     }
     case 'Method': {
       const o=await bEval(e.obj,env,rt);
+      if(o===null||o===undefined){
+        const where=e.line?` (line ${e.line})`:'';
+        let hint='';
+        if(e.obj&&e.obj.type==='Call'&&e.obj.fn&&e.obj.fn.type==='Idx'){
+          const mName=e.obj.fn.key&&e.obj.fn.key.value;
+          const arg0=e.obj.args&&e.obj.args[0];
+          if(mName==='FindPart'||mName==='FindFirstChild'||mName==='WaitForChild'){
+            if(arg0&&arg0.type==='Lit'){
+              hint=`\n  → ${mName}(${JSON.stringify(arg0.value)}) returned nil`+
+                   `\n  → No Instance named "${arg0.value}" exists in Workspace.`+
+                   `\n  → Create it first: workspace:CreatePart("Part",{Name="${arg0.value}",Position=Vector3.new(0,5,0)})`;
+            } else hint=`\n  → ${mName}(...) returned nil`;
+          }
+        }
+        const desc=describeExpr(e.obj);
+        if(!hint&&desc) hint=`\n  → receiver: ${desc}`;
+        throw new Error(`Attempt to call method '${e.method}' on nil${where}${hint}`);
+      }
       const args=[]; for(const a of e.args) args.push(await bEval(a,env,rt));
       return await bCallMethod(o,e.method,args,rt);
     }
@@ -2188,7 +2229,24 @@ function wrapInstance(inst,rt){
     const walk=(x)=>{ if(found) return; if(x.name===n){ found=x; return; } for(const c of x.children) walk(c); };
     walk(inst); return wrapInstance(found,rt);
   };
-  w.WaitForChild=w.FindFirstChild;
+  w.WaitForChild=(n,timeout)=>{
+    const t=timeout===undefined?10:bNum(timeout);
+    const start=performance.now();
+    const find=()=>{
+      let found=null;
+      const walk=(x)=>{ if(found) return; if(x.name===n){ found=x; return; } for(const c of x.children) walk(c); };
+      walk(inst); return found;
+    };
+    return new Promise((resolve,reject)=>{
+      const tick=()=>{
+        const f=find();
+        if(f) return resolve(wrapInstance(f,rt));
+        if((performance.now()-start)/1000>=t) return reject(new Error(`WaitForChild("${n}") timed out after ${t}s`));
+        setTimeout(tick,60);
+      };
+      tick();
+    });
+  };
   w.GetChildren=()=>inst.children.map(c=>wrapInstance(c,rt));
   w.GetDescendants=()=>{ const out=[]; const walk=(x)=>{ for(const c of x.children){ out.push(wrapInstance(c,rt)); walk(c); } }; walk(inst); return out; };
   w.Destroy=()=>{ inst.destroy(); };
@@ -2295,6 +2353,49 @@ function wrapInstance(inst,rt){
       walk(inst); return wrapInstance(found,rt);
     };
     w.FindFirstChild=(n)=>wrapInstance(inst.children.find(c=>c.name===n),rt);
+    w.FindOrCreate=(n,opts)=>{
+      let found=null;
+      const walk=(x)=>{ if(found) return; if(x.name===n){ found=x; return; } for(const c of x.children) walk(c); };
+      walk(inst);
+      if(found) return wrapInstance(found,rt);
+      opts=opts||{};
+      const kind=opts.Kind||opts.kind||'Part';
+      const p=new Part(kind,inst);
+      p.name=String(n);
+      const pos=opts.Position||opts.position;
+      const size=opts.Size||opts.size;
+      if(pos) p.setPosition(bNum(pos.x),bNum(pos.y),bNum(pos.z));
+      else if(opts.x!==undefined) p.setPosition(bNum(opts.x),bNum(opts.y),bNum(opts.z));
+      else p.setPosition(0,5,0);
+      if(size){
+        const arr=Array.isArray(size)?size:[size.x,size.y,size.z];
+        p.setSize(bNum(arr[0]),bNum(arr[1]),bNum(arr[2]));
+      }
+      if(opts.Color||opts.color) p.setColor(String(opts.Color||opts.color));
+      if(opts.Anchored!==undefined) p.setAnchored(bTruthy(opts.Anchored));
+      if(opts.Transparency!==undefined) p.setTransparency(bNum(opts.Transparency));
+      Studio.refreshExplorer();
+      Studio.log(`FindOrCreate: created "${n}"`,'action');
+      return wrapInstance(p,rt);
+    };
+    w.WaitForChild=(n,timeout)=>{
+      const t=timeout===undefined?10:bNum(timeout);
+      const start=performance.now();
+      const find=()=>{
+        let found=null;
+        const walk=(x)=>{ if(found) return; if(x.name===n){ found=x; return; } for(const c of x.children) walk(c); };
+        walk(inst); return found;
+      };
+      return new Promise((resolve,reject)=>{
+        const tick=()=>{
+          const f=find();
+          if(f) return resolve(wrapInstance(f,rt));
+          if((performance.now()-start)/1000>=t) return reject(new Error(`WaitForChild("${n}") timed out after ${t}s`));
+          setTimeout(tick,60);
+        };
+        tick();
+      });
+    };
     w.GetChildren=()=>inst.children.map(c=>wrapInstance(c,rt));
     w.CreatePart=(a,b,c,d,e,f,g)=>{
       // Support: ("Part"), ("Part",{...}), ({...}), (x,y,z,sx,sy,sz,color)
