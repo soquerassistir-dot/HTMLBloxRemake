@@ -246,7 +246,6 @@
         <button class="tool" id="cloud-load">Open</button>
         <button class="tool" id="cloud-publish">Publish</button>
         <button class="tool" id="cloud-new">New</button>
-        <button class="tool" id="cloud-import">Import Map</button>
       </div>
     </div>
 
@@ -813,8 +812,6 @@ class Part extends Instance {
   _geo(s) {
     if (this.className === 'Sphere')
       return new THREE.SphereGeometry(Math.min(s.x, s.y, s.z) / 2, 24, 16);
-    if (this.className === 'Icosahedron')
-      return new THREE.IcosahedronGeometry(Math.min(s.x, s.y, s.z) / 2, 0);
     if (this.className === 'Cylinder')
       return new THREE.CylinderGeometry(s.x / 2, s.x / 2, s.y, 24);
     if (this.className === 'Wedge') {
@@ -2992,27 +2989,6 @@ const Studio = {
       cloudToast('New game started.', '#4a7ab8');
       this.log('New game.', 'info');
     });
-        document.getElementById('cloud-import').addEventListener('click', () => {
-      const choice = prompt(
-        'Which map to import?\n\n' +
-        '1) Blocky World (full city map)\n' +
-        '2) Empty (baseplate only)\n' +
-        '3) Cancel\n\n' +
-        'Enter number (1/2/3):',
-        '1'
-      );
-      if (!choice || choice === '3') return;
-
-      if (choice === '1') {
-        if (!confirm('This will CLEAR the current workspace and import Blocky World. Continue?')) return;
-        clearWorkspaceParts();
-        importBlockyWorld();
-      } else if (choice === '2') {
-        if (!confirm('This will CLEAR the current workspace. Continue?')) return;
-        clearWorkspaceParts();
-        importEmptyWorld();
-      }
-    });
   },
 
   _pick(additive) {
@@ -3161,199 +3137,6 @@ const Studio = {
     this.renderer.render(this.scene, this.camera);
   }
 };
-
-/* ============================================================
-   IMPORT MAPS — converte generators do game.js em Parts editáveis
-   ============================================================ */
-function _hex(n) { return '#' + n.toString(16).padStart(6, '0'); }
-
-function importBlockyWorld() {
-  const W = Studio.tree.workspace;
-  const created = [];
-
-  const box = (x, y, z, sx, sy, sz, color, opts = {}) => {
-    const p = new Part(opts.kind || 'Part', W);
-    p.setSize(sx, sy, sz);
-    p.setPosition(x, y, z);
-    p.setColor(typeof color === 'number' ? _hex(color) : color);
-    if (opts.name) p.name = opts.name;
-    if (opts.castShadow === false) p.setCastShadow(false);
-    created.push(p);
-    return p;
-  };
-
-  /* Baseplate */
-  box(0, -1, 0, 120, 2, 120, 0x6ab04c, { name: 'Baseplate', castShadow: false });
-
-  /* Road */
-  box(0, 0.03, 0, 120, 0.05, 12, 0x54545e, { name: 'Road', castShadow: false });
-
-  /* Road lines */
-  for (let x = -56; x <= 56; x += 9) {
-    box(x, 0.06, 0, 4, 0.05, 0.55, 0xe9e9e9, { name: 'RoadLine', castShadow: false });
-  }
-
-  /* Sidewalks */
-  box(0, 0.15,  7.5, 120, 0.3, 3, 0xbdbdbd, { name: 'SidewalkN', castShadow: false });
-  box(0, 0.15, -7.5, 120, 0.3, 3, 0xbdbdbd, { name: 'SidewalkS', castShadow: false });
-
-  /* Houses */
-  function buildHouse(cx, cz, w, d, wallColor, roofColor, facing) {
-    const wallT = 0.6, wallH = 10, doorW = 4, doorH = 7;
-    const front = cz + facing * (d / 2 - wallT / 2);
-    const back  = cz - facing * (d / 2 - wallT / 2);
-
-    box(cx, wallH / 2, back, w, wallH, wallT, wallColor, { name: 'WallBack' });
-    box(cx - w / 2 + wallT / 2, wallH / 2, cz, wallT, wallH, d, wallColor, { name: 'WallLeft' });
-    box(cx + w / 2 - wallT / 2, wallH / 2, cz, wallT, wallH, d, wallColor, { name: 'WallRight' });
-
-    const sideW = (w - doorW) / 2;
-    box(cx - (doorW / 2 + sideW / 2), wallH / 2, front, sideW, wallH, wallT, wallColor, { name: 'WallFrontL' });
-    box(cx + (doorW / 2 + sideW / 2), wallH / 2, front, sideW, wallH, wallT, wallColor, { name: 'WallFrontR' });
-
-    const lintelH = wallH - doorH;
-    box(cx, doorH + lintelH / 2, front, doorW, lintelH, wallT, wallColor, { name: 'DoorLintel' });
-
-    box(cx, 0.1, cz, w - 0.4, 0.2, d - 0.4, 0x8a6a4a, { name: 'Floor', castShadow: false });
-    box(cx, wallH + 0.4, cz, w + 1.4, 0.8, d + 1.4, roofColor, { name: 'Roof' });
-    box(cx + w * 0.28, wallH + 2.4, cz - d * 0.24, 1.6, 3.4, 1.6, 0x8d8d8d, { name: 'Chimney' });
-
-    [-1, 1].forEach((side, i) => {
-      const wx = cx + side * (w / 2 - wallT / 2);
-      box(wx, 5.4, cz, 0.16, 2.4, 2.4, 0x9fdcf5, { name: 'Window' + i, castShadow: false });
-    });
-  }
-
-  buildHouse(-32, -22, 18, 14, 0xd9c6a5, 0xa63b2f,  1);
-  buildHouse( 32, -22, 16, 14, 0xe0d3b8, 0x7a4a2b,  1);
-  buildHouse(-32,  22, 18, 14, 0xc9b8a8, 0x8a3b3b, -1);
-  buildHouse( 32,  22, 16, 14, 0xd9c6a5, 0xa63b2f, -1);
-  buildHouse(  0, -40, 22, 16, 0xe0d3b8, 0x7a4a2b,  1);
-
-  /* Trees */
-  const leafMats = [0x3f8f3f, 0x4aa04a, 0x357a35];
-
-  function buildTree(x, z, scale = 1) {
-    const trunkH = 6 * scale, trunkR = 0.7 * scale;
-
-    const trunk = new Part('Cylinder', W);
-    trunk.setSize(trunkR * 2, trunkH, trunkR * 2);
-    trunk.setPosition(x, trunkH / 2, z);
-    trunk.setColor('#7a5230');
-    trunk.name = 'Trunk';
-    created.push(trunk);
-
-    const leafColor = leafMats[Math.floor(Math.random() * leafMats.length)];
-    const r1 = 2.9 * scale, r2 = 2.1 * scale, r3 = 1.3 * scale;
-
-    const c1 = new Part('Icosahedron', W);
-    c1.setSize(r1 * 2, r1 * 2, r1 * 2);
-    c1.setPosition(x, trunkH + r1 * 0.55, z);
-    c1.setColor(_hex(leafColor));
-    c1.name = 'Leaves';
-    created.push(c1);
-
-    const c2 = new Part('Icosahedron', W);
-    c2.setSize(r2 * 2, r2 * 2, r2 * 2);
-    c2.setPosition(x + r1 * 0.5, trunkH + r1 * 1.1, z - r1 * 0.35);
-    c2.setColor(_hex(leafColor));
-    c2.name = 'Leaves';
-    created.push(c2);
-
-    const c3 = new Part('Icosahedron', W);
-    c3.setSize(r3 * 2, r3 * 2, r3 * 2);
-    c3.setPosition(x - r1 * 0.45, trunkH + r1 * 1.25, z + r1 * 0.4);
-    c3.setColor(_hex(leafColor));
-    c3.name = 'Leaves';
-    created.push(c3);
-  }
-
-  [
-    [-52, -25], [52, -25], [-52, 25], [52, 25],
-    [-16, -14], [16, -20], [-16, 14], [16, 14],
-    [0, 32], [-26, 42], [26, 42], [0, -54],
-    [-46, 14], [46, -14]
-  ].forEach(([x, z], i) => buildTree(x, z, 0.9 + (i % 3) * 0.12));
-
-  /* Platforms */
-  [
-    [10, 2.0, -10, 6, 1, 6], [16, 4.5, -10, 6, 1, 6], [22, 7.0, -10, 6, 1, 6],
-    [28, 9.5, -10, 6, 1, 6], [34, 12.0, -10, 8, 1, 8]
-  ].forEach(([x, y, z, sx, sy, sz], i) =>
-    box(x, y, z, sx, sy, sz, 0x9b7653, { name: 'Platform' + i }));
-
-  /* Gold block */
-  box(34, 13.9, -10, 2.2, 2.2, 2.2, 0xffd700, { name: 'GoldBlock' });
-
-  /* Crates */
-  [
-    [ 6, 1, 14], [ 6, 3, 14], [ 8, 1, 14], [ 7, 1, 16],
-    [-9, 1, 16], [-9, 3, 16], [-11, 1, 16]
-  ].forEach(([x, y, z]) =>
-    box(x, y, z, 2, 2, 2, 0xb98a4b, { name: 'Crate' }));
-
-  /* Benches */
-  function buildBench(x, z) {
-    box(x, 1.4, z, 4.4, 0.4, 1.4, 0x8b5a2b, { name: 'BenchSeat' });
-    box(x - 1.7, 0.7, z, 0.4, 1.4, 1.2, 0x5a3d1e, { name: 'BenchLegL' });
-    box(x + 1.7, 0.7, z, 0.4, 1.4, 1.2, 0x5a3d1e, { name: 'BenchLegR' });
-    box(x, 2.6, z - 0.6, 4.4, 1.6, 0.25, 0x8b5a2b, { name: 'BenchBack' });
-  }
-  buildBench(-30,  10);
-  buildBench( 30,  10);
-  buildBench(-30, -10);
-  buildBench( 30, -10);
-
-  /* Lamps */
-  function buildLamp(x, z) {
-    const poleH = 12;
-    const pole = new Part('Cylinder', W);
-    pole.setSize(0.9, poleH, 0.9);
-    pole.setPosition(x, poleH / 2, z);
-    pole.setColor('#6b6b6b');
-    pole.name = 'LampPole';
-    created.push(pole);
-
-    box(x, poleH + 0.5, z, 1.8, 1.2, 1.8, 0xfff2b0, { name: 'LampTop' });
-  }
-  [-40, -20, 0, 20, 40].forEach((x) => {
-    buildLamp(x,  10.5);
-    buildLamp(x, -10.5);
-  });
-
-  /* Decorative walls */
-  box(-50, 3, -20, 1.2, 6, 16, 0xcfcfcf, { name: 'WallW' });
-  box( 50, 3,  20, 1.2, 6, 16, 0xcfcfcf, { name: 'WallE' });
-  box(  0, 3,  46, 22, 6, 1.2, 0xcfcfcf, { name: 'WallN' });
-
-  /* Elevations */
-  box(-45, 1,   -45, 14, 2, 14, 0x5fa344, { name: 'Hill1', castShadow: false });
-  box( 45, 1.5,  45, 16, 3, 16, 0x5fa344, { name: 'Hill2', castShadow: false });
-  box(-45, 3,   -45,  6, 2,  6, 0x4f8f38, { name: 'Hill1Top' });
-
-  /* Boundaries */
-  box(  0, 8, -60, 122, 16, 2, 0x7f8c8d, { name: 'BoundaryN' });
-  box(  0, 8,  60, 122, 16, 2, 0x7f8c8d, { name: 'BoundaryS' });
-  box(-60, 8,   0,   2, 16, 122, 0x7f8c8d, { name: 'BoundaryW' });
-  box( 60, 8,   0,   2, 16, 122, 0x7f8c8d, { name: 'BoundaryE' });
-
-  Studio.log(`Blocky World imported: ${created.length} parts`, 'success');
-  Studio.refreshExplorer();
-  Studio.refreshProps();
-  return created.length;
-}
-
-function importEmptyWorld() {
-  const W = Studio.tree.workspace;
-  const bp = new Part('Part', W);
-  bp.setSize(256, 2, 256);
-  bp.setPosition(0, -1, 0);
-  bp.setColor('#cfcfcf');
-  bp.name = 'Baseplate';
-  Studio.log('Empty world imported', 'success');
-  Studio.refreshExplorer();
-  Studio.refreshProps();
-}
 
 /* ============================================================
    SERIALIZATION
