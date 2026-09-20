@@ -1562,6 +1562,972 @@ class StarterPlayer extends Instance { constructor() { super('StarterPlayer'); }
 class StarterGui extends Instance { constructor() { super('StarterGui'); } }
 class StarterPack extends Instance { constructor() { super('StarterPack'); } }
 
+  /* ============================================================
+   BLOK — Full Lua-style Interpreter
+   ============================================================ */
+
+class BlokStop   extends Error { constructor(){ super('Script stopped'); this.name='BlokStop'; } }
+class BlokBreak  extends Error { constructor(){ super('break'); this.name='BlokBreak'; } }
+class BlokReturn extends Error { constructor(v){ super('return'); this.name='BlokReturn'; this.value=v; } }
+
+class BlokSignal {
+  constructor(name='Signal'){ this.name=name; this.handlers=[]; }
+  Connect(fn){
+    const h={ fn, connected:true };
+    this.handlers.push(h);
+    const conn={ Connected:true,
+      Disconnect(){ h.connected=false; conn.Connected=false;
+        const i=this._owner.handlers.indexOf(h); if(i>=0) this._owner.handlers.splice(i,1); },
+      _owner:this };
+    return conn;
+  }
+  Once(fn){ const c=this.Connect((...a)=>{ c.Disconnect(); fn(...a); }); return c; }
+  Fire(...args){
+    for(const h of [...this.handlers]){
+      if(!h.connected) continue;
+      try { const r=h.fn(...args); if(r&&r.catch) r.catch(e=>console.error('[signal]',e)); }
+      catch(e){ console.error('[signal]', e); }
+    }
+  }
+  Wait(){ return new Promise(res=>this.Once(res)); }
+}
+
+/* ---------- LEXER ---------- */
+function blokLex(src){
+  const toks=[]; let i=0; const len=src.length;
+  const kws=new Set(['and','break','do','else','elseif','end','false','for','function','if','in','local','nil','not','or','repeat','return','then','true','until','while']);
+  while(i<len){
+    const c=src[i];
+    if(c===' '||c==='\t'||c==='\r'||c==='\n'){ i++; continue; }
+    // comments
+    if(c==='-'&&src[i+1]==='-'){
+      i+=2;
+      if(src[i]==='['){
+        let j=i+1,eq=0; while(src[j]==='='){eq++;j++;}
+        if(src[j]==='['){
+          const close=']'+'='.repeat(eq)+']';
+          const end=src.indexOf(close,j+1); i=end>=0?end+close.length:len; continue;
+        }
+      }
+      while(i<len&&src[i]!=='\n') i++;
+      continue;
+    }
+    // long string [[...]]
+    if(c==='['&&(src[i+1]==='['||src[i+1]==='=')){
+      let j=i+1,eq=0; while(src[j]==='='){eq++;j++;}
+      if(src[j]==='['){
+        const close=']'+'='.repeat(eq)+']';
+        const end=src.indexOf(close,j+1);
+        const str=src.slice(j+1,end>=0?end:len);
+        i=end>=0?end+close.length:len;
+        toks.push({type:'str',value:str}); continue;
+      }
+    }
+    // strings
+    if(c==='"'||c==="'"){
+      const q=c; i++; let s='';
+      while(i<len&&src[i]!==q){
+        if(src[i]==='\\'){
+          const n=src[i+1];
+          if(n==='x'){ s+=String.fromCharCode(parseInt(src.substr(i+2,2),16)||0); i+=4; continue; }
+          if(n==='u'){ s+=String.fromCharCode(parseInt(src.substr(i+2,4),16)||0); i+=6; continue; }
+          const esc={n:'\n',t:'\t',r:'\r',a:'\x07',b:'\b',f:'\f',v:'\v','\\':'\\','"':'"',"'":"'",'\n':''};
+          s += esc[n]!==undefined?esc[n]:n; i+=2;
+        } else { s+=src[i]; i++; }
+      }
+      i++; toks.push({type:'str',value:s}); continue;
+    }
+    // numbers
+    if(/[0-9]/.test(c)||(c==='.'&&/[0-9]/.test(src[i+1]))){
+      if(c==='0'&&(src[i+1]==='x'||src[i+1]==='X')){
+        let s=src.substr(i,2); i+=2;
+        while(i<len&&/[0-9a-fA-F]/.test(src[i])) s+=src[i++];
+        toks.push({type:'num',value:parseInt(s,16)}); continue;
+      }
+      let s='';
+      while(i<len&&/[0-9]/.test(src[i])) s+=src[i++];
+      if(src[i]==='.'){ s+=src[i++]; while(i<len&&/[0-9]/.test(src[i])) s+=src[i++]; }
+      if(src[i]==='e'||src[i]==='E'){ s+=src[i++];
+        if(src[i]==='+'||src[i]==='-') s+=src[i++];
+        while(i<len&&/[0-9]/.test(src[i])) s+=src[i++]; }
+      toks.push({type:'num',value:parseFloat(s)}); continue;
+    }
+    // identifiers
+    if(/[A-Za-z_]/.test(c)){
+      let s=''; while(i<len&&/[A-Za-z0-9_]/.test(src[i])) s+=src[i++];
+      toks.push(kws.has(s)?{type:'kw',value:s}:{type:'name',value:s}); continue;
+    }
+    // operators
+    if(src.substr(i,3)==='...'){ toks.push({type:'op',value:'...'}); i+=3; continue; }
+    const two=src.substr(i,2);
+    if(['==','~=','<=','>=','..','::','//'].includes(two)){ toks.push({type:'op',value:two}); i+=2; continue; }
+    if('+-*/%^#<>=(){}[].,;:'.includes(c)){ toks.push({type:'op',value:c}); i++; continue; }
+    throw new Error(`Unexpected character '${c}'`);
+  }
+  toks.push({type:'eof',value:null});
+  return toks;
+}
+
+/* ---------- PARSER ---------- */
+class BlokParser {
+  constructor(t){ this.t=t; this.p=0; }
+  peek(k=0){ return this.t[this.p+k]||{type:'eof'}; }
+  adv(){ return this.t[this.p++]; }
+  is(t,v){ const x=this.peek(); return x.type===t && (v===undefined||x.value===v); }
+  acc(t,v){ if(this.is(t,v)) return this.adv(); return null; }
+  exp(t,v){ if(!this.is(t,v)) throw new Error(`Expected ${v||t}, got '${this.peek().value}'`); return this.adv(); }
+
+  parseChunk(){ const b=this.parseBlock(); this.exp('eof'); return {type:'Chunk',body:b}; }
+
+  parseBlock(){
+    const s=[];
+    while(!this.is('eof')&&!this.is('kw','end')&&!this.is('kw','else')&&!this.is('kw','elseif')&&!this.is('kw','until')){
+      const st=this.parseStmt(); if(st) s.push(st);
+    }
+    return {type:'Block',body:s};
+  }
+
+  parseStmt(){
+    if(this.acc('op',';')) return null;
+    if(this.is('kw','local')) return this.parseLocal();
+    if(this.is('kw','function')) return this.parseFnDecl();
+    if(this.is('kw','if')) return this.parseIf();
+    if(this.is('kw','while')) return this.parseWhile();
+    if(this.is('kw','repeat')) return this.parseRepeat();
+    if(this.is('kw','for')) return this.parseFor();
+    if(this.is('kw','do')){ this.adv(); const b=this.parseBlock(); this.exp('kw','end'); return {type:'Do',body:b}; }
+    if(this.is('kw','return')){
+      this.adv();
+      const ender=this.is('eof')||this.is('kw','end')||this.is('kw','else')||this.is('kw','elseif')||this.is('kw','until')||this.is('op',';');
+      const exprs=ender?[]:this.parseExprList();
+      this.acc('op',';');
+      return {type:'Return',exprs};
+    }
+    if(this.is('kw','break')){ this.adv(); this.acc('op',';'); return {type:'Break'}; }
+
+    const first=this.parseExpr();
+    if(this.is('op','=')||this.is('op',',')){
+      const targets=[first];
+      while(this.acc('op',',')) targets.push(this.parseExpr());
+      this.exp('op','=');
+      const values=this.parseExprList();
+      return {type:'Assign',targets,values};
+    }
+    return {type:'ExprStmt',expr:first};
+  }
+
+  parseExprList(){ const e=[this.parseExpr()]; while(this.acc('op',',')) e.push(this.parseExpr()); return e; }
+
+  parseExpr(){ return this.parseOr(); }
+  parseOr(){ let l=this.parseAnd();
+    while(this.is('kw','or')){ this.adv(); l={type:'Bin',op:'or',left:l,right:this.parseAnd()}; } return l; }
+  parseAnd(){ let l=this.parseCmp();
+    while(this.is('kw','and')){ this.adv(); l={type:'Bin',op:'and',left:l,right:this.parseCmp()}; } return l; }
+  parseCmp(){
+    let l=this.parseConcat();
+    while(['==','~=','<','>','<=','>='].some(o=>this.is('op',o))){
+      const op=this.adv().value; l={type:'Bin',op,left:l,right:this.parseConcat()};
+    } return l;
+  }
+  parseConcat(){
+    const l=this.parseAdd();
+    if(this.is('op','..')){ this.adv(); return {type:'Bin',op:'..',left:l,right:this.parseConcat()}; }
+    return l;
+  }
+  parseAdd(){
+    let l=this.parseMul();
+    while(this.is('op','+')||this.is('op','-')){ const op=this.adv().value; l={type:'Bin',op,left:l,right:this.parseMul()}; }
+    return l;
+  }
+  parseMul(){
+    let l=this.parseUnary();
+    while(this.is('op','*')||this.is('op','/')||this.is('op','%')||this.is('op','//')){
+      const op=this.adv().value; l={type:'Bin',op,left:l,right:this.parseUnary()};
+    } return l;
+  }
+  parseUnary(){
+    if(this.is('kw','not')){ this.adv(); return {type:'Un',op:'not',e:this.parseUnary()}; }
+    if(this.is('op','-')){ this.adv(); return {type:'Un',op:'-',e:this.parseUnary()}; }
+    if(this.is('op','#')){ this.adv(); return {type:'Un',op:'#',e:this.parseUnary()}; }
+    return this.parsePow();
+  }
+  parsePow(){
+    const l=this.parseSuffixed();
+    if(this.is('op','^')){ this.adv(); return {type:'Bin',op:'^',left:l,right:this.parseUnary()}; }
+    return l;
+  }
+  parseSuffixed(){
+    let e=this.parsePrimary();
+    while(true){
+      if(this.is('op','.')){
+        this.adv(); const n=this.exp('name').value;
+        e={type:'Idx',obj:e,key:{type:'Lit',value:n},dot:true};
+      } else if(this.is('op','[')){
+        this.adv(); const k=this.parseExpr(); this.exp('op',']');
+        e={type:'Idx',obj:e,key:k};
+      } else if(this.is('op',':')){
+        this.adv(); const n=this.exp('name').value;
+        const args=this.parseArgs();
+        e={type:'Method',obj:e,method:n,args};
+      } else if(this.is('op','(')||this.is('str')||this.is('op','{')){
+        const args=this.parseArgs();
+        e={type:'Call',fn:e,args};
+      } else break;
+    }
+    return e;
+  }
+  parseArgs(){
+    if(this.is('op','(')){
+      this.adv(); const a=[];
+      if(!this.is('op',')')){ a.push(this.parseExpr()); while(this.acc('op',',')) a.push(this.parseExpr()); }
+      this.exp('op',')'); return a;
+    }
+    if(this.is('str')) return [{type:'Lit',value:this.adv().value}];
+    if(this.is('op','{')) return [this.parsePrimary()];
+    throw new Error('Expected arguments');
+  }
+  parsePrimary(){
+    const t=this.peek();
+    if(t.type==='num'){ this.adv(); return {type:'Lit',value:t.value}; }
+    if(t.type==='str'){ this.adv(); return {type:'Lit',value:t.value}; }
+    if(t.type==='kw'&&t.value==='nil'){ this.adv(); return {type:'Lit',value:null}; }
+    if(t.type==='kw'&&t.value==='true'){ this.adv(); return {type:'Lit',value:true}; }
+    if(t.type==='kw'&&t.value==='false'){ this.adv(); return {type:'Lit',value:false}; }
+    if(t.type==='name'){ this.adv(); return {type:'Ident',name:t.value}; }
+    if(t.type==='op'&&t.value==='('){ this.adv(); const e=this.parseExpr(); this.exp('op',')'); return e; }
+    if(t.type==='op'&&t.value==='{') return this.parseTable();
+    if(t.type==='kw'&&t.value==='function') return this.parseFnExpr();
+    if(t.type==='op'&&t.value==='...'){ this.adv(); return {type:'Vararg'}; }
+    throw new Error(`Unexpected token '${t.value}'`);
+  }
+  parseTable(){
+    this.exp('op','{'); const items=[];
+    while(!this.is('op','}')){
+      if(this.is('op','[')){ this.adv(); const k=this.parseExpr(); this.exp('op',']'); this.exp('op','='); items.push({kind:'k',k,v:this.parseExpr()}); }
+      else if(this.is('name')&&this.peek(1).type==='op'&&this.peek(1).value==='='){
+        const n=this.adv().value; this.adv(); items.push({kind:'k',k:{type:'Lit',value:n},v:this.parseExpr()});
+      } else items.push({kind:'v',v:this.parseExpr()});
+      if(!this.acc('op',',')&&!this.acc('op',';')) break;
+    }
+    this.exp('op','}');
+    return {type:'Table',items};
+  }
+  parseFnExpr(){
+    this.exp('kw','function'); const params=[];
+    this.exp('op','(');
+    if(!this.is('op',')')){ params.push(this.exp('name').value); while(this.acc('op',',')) params.push(this.exp('name').value); }
+    this.exp('op',')');
+    const body=this.parseBlock(); this.exp('kw','end');
+    return {type:'Fn',params,body};
+  }
+  parseLocal(){
+    this.exp('kw','local');
+    if(this.is('kw','function')){
+      this.adv(); const n=this.exp('name').value; const params=[];
+      this.exp('op','(');
+      if(!this.is('op',')')){ params.push(this.exp('name').value); while(this.acc('op',',')) params.push(this.exp('name').value); }
+      this.exp('op',')');
+      const body=this.parseBlock(); this.exp('kw','end');
+      return {type:'LocalFn',name:n,params,body};
+    }
+    const names=[this.exp('name').value];
+    while(this.acc('op',',')) names.push(this.exp('name').value);
+    let values=[];
+    if(this.acc('op','=')) values=this.parseExprList();
+    return {type:'Local',names,values};
+  }
+  parseFnDecl(){
+    this.exp('kw','function');
+    const parts=[this.exp('name').value];
+    let isMethod=false;
+    while(this.is('op','.')||this.is('op',':')){
+      if(this.is('op',':')) isMethod=true;
+      this.adv(); parts.push(this.exp('name').value);
+    }
+    const params=[];
+    this.exp('op','(');
+    if(isMethod) params.push('self');
+    if(!this.is('op',')')){ params.push(this.exp('name').value); while(this.acc('op',',')) params.push(this.exp('name').value); }
+    this.exp('op',')');
+    const body=this.parseBlock(); this.exp('kw','end');
+    return {type:'FnDecl',parts,params,body};
+  }
+  parseIf(){
+    this.exp('kw','if'); const clauses=[];
+    clauses.push({cond:this.parseExpr(),body:(this.exp('kw','then'),this.parseBlock())});
+    while(this.is('kw','elseif')){
+      this.adv(); const c=this.parseExpr(); this.exp('kw','then'); clauses.push({cond:c,body:this.parseBlock()});
+    }
+    let elseBody=null;
+    if(this.acc('kw','else')) elseBody=this.parseBlock();
+    this.exp('kw','end');
+    return {type:'If',clauses,elseBody};
+  }
+  parseWhile(){ this.exp('kw','while'); const c=this.parseExpr(); this.exp('kw','do'); const b=this.parseBlock(); this.exp('kw','end'); return {type:'While',cond:c,body:b}; }
+  parseRepeat(){ this.exp('kw','repeat'); const b=this.parseBlock(); this.exp('kw','until'); return {type:'Repeat',body:b,cond:this.parseExpr()}; }
+  parseFor(){
+    this.exp('kw','for');
+    const n1=this.exp('name').value;
+    if(this.acc('op','=')){
+      const from=this.parseExpr(); this.exp('op',','); const to=this.parseExpr();
+      let step=null; if(this.acc('op',',')) step=this.parseExpr();
+      this.exp('kw','do'); const body=this.parseBlock(); this.exp('kw','end');
+      return {type:'ForNum',name:n1,from,to,step,body};
+    }
+    const names=[n1]; while(this.acc('op',',')) names.push(this.exp('name').value);
+    this.exp('kw','in'); const exprs=this.parseExprList();
+    this.exp('kw','do'); const body=this.parseBlock(); this.exp('kw','end');
+    return {type:'ForIn',names,exprs,body};
+  }
+}
+
+/* ---------- ENVIRONMENT ---------- */
+class Env {
+  constructor(parent){ this.vars=Object.create(null); this.parent=parent; }
+  get(n){ let e=this; while(e){ if(n in e.vars) return e.vars[n]; e=e.parent; } return undefined; }
+  set(n,v){
+    let e=this; while(e){ if(n in e.vars){ e.vars[n]=v; return; } e=e.parent; }
+    let g=this; while(g.parent) g=g.parent; g.vars[n]=v;
+  }
+  declare(n,v){ this.vars[n]=v; }
+}
+
+/* ---------- HELPERS ---------- */
+function bNum(v){ return typeof v==='number'?v:(typeof v==='string'?parseFloat(v)||0:0); }
+function bTruthy(v){ return v!==null&&v!==undefined&&v!==false&&v!==0&&v!==''; }
+function bDisplay(v){
+  if(v===null||v===undefined) return 'nil';
+  if(typeof v==='boolean') return v?'true':'false';
+  if(typeof v==='number'){ if(Number.isInteger(v)) return String(v); return String(v); }
+  if(typeof v==='string') return v;
+  if(typeof v==='function') return '<function>';
+  if(typeof v==='object'){
+    if(v.__blokInstance) return `[${v.ClassName||'Instance'}: ${v.Name||''}]`;
+    try{ return JSON.stringify(v); }catch(e){ return '[table]'; }
+  }
+  return String(v);
+}
+function bType(v){
+  if(v===null||v===undefined) return 'nil';
+  if(typeof v==='boolean') return 'boolean';
+  if(typeof v==='number') return 'number';
+  if(typeof v==='string') return 'string';
+  if(typeof v==='function') return 'function';
+  if(v&&v.__isVector3) return 'Vector3';
+  return 'table';
+}
+function bArray(t){
+  const a=[];
+  if(Array.isArray(t)) return t.slice();
+  if(t&&typeof t==='object'){ let i=1; while(t[i]!==undefined){ a.push(t[i]); i++; } }
+  return a;
+}
+function bApplyBin(op,a,b){
+  switch(op){
+    case '+': return bNum(a)+bNum(b);
+    case '-': return bNum(a)-bNum(b);
+    case '*': return bNum(a)*bNum(b);
+    case '/': return bNum(a)/bNum(b);
+    case '%': return bNum(a)%bNum(b);
+    case '//': return Math.floor(bNum(a)/bNum(b));
+    case '^': return Math.pow(bNum(a),bNum(b));
+    case '..': return bDisplay(a)+bDisplay(b);
+    case '==': return a===b;
+    case '~=': return a!==b;
+    case '<': return (typeof a==='string'&&typeof b==='string')?a<b:bNum(a)<bNum(b);
+    case '>': return (typeof a==='string'&&typeof b==='string')?a>b:bNum(a)>bNum(b);
+    case '<=': return (typeof a==='string'&&typeof b==='string')?a<=b:bNum(a)<=bNum(b);
+    case '>=': return (typeof a==='string'&&typeof b==='string')?a>=b:bNum(a)>=bNum(b);
+  }
+  throw new Error('Unknown operator '+op);
+}
+function bIndex(o,k){
+  if(o===null||o===undefined) throw new Error(`Attempt to index nil with '${bDisplay(k)}'`);
+  if(typeof o==='object'||typeof o==='function') return o[k];
+  return undefined;
+}
+function bMakeVector3(x,y,z){
+  return {
+    __isVector3:true,
+    x:bNum(x), y:bNum(y), z:bNum(z),
+    get Magnitude(){ return Math.hypot(this.x,this.y,this.z); },
+    get Unit(){ const m=this.Magnitude||1; return bMakeVector3(this.x/m,this.y/m,this.z/m); },
+    Add(v){ return bMakeVector3(this.x+bNum(v.x),this.y+bNum(v.y),this.z+bNum(v.z)); },
+    Sub(v){ return bMakeVector3(this.x-bNum(v.x),this.y-bNum(v.y),this.z-bNum(v.z)); },
+    Mul(s){ return bMakeVector3(this.x*bNum(s),this.y*bNum(s),this.z*bNum(s)); },
+    Div(s){ return bMakeVector3(this.x/bNum(s),this.y/bNum(s),this.z/bNum(s)); },
+    Dot(v){ return this.x*v.x+this.y*v.y+this.z*v.z; },
+    Cross(v){ return bMakeVector3(this.y*v.z-this.z*v.y, this.z*v.x-this.x*v.z, this.x*v.y-this.y*v.x); },
+    Lerp(v,a){ const t=bNum(a); return bMakeVector3(this.x+(v.x-this.x)*t, this.y+(v.y-this.y)*t, this.z+(v.z-this.z)*t); },
+    toString(){ return `(${this.x}, ${this.y}, ${this.z})`; }
+  };
+}
+
+/* ---------- FUNCTION MACHINERY ---------- */
+function bMakeFunction(params,body,closure,rt){
+  const fn=async function(...args){
+    if(rt&&rt.stopped) throw new BlokStop();
+    const env=new Env(closure);
+    for(let i=0;i<params.length;i++) env.declare(params[i], args[i]===undefined?null:args[i]);
+    try{ await bExecBlock(body,env,rt); return null; }
+    catch(e){ if(e instanceof BlokReturn) return e.value; throw e; }
+  };
+  fn.__blok=true;
+  return fn;
+}
+async function bCall(fn,args,rt){
+  if(fn===null||fn===undefined) throw new Error('Attempt to call a nil value');
+  if(typeof fn==='function') return await fn(...args);
+  if(typeof fn==='object'&&typeof fn.__call==='function') return await fn.__call(...args);
+  throw new Error('Attempt to call a non-function value');
+}
+async function bCallMethod(obj,name,args,rt){
+  if(obj===null||obj===undefined) throw new Error(`Attempt to call method '${name}' on nil`);
+  const fn=obj[name];
+  if(typeof fn!=='function') throw new Error(`'${name}' is not a function`);
+  return await bCall(fn,[obj,...args],rt);
+}
+
+/* ---------- EVALUATOR ---------- */
+async function bEval(e,env,rt){
+  if(rt&&rt.stopped) throw new BlokStop();
+  switch(e.type){
+    case 'Lit': return e.value;
+    case 'Ident': { const v=env.get(e.name); if(v===undefined&&!(e.name in (env.vars||{}))) return null; return v===undefined?null:v; }
+    case 'Vararg': return env.get('...')||[];
+    case 'Table': {
+      const t={}; let ai=1;
+      for(const it of e.items){
+        if(it.kind==='k'){ const k=await bEval(it.k,env,rt); t[k]=await bEval(it.v,env,rt); }
+        else { t[ai++]=await bEval(it.v,env,rt); }
+      }
+      return t;
+    }
+    case 'Fn': return bMakeFunction(e.params,e.body,env,rt);
+    case 'Idx': { const o=await bEval(e.obj,env,rt); const k=await bEval(e.key,env,rt); return bIndex(o,k); }
+    case 'Call': {
+      const fn=await bEval(e.fn,env,rt);
+      const args=[]; for(const a of e.args) args.push(await bEval(a,env,rt));
+      return await bCall(fn,args,rt);
+    }
+    case 'Method': {
+      const o=await bEval(e.obj,env,rt);
+      const args=[]; for(const a of e.args) args.push(await bEval(a,env,rt));
+      return await bCallMethod(o,e.method,args,rt);
+    }
+    case 'Bin': {
+      if(e.op==='and'){ const l=await bEval(e.left,env,rt); if(!bTruthy(l)) return l; return await bEval(e.right,env,rt); }
+      if(e.op==='or'){ const l=await bEval(e.left,env,rt); if(bTruthy(l)) return l; return await bEval(e.right,env,rt); }
+      const l=await bEval(e.left,env,rt); const r=await bEval(e.right,env,rt);
+      return bApplyBin(e.op,l,r);
+    }
+    case 'Un': {
+      const v=await bEval(e.e,env,rt);
+      if(e.op==='not') return !bTruthy(v);
+      if(e.op==='-') return -bNum(v);
+      if(e.op==='#'){ if(typeof v==='string') return v.length; return bArray(v).length; }
+    }
+  }
+  throw new Error('Unknown expression type: '+e.type);
+}
+
+async function bAssign(target,value,env,rt){
+  if(target.type==='Ident'){ env.set(target.name,value); return; }
+  if(target.type==='Idx'){
+    const o=await bEval(target.obj,env,rt);
+    const k=await bEval(target.key,env,rt);
+    if(o===null||o===undefined) throw new Error('Attempt to index nil for assignment');
+    o[k]=value; return;
+  }
+  throw new Error('Cannot assign to this expression');
+}
+
+let __bYieldCounter=0;
+async function bExecBlock(block,env,rt){
+  for(const s of block.body){
+    if(rt&&rt.stopped) throw new BlokStop();
+    await bExecStmt(s,env,rt);
+  }
+}
+
+async function bExecStmt(s,env,rt){
+  if(rt&&rt.stopped) throw new BlokStop();
+  switch(s.type){
+    case 'Local': {
+      const vals=[];
+      for(const e of s.values) vals.push(await bEval(e,env,rt));
+      for(let i=0;i<s.names.length;i++) env.declare(s.names[i], vals[i]===undefined?null:vals[i]);
+      return;
+    }
+    case 'LocalFn': {
+      const fn=bMakeFunction(s.params,s.body,env,rt);
+      env.declare(s.name,fn); return;
+    }
+    case 'FnDecl': {
+      if(s.parts.length===1){ env.declare(s.parts[0], bMakeFunction(s.params,s.body,env,rt)); return; }
+      let o=env.get(s.parts[0]);
+      for(let i=1;i<s.parts.length-1;i++) o=bIndex(o,s.parts[i]);
+      if(o===null||o===undefined) throw new Error(`Cannot define function on nil`);
+      o[s.parts[s.parts.length-1]]=bMakeFunction(s.params,s.body,env,rt);
+      return;
+    }
+    case 'Assign': {
+      const vals=[];
+      for(const e of s.values) vals.push(await bEval(e,env,rt));
+      for(let i=0;i<s.targets.length;i++) await bAssign(s.targets[i], vals[i]===undefined?null:vals[i], env, rt);
+      return;
+    }
+    case 'ExprStmt': await bEval(s.expr,env,rt); return;
+    case 'If': {
+      for(const c of s.clauses){
+        if(bTruthy(await bEval(c.cond,env,rt))){ await bExecBlock(c.body,new Env(env),rt); return; }
+      }
+      if(s.elseBody) await bExecBlock(s.elseBody,new Env(env),rt);
+      return;
+    }
+    case 'While': {
+      let n=0;
+      while(bTruthy(await bEval(s.cond,env,rt))){
+        try{ await bExecBlock(s.body,new Env(env),rt); }
+        catch(e){ if(e instanceof BlokBreak) break; throw e; }
+        if(rt&&rt.stopped) throw new BlokStop();
+        if(++n%1000===0) await new Promise(r=>setTimeout(r,0));
+      }
+      return;
+    }
+    case 'Repeat': {
+      let n=0;
+      while(true){
+        try{ await bExecBlock(s.body,new Env(env),rt); }
+        catch(e){ if(e instanceof BlokBreak) break; throw e; }
+        if(bTruthy(await bEval(s.cond,env,rt))) break;
+        if(++n%1000===0) await new Promise(r=>setTimeout(r,0));
+      }
+      return;
+    }
+    case 'ForNum': {
+      const from=bNum(await bEval(s.from,env,rt));
+      const to=bNum(await bEval(s.to,env,rt));
+      const step=s.step?bNum(await bEval(s.step,env,rt)):1;
+      const e2=new Env(env); let n=0;
+      for(let i=from; step>0?i<=to:i>=to; i+=step){
+        e2.vars[s.name]=i;
+        try{ await bExecBlock(s.body,e2,rt); }
+        catch(e){ if(e instanceof BlokBreak) break; throw e; }
+        if(++n%1000===0) await new Promise(r=>setTimeout(r,0));
+      }
+      return;
+    }
+    case 'ForIn': {
+      const vals=[];
+      for(const e of s.exprs) vals.push(await bEval(e,env,rt));
+      const it=vals[0]; const e2=new Env(env);
+      if(it&&it.__ipairs){
+        const arr=it.__arr;
+        for(let i=0;i<arr.length;i++){
+          e2.vars[s.names[0]]=i+1;
+          if(s.names[1]) e2.vars[s.names[1]]=arr[i];
+          try{ await bExecBlock(s.body,e2,rt); }
+          catch(e){ if(e instanceof BlokBreak) break; throw e; }
+        }
+      } else if(it&&it.__pairs){
+        const obj=it.__obj;
+        const keys = Array.isArray(obj) ? obj.map((_,i)=>i+1) : Object.keys(obj);
+        for(const k of keys){
+          e2.vars[s.names[0]]=k;
+          if(s.names[1]) e2.vars[s.names[1]]=obj[k];
+          try{ await bExecBlock(s.body,e2,rt); }
+          catch(e){ if(e instanceof BlokBreak) break; throw e; }
+        }
+      } else if(typeof it==='function'){
+        let ctrl=vals[2];
+        while(true){
+          const r=await bCall(it,[vals[1],ctrl],rt);
+          if(r===null||r===undefined) break;
+          if(Array.isArray(r)){ for(let i=0;i<s.names.length;i++) e2.vars[s.names[i]]=r[i]; ctrl=r[0]; }
+          else { e2.vars[s.names[0]]=r; ctrl=r; }
+          try{ await bExecBlock(s.body,e2,rt); }
+          catch(e){ if(e instanceof BlokBreak) break; throw e; }
+        }
+      }
+      return;
+    }
+    case 'Do': await bExecBlock(s.body,new Env(env),rt); return;
+    case 'Return': {
+      const vals=[];
+      for(const e of s.exprs) vals.push(await bEval(e,env,rt));
+      throw new BlokReturn(vals.length===0?null:(vals.length===1?vals[0]:vals));
+    }
+    case 'Break': throw new BlokBreak();
+  }
+  throw new Error('Unknown statement: '+s.type);
+}
+
+/* ---------- RUNTIME ---------- */
+class BlokRuntime {
+  constructor(studio,name){ this.studio=studio; this.name=name; this.stopped=false; this._lastVal=null; }
+  stop(){ this.stopped=true; }
+  wrap(inst){ return wrapInstance(inst,this); }
+}
+
+/* ---------- ROBLOX-STYLE API ---------- */
+const __wrapCache=new WeakMap();
+
+function wrapInstance(inst,rt){
+  if(!inst) return null;
+  if(__wrapCache.has(inst)) return __wrapCache.get(inst);
+
+  const w={};
+  w.__blokInstance=true;
+  w.__inst=inst;
+  Object.defineProperty(w,'Name',{ get:()=>inst.name, set:v=>{ inst.name=String(v); Studio.refreshExplorer(); } });
+  Object.defineProperty(w,'ClassName',{ get:()=>inst.className });
+  w.FindFirstChild=(n)=>wrapInstance(inst.children.find(c=>c.name===n),rt);
+  w.FindPart=(n)=>{
+    let found=null;
+    const walk=(x)=>{ if(found) return; if(x.name===n){ found=x; return; } for(const c of x.children) walk(c); };
+    walk(inst); return wrapInstance(found,rt);
+  };
+  w.WaitForChild=w.FindFirstChild;
+  w.GetChildren=()=>inst.children.map(c=>wrapInstance(c,rt));
+  w.GetDescendants=()=>{ const out=[]; const walk=(x)=>{ for(const c of x.children){ out.push(wrapInstance(c,rt)); walk(c); } }; walk(inst); return out; };
+  w.Destroy=()=>{ inst.destroy(); };
+  w.IsA=(c)=>inst.className===c||(c==='Instance');
+  w.GetProperty=(k)=>inst.props[k];
+  w.SetProperty=(k,v)=>{ inst.props[k]=v; if(inst.refresh) inst.refresh(); };
+  w.Clone=()=>wrapInstance(cloneInstance(inst),rt);
+
+  if(inst instanceof Part){
+    Object.defineProperty(w,'Position',{
+      get:()=>{ const p=inst.getPosition(); return bMakeVector3(p.x,p.y,p.z); },
+      set:(v)=>{ if(v&&v.x!==undefined) inst.setPosition(bNum(v.x),bNum(v.y),bNum(v.z)); }
+    });
+    Object.defineProperty(w,'Size',{
+      get:()=>bMakeVector3(inst.props.Size.x,inst.props.Size.y,inst.props.Size.z),
+      set:(v)=>{ if(v){ const arr=Array.isArray(v)?v:[v.x,v.y,v.z]; inst.setSize(bNum(arr[0]),bNum(arr[1]),bNum(arr[2])); } }
+    });
+    Object.defineProperty(w,'Rotation',{
+      get:()=>bMakeVector3(inst.localRot.x,inst.localRot.y,inst.localRot.z),
+      set:(v)=>{ if(v) inst.setRotation(bNum(v.x),bNum(v.y),bNum(v.z)); }
+    });
+    Object.defineProperty(w,'Color',{
+      get:()=>inst.props.Color,
+      set:(v)=>{ inst.setColor(String(v)); }
+    });
+    Object.defineProperty(w,'Transparency',{
+      get:()=>inst.props.Transparency,
+      set:(v)=>inst.setTransparency(bNum(v))
+    });
+    Object.defineProperty(w,'Reflectance',{
+      get:()=>inst.props.Reflectance,
+      set:(v)=>inst.setReflectance(bNum(v))
+    });
+    Object.defineProperty(w,'Anchored',{
+      get:()=>inst.props.Anchored,
+      set:(v)=>inst.setAnchored(bTruthy(v))
+    });
+    Object.defineProperty(w,'CanCollide',{
+      get:()=>inst.props.CanCollide,
+      set:(v)=>inst.setCanCollide(bTruthy(v))
+    });
+
+    w.Spin=(x,y,z)=>{
+      inst._spin={ x:bNum(x)||0, y:bNum(y)||0, z:bNum(z)||0 };
+      Studio._spinParts.add(inst);
+    };
+    w.StopSpin=()=>{ inst._spin=null; Studio._spinParts.delete(inst); };
+    w.MoveTo=(x,y,z)=>{ if(x&&x.x!==undefined) inst.setPosition(bNum(x.x),bNum(x.y),bNum(x.z)); else inst.setPosition(bNum(x),bNum(y),bNum(z)); };
+    w.SetPosition=w.MoveTo;
+    w.SetColor=(c)=>inst.setColor(String(c));
+    w.SetSize=(x,y,z)=>{ if(x&&x.x!==undefined) inst.setSize(bNum(x.x),bNum(x.y),bNum(x.z)); else inst.setSize(bNum(x),bNum(y),bNum(z)); };
+    w.SetRotation=(x,y,z)=>{ if(x&&x.x!==undefined) inst.setRotation(bNum(x.x),bNum(x.y),bNum(x.z)); else inst.setRotation(bNum(x),bNum(y),bNum(z)); };
+    w.SetTransparency=(v)=>inst.setTransparency(bNum(v));
+    w.SetReflectance=(v)=>inst.setReflectance(bNum(v));
+    w.SetAnchored=(v)=>inst.setAnchored(bTruthy(v));
+    w.SetCanCollide=(v)=>inst.setCanCollide(bTruthy(v));
+    w.SetCastShadow=(v)=>inst.setCastShadow(bTruthy(v));
+    w.AddDecal=(face,url,t)=>inst.addDecal(String(face),String(url),bNum(t)||0);
+    w.RemoveDecals=()=>{ inst.props.Decals=[]; inst._rebuildDecals(); };
+
+    w.Tween=(prop,target,time,style)=>{
+      const dur=Math.max(0.01,bNum(time)||1);
+      const start={};
+      const s=inst.props.Size, p=inst.getPosition(), r=inst.localRot;
+      if(prop==='Position'||prop==='pos'){ start.x=p.x; start.y=p.y; start.z=p.z;
+        Studio._tweens.push({elapsed:0,duration:dur,step:(k)=>{
+          inst.setPosition(start.x+(bNum(target.x)-start.x)*k, start.y+(bNum(target.y)-start.y)*k, start.z+(bNum(target.z)-start.z)*k);
+        }});
+      } else if(prop==='Size'||prop==='size'){
+        start.x=s.x; start.y=s.y; start.z=s.z;
+        const tarr=Array.isArray(target)?target:[target.x,target.y,target.z];
+        Studio._tweens.push({elapsed:0,duration:dur,step:(k)=>{
+          inst.setSize(start.x+(bNum(tarr[0])-start.x)*k, start.y+(bNum(tarr[1])-start.y)*k, start.z+(bNum(tarr[2])-start.z)*k);
+        }});
+      } else if(prop==='Rotation'||prop==='rot'){
+        start.x=r.x; start.y=r.y; start.z=r.z;
+        Studio._tweens.push({elapsed:0,duration:dur,step:(k)=>{
+          inst.setRotation(start.x+(bNum(target.x)-start.x)*k, start.y+(bNum(target.y)-start.y)*k, start.z+(bNum(target.z)-start.z)*k);
+        }});
+      } else if(prop==='Transparency'){
+        start.v=inst.props.Transparency;
+        Studio._tweens.push({elapsed:0,duration:dur,step:(k)=>{
+          inst.setTransparency(start.v+(bNum(target)-start.v)*k);
+        }});
+      } else if(prop==='Color'){
+        const from=new THREE.Color(inst.props.Color);
+        const to=new THREE.Color(String(target));
+        Studio._tweens.push({elapsed:0,duration:dur,step:(k)=>{
+          const c=from.clone().lerp(to,k);
+          inst.setColor('#'+c.getHexString());
+        }});
+      }
+      return null;
+    };
+
+    w.Touched=(inst._blokSignals=inst._blokSignals||{}).Touched || (inst._blokSignals.Touched=new BlokSignal('Touched'));
+    w.Clicked=inst._blokSignals.Clicked || (inst._blokSignals.Clicked=new BlokSignal('Clicked'));
+  }
+
+  if(inst instanceof WorkspaceService){
+    w.FindPart=(n)=>{
+      let found=null;
+      const walk=(x)=>{ if(found) return; if(x.name===n){ found=x; return; } for(const c of x.children) walk(c); };
+      walk(inst); return wrapInstance(found,rt);
+    };
+    w.FindFirstChild=(n)=>wrapInstance(inst.children.find(c=>c.name===n),rt);
+    w.GetChildren=()=>inst.children.map(c=>wrapInstance(c,rt));
+    w.CreatePart=(a,b,c,d,e,f,g)=>{
+      // Support: ("Part"), ("Part",{...}), ({...}), (x,y,z,sx,sy,sz,color)
+      let kind='Part'; let opts={};
+      if(typeof a==='number'){ opts={x:a,y:b,z:c,sx:d,sy:e,sz:f,color:g}; }
+      else if(typeof a==='string'){ kind=a; if(b&&typeof b==='object') opts=b; }
+      else if(a&&typeof a==='object'){ opts=a; if(a.Kind||a.kind) kind=a.Kind||a.kind; }
+      const p=new Part(kind,inst);
+      const pos=opts.Position||opts.position;
+      const size=opts.Size||opts.size;
+      p.setPosition(bNum(opts.x!==undefined?opts.x:(pos?pos.x:0)), bNum(opts.y!==undefined?opts.y:(pos?pos.y:5)), bNum(opts.z!==undefined?opts.z:(pos?pos.z:0)));
+      if(opts.sx!==undefined) p.setSize(bNum(opts.sx),bNum(opts.sy),bNum(opts.sz));
+      else if(size) p.setSize(bNum(size.x!==undefined?size.x:size[0]),bNum(size.y!==undefined?size.y:size[1]),bNum(size.z!==undefined?size.z:size[2]));
+      if(opts.color) p.setColor(String(opts.color));
+      if(opts.Color) p.setColor(String(opts.Color));
+      if(opts.Name||opts.name) p.name=String(opts.Name||opts.name);
+      if(opts.Anchored!==undefined) p.setAnchored(bTruthy(opts.Anchored));
+      if(opts.Transparency!==undefined) p.setTransparency(bNum(opts.Transparency));
+      Studio.refreshExplorer();
+      return wrapInstance(p,rt);
+    };
+    w.DestroyAll=()=>{
+      const toKill=[]; const walk=(x)=>{ for(const c of [...x.children]){ if(c instanceof Part&&!c._rigPart) toKill.push(c); else walk(c); } };
+      walk(inst); toKill.forEach(p=>p.destroy());
+      Studio.refreshExplorer();
+    };
+    w.Raycast=(from,to)=>{
+      const f=from, t=to;
+      const dir=new THREE.Vector3(bNum(t.x)-bNum(f.x),bNum(t.y)-bNum(f.y),bNum(t.z)-bNum(f.z));
+      const len=dir.length(); dir.normalize();
+      const ray=new THREE.Raycaster(new THREE.Vector3(bNum(f.x),bNum(f.y),bNum(f.z)),dir,0,len);
+      const meshes=[]; Studio.scene.traverse(o=>{ if(o.isMesh&&o.userData.instance&&!o.userData.isDecal) meshes.push(o); });
+      const hits=ray.intersectObjects(meshes,false);
+      if(!hits.length) return null;
+      const h=hits[0];
+      return { Instance: wrapInstance(h.object.userData.instance,rt), Distance: h.distance, Position: bMakeVector3(h.point.x,h.point.y,h.point.z) };
+    };
+  }
+
+  if(inst instanceof Terrain){
+    w.Regenerate=()=>inst.regenerate();
+    Object.defineProperty(w,'Seed',{ get:()=>inst.props.Seed, set:v=>{ inst.props.Seed=bNum(v); inst._build(); } });
+    Object.defineProperty(w,'Height',{ get:()=>inst.props.Height, set:v=>{ inst.props.Height=bNum(v); inst._build(); } });
+  }
+
+  if(inst instanceof Rig){
+    w.SetJoint=(name,x,y,z)=>inst.setJointRotation(name,bNum(x),bNum(y),bNum(z));
+    w.GetJoint=(name)=>inst.joints[name];
+  }
+
+  __wrapCache.set(inst,w);
+  return w;
+}
+
+function cloneInstance(inst){
+  if(inst instanceof Part && !inst._rigPart){
+    const parent=inst.parent||Studio.tree.workspace;
+    const c=new Part(inst.className,parent);
+    const wp=inst.getPosition();
+    c.setPosition(wp.x,wp.y,wp.z);
+    c.setSize(inst.props.Size.x,inst.props.Size.y,inst.props.Size.z);
+    c.setRotation(inst.localRot.x,inst.localRot.y,inst.localRot.z);
+    c.setColor(inst.props.Color);
+    c.setTransparency(inst.props.Transparency);
+    c.setReflectance(inst.props.Reflectance);
+    c.setAnchored(inst.props.Anchored);
+    c.setCanCollide(inst.props.CanCollide);
+    c.props.Decals=JSON.parse(JSON.stringify(inst.props.Decals||[]));
+    c._rebuildDecals();
+    c.name=inst.name;
+    Studio.refreshExplorer();
+    return c;
+  }
+  return null;
+}
+
+/* ---------- GLOBAL ENVIRONMENT ---------- */
+function bMakeGlobalEnv(rt){
+  const env=new Env(null);
+  const S=rt.studio;
+
+  env.declare('print',(...a)=>S.log(a.map(bDisplay).join('\t'),'script'));
+  env.declare('warn',(...a)=>S.log(a.map(bDisplay).join('\t'),'warn'));
+  env.declare('error',(...a)=>S.log(a.map(bDisplay).join('\t'),'error'));
+  env.declare('tostring',(v)=>bDisplay(v));
+  env.declare('tonumber',(v)=>{ const n=Number(v); return isNaN(n)?null:n; });
+  env.declare('type',(v)=>bType(v));
+  env.declare('pairs',(t)=>({__pairs:true,__obj:t}));
+  env.declare('ipairs',(t)=>({__ipairs:true,__arr:bArray(t)}));
+  env.declare('select',(n,...a)=>{ if(n==='#') return a.length; const i=bNum(n); return a.slice(i-1); });
+  env.declare('assert',(v,msg)=>{ if(!bTruthy(v)) throw new Error(msg?bDisplay(msg):'assertion failed'); return v; });
+  env.declare('unpack',(t,i,j)=>{ const a=bArray(t); return a.slice((i||1)-1, j===undefined?a.length:j); });
+  env.declare('wait',(n)=>new Promise(r=>setTimeout(r,Math.max(0,bNum(n)||0)*1000)));
+  env.declare('spawn',(fn,...a)=>{ Promise.resolve().then(()=>bCall(fn,a,rt)).catch(e=>S.log('[spawn] '+e.message,'error')); });
+
+  env.declare('task',{
+    wait:(n)=>new Promise(r=>setTimeout(r,Math.max(0,bNum(n)||0)*1000)),
+    spawn:(fn,...a)=>{ Promise.resolve().then(()=>bCall(fn,a,rt)).catch(e=>S.log('[task] '+e.message,'error')); },
+    delay:(n,fn,...a)=>{ setTimeout(()=>{ Promise.resolve().then(()=>bCall(fn,a,rt)).catch(e=>S.log('[task] '+e.message,'error')); }, Math.max(0,bNum(n)||0)*1000); },
+    defer:(fn,...a)=>{ Promise.resolve().then(()=>bCall(fn,a,rt)).catch(e=>S.log('[task] '+e.message,'error')); }
+  });
+
+  env.declare('math',{
+    pi:Math.PI, huge:Infinity,
+    random:(a,b)=>{ if(a===undefined) return Math.random();
+      if(b===undefined){ if(Array.isArray(a)||(a&&typeof a==='object')){ const arr=bArray(a); return arr[Math.floor(Math.random()*arr.length)]; } return Math.floor(Math.random()*(a))+1; }
+      return Math.floor(Math.random()*(b-a+1))+a; },
+    floor:Math.floor, ceil:Math.ceil, abs:Math.abs, sqrt:Math.sqrt,
+    sin:Math.sin, cos:Math.cos, tan:Math.tan, asin:Math.asin, acos:Math.acos, atan:Math.atan,
+    atan2:Math.atan2, log:Math.log, exp:Math.exp, pow:Math.pow,
+    min:(...a)=>Math.min(...a.map(bNum)), max:(...a)=>Math.max(...a.map(bNum)),
+    fmod:(a,b)=>bNum(a)%bNum(b), clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
+    rad:(d)=>bNum(d)*Math.PI/180, deg:(r)=>bNum(r)*180/Math.PI,
+    round:(v,n)=>{ const m=Math.pow(10,n||0); return Math.round(bNum(v)*m)/m; },
+    sign:(v)=>Math.sign(bNum(v))
+  });
+
+  env.declare('string',{
+    format:(fmt,...args)=>{
+      let i=0;
+      return String(fmt).replace(/%[-+ #0]*\d*(?:\.\d+)?[diouxXeEfgGscq%]/g,(m)=>{
+        if(m==='%%') return '%';
+        const val=args[i++]; const spec=m[m.length-1];
+        const pad=/0(\d+)/.exec(m);
+        if(spec==='d'||spec==='i'){ const s=String(Math.floor(bNum(val))); return pad?s.padStart(parseInt(pad[1]),'0'):s; }
+        if(spec==='u') return String(Math.floor(bNum(val))>>>0);
+        if(spec==='x'){ const s=(Math.floor(bNum(val))>>>0).toString(16); return pad?s.padStart(parseInt(pad[1]),'0'):s; }
+        if(spec==='X') return (Math.floor(bNum(val))>>>0).toString(16).toUpperCase();
+        if(spec==='f'){ const p=/\.(\d+)/.exec(m); return bNum(val).toFixed(p?parseInt(p[1]):6); }
+        if(spec==='e'||spec==='E') return bNum(val).toExponential();
+        if(spec==='g'||spec==='G') return String(bNum(val));
+        if(spec==='s') return bDisplay(val);
+        if(spec==='q') return JSON.stringify(bDisplay(val));
+        if(spec==='c') return String.fromCharCode(bNum(val));
+        return m;
+      });
+    },
+    len:(s)=>String(s).length,
+    sub:(s,i,j)=>{ s=String(s); i=i||1; j=j===undefined?s.length:j; if(i<0) i=s.length+i+1; if(j<0) j=s.length+j+1; return s.substring(i-1,j); },
+    upper:(s)=>String(s).toUpperCase(),
+    lower:(s)=>String(s).toLowerCase(),
+    rep:(s,n)=>String(s).repeat(Math.max(0,bNum(n))),
+    reverse:(s)=>String(s).split('').reverse().join(''),
+    find:(s,p,i)=>String(s).indexOf(String(p),(bNum(i)||1)-1)===-1?null:[String(s).indexOf(String(p),(bNum(i)||1)-1)+1],
+    gsub:(s,a,b)=>String(s).split(String(a)).join(String(b)),
+    byte:(s,i)=>String(s).charCodeAt((bNum(i)||1)-1),
+    char:(...a)=>a.map(n=>String.fromCharCode(bNum(n))).join('')
+  });
+
+  env.declare('table',{
+    insert:(t,v,...more)=>{ if(more.length===0){ t[bArray(t).length+1]=v; } else { const pos=bNum(v); const arr=bArray(t); arr.splice(pos-1,0,...more); t.length=arr.length; for(let i=0;i<arr.length;i++) t[i+1]=arr[i]; } return null; },
+    remove:(t,p)=>{ const arr=bArray(t); if(p===undefined){ const v=arr.pop(); for(let i=0;i<arr.length;i++) t[i+1]=arr[i]; delete t[arr.length+1]; return v; } const v=arr.splice(bNum(p)-1,1)[0]; for(let i=0;i<arr.length;i++) t[i+1]=arr[i]; delete t[arr.length+1]; return v; },
+    concat:(t,sep,i,j)=>{ const a=bArray(t); return a.slice((i||1)-1,j===undefined?a.length:j).map(bDisplay).join(sep===undefined?'':sep); },
+    sort:(t,fn)=>{ const a=bArray(t); a.sort((x,y)=>fn?bNum(fn(x,y)):(x<y?-1:x>y?1:0)); for(let i=0;i<a.length;i++) t[i+1]=a[i]; return null; },
+    unpack:(t,i,j)=>bArray(t).slice((i||1)-1, j===undefined?bArray(t).length:j),
+    getn:(t)=>bArray(t).length
+  });
+
+  env.declare('os',{
+    time:()=>Math.floor(Date.now()/1000),
+    clock:()=>performance.now()/1000,
+    date:(fmt)=>{ const d=new Date(); if(fmt==='*t'){ return {year:d.getFullYear(),month:d.getMonth()+1,day:d.getDate(),hour:d.getHours(),min:d.getMinutes(),sec:d.getSeconds()}; } return d.toString(); }
+  });
+
+  env.declare('Vector3',{ new:(x,y,z)=>bMakeVector3(x,y,z) });
+  env.declare('Color3',{ new:(r,g,b)=>({r:bNum(r),g:bNum(g),b:bNum(b)}), fromHex:(h)=>String(h) });
+  env.declare('CFrame',{ new:(x,y,z)=>({x:bNum(x),y:bNum(y),z:bNum(z)}) });
+
+  env.declare('Instance',{
+    new:(cls,parent)=>{
+      if(cls==='Part'||cls==='Wedge'||cls==='CornerWedge'||cls==='Sphere'||cls==='Cylinder'){
+        const p=new Part(cls, (parent&&parent.__inst)||rt.studio.tree.workspace);
+        rt.studio.refreshExplorer();
+        return wrapInstance(p,rt);
+      }
+      if(cls==='Folder'){ const f=new Folder((parent&&parent.__inst)||rt.studio.tree.workspace); return wrapInstance(f,rt); }
+      if(cls==='Script'){ const s=new Script((parent&&parent.__inst)||rt.studio.tree.workspace); return wrapInstance(s,rt); }
+      throw new Error('Unknown class: '+cls);
+    }
+  });
+
+  env.declare('workspace',wrapInstance(rt.studio.tree.workspace,rt));
+  env.declare('Workspace',env.get('workspace'));
+  env.declare('lighting',wrapInstance(rt.studio.tree.lighting,rt));
+  env.declare('Lighting',env.get('lighting'));
+
+  // players service
+  const players={
+    __blokInstance:true,
+    GetPlayers:()=>rt.studio.playerController ? [rt.studio._playerObj] : [],
+    PlayerAdded:new BlokSignal('PlayerAdded'),
+    PlayerRemoving:new BlokSignal('PlayerRemoving')
+  };
+  env.declare('players',players);
+
+  // game
+  const game={
+    __blokInstance:true,
+    Workspace:env.get('workspace'),
+    Lighting:env.get('lighting'),
+    GetService:(n)=>{
+      const map={ Workspace:env.get('workspace'), Lighting:env.get('lighting'), Players:players,
+        ReplicatedStorage:wrapInstance(rt.studio.tree.replicated,rt),
+        ServerScriptService:wrapInstance(rt.studio.tree.server,rt),
+        StarterPlayer:wrapInstance(rt.studio.tree.starterPlayer,rt),
+        StarterGui:wrapInstance(rt.studio.tree.starterGui,rt),
+        StarterPack:wrapInstance(rt.studio.tree.starterPack,rt) };
+      const s=map[n];
+      if(!s) throw new Error('Service not found: '+n);
+      return s;
+    },
+    Workspace_:null,
+    // helper
+    Players:players
+  };
+  env.declare('game',game);
+  env.declare('Game',game);
+
+  return env;
+}
+
+/* ---------- PUBLIC RUN ---------- */
+async function blokRunScript(src,name,rt){
+  const toks=blokLex(src||'');
+  const ast=new BlokParser(toks).parseChunk();
+  const env=bMakeGlobalEnv(rt);
+  try{ await bExecBlock(ast.body,env,rt); return true; }
+  catch(e){
+    if(e instanceof BlokStop||e instanceof BlokReturn||e instanceof BlokBreak) return true;
+    throw e;
+  }
+}
+
 /* ============================================================
    STUDIO
    ============================================================ */
@@ -1581,8 +2547,12 @@ const Studio = {
   _welds: [],
   _last: 0,
   // Advanced fields
-  sounds: [],  // { id, name, url, volume, loop, autoplay, positional, x, y, z }
+  sounds: [],
   _previewAudio: null,
+  _runtimes: [],
+  _spinParts: new Set(),
+  _tweens: [],
+  _playerObj: null,
 
   init() {
     this._buildServices();
@@ -2244,6 +3214,7 @@ const Studio = {
       if (s.autoplay) this._playSoundPreview(s, true);
     }
     setTimeout(() => { try { this.renderer.domElement.requestPointerLock(); } catch(e){} }, 100);
+    this._playerObj = { Name: 'Player', __blokInstance: true, Character: wrapInstance({ name: 'Player', className: 'Character', children: [] }, null) };
     this.log('Play mode', 'success');
   },
 
@@ -2263,55 +3234,58 @@ const Studio = {
       this.savedCamState = null;
     }
     if (document.pointerLockElement) document.exitPointerLock();
-    // Stop all sounds
+    this.stopAllRuntimes();
+    (function clear(i){ __wrapCache.delete(i); i.children?.forEach(clear); })(this.tree.workspace);
+    this._playerObj = null;
     this.stopAllSounds();
     this._attachGizmo();
     this.log('Play stopped', 'info');
   },
 
   _runAllScripts() {
+    this.stopAllRuntimes();
     const scripts = [];
-    const walk = (inst) => { if (inst instanceof Script && inst.props.Enabled !== false) scripts.push(inst); inst.children?.forEach(walk); };
+    const walk = (inst) => {
+      if (inst instanceof Script && inst.props.Enabled !== false) scripts.push(inst);
+      inst.children?.forEach(walk);
+    };
     walk(this.tree.workspace);
-    for (const s of scripts) { this.log(`Running script: ${s.name}`, 'action'); this.runScript(s.props.Source, s.name); }
+    for (const s of scripts) this.runScript(s.props.Source, s.name);
   },
 
   runScript(src, name = 'Script') {
-    const lines = (src || '').split('\n');
-    const ctx = {
-      print: (...a) => this.log(a.join(' '), 'script'),
-      workspace: {
-        CreatePart: (x, y, z, sx, sy, sz, color) => {
-          const p = new Part('Part', this.tree.workspace);
-          p.setPosition(+x, +y, +z);
-          p.setSize(+sx, +sy, +sz);
-          if (typeof color === 'number') p.setColor('#' + color.toString(16).padStart(6, '0'));
-          else if (typeof color === 'string') p.setColor(color);
-          this.refreshExplorer();
-          return p;
-        }
-      }
-    };
+    const rt = new BlokRuntime(this, name);
+    this._runtimes.push(rt);
     try {
-      for (let i = 0; i < lines.length; i++) {
-        const t = lines[i].trim();
-        if (!t || t.startsWith('--')) continue;
-        let m = t.match(/^print\s*\((.*)\)\s*;?$/);
-        if (m) { ctx.print(m[1].replace(/^["']|["']$/g, '')); continue; }
-        m = t.match(/^workspace:CreatePart\s*\(([^)]*)\)\s*;?$/);
-        if (m) {
-          const args = m[1].split(',').map(s => { s = s.trim(); return /^0x[0-9a-f]+$/i.test(s) ? parseInt(s, 16) : Number(s); });
-          ctx.workspace.CreatePart(...args);
-          continue;
-        }
-        this.log(`[${name}] L${i+1}: unknown -> "${t}"`, 'warn');
-      }
-      this.log(`[${name}] OK`, 'success');
+      // Parse first (synchronous) so parse errors are reported immediately
+      const toks = blokLex(src || '');
+      const ast = new BlokParser(toks).parseChunk();
+      const env = bMakeGlobalEnv(rt);
+      this.log(`[${name}] started`, 'action');
+      bExecBlock(ast.body, env, rt).catch(e => {
+        if (e instanceof BlokStop || e instanceof BlokReturn || e instanceof BlokBreak) return;
+        this.log(`[${name}] runtime error: ${e.message}`, 'error');
+        console.error(e);
+      });
       return true;
     } catch (e) {
-      this.log(`[${name}] error: ${e.message}`, 'error');
+      this.log(`[${name}] syntax error: ${e.message}`, 'error');
       return false;
     }
+  },
+
+  stopAllRuntimes() {
+    for (const rt of this._runtimes) { try { rt.stop(); } catch(e){} }
+    this._runtimes = [];
+    // reset signals & spin state
+    const walk = (i) => {
+      if (i._blokSignals) { for (const k in i._blokSignals) i._blokSignals[k].handlers = []; }
+      if (i._spin) i._spin = null;
+      i.children?.forEach(walk);
+    };
+    walk(this.tree.workspace);
+    this._spinParts.clear();
+    this._tweens = [];
   },
 
   openScript(s) {
@@ -2647,13 +3621,67 @@ const Studio = {
     const now = performance.now();
     const dt = Math.min(0.1, (now - (this._last || now)) / 1000);
     this._last = now;
+
+    // Spinning parts
+    if (this._spinParts.size) {
+      for (const part of [...this._spinParts]) {
+        if (!part._spin || !part.mesh || !part.mesh.parent) { this._spinParts.delete(part); continue; }
+        part.localRot.x += part._spin.x * dt;
+        part.localRot.y += part._spin.y * dt;
+        part.localRot.z += part._spin.z * dt;
+        part._applyTransform();
+      }
+    }
+
+    // Tweens
+    if (this._tweens.length) {
+      const finished = [];
+      for (let i = 0; i < this._tweens.length; i++) {
+        const t = this._tweens[i];
+        t.elapsed += dt;
+        const k = Math.min(1, t.elapsed / t.duration);
+        try { t.step(k); } catch(e) { console.error(e); }
+        if (k >= 1) finished.push(i);
+      }
+      for (let i = finished.length - 1; i >= 0; i--) this._tweens.splice(finished[i], 1);
+    }
+
     if (this.playing) {
-      if (this.playerController) this.playerController.update(dt);
+      if (this.playerController) {
+        this.playerController.update(dt);
+        this._checkTouches();
+      }
     } else {
       this._camMove(dt);
       this.controls.update();
     }
     this.renderer.render(this.scene, this.camera);
+  },
+
+  _checkTouches() {
+    const b = this.playerController?.char?.body;
+    if (!b) return;
+    const pbox = new THREE.Box3(
+      new THREE.Vector3(b.pos.x - b.hx, b.pos.y, b.pos.z - b.hz),
+      new THREE.Vector3(b.pos.x + b.hx, b.pos.y + b.height, b.pos.z + b.hz)
+    );
+    const walk = (inst) => {
+      if (inst instanceof Part && inst.mesh && inst._blokSignals?.Touched?.handlers.length) {
+        const wp = inst.getPosition();
+        const s = inst.props.Size;
+        const ibox = new THREE.Box3(
+          new THREE.Vector3(wp.x - s.x/2, wp.y - s.y/2, wp.z - s.z/2),
+          new THREE.Vector3(wp.x + s.x/2, wp.y + s.y/2, wp.z + s.z/2)
+        );
+        const touching = pbox.intersectsBox(ibox);
+        if (touching && !inst._wasTouching) {
+          inst._wasTouching = true;
+          inst._blokSignals.Touched.Fire(this._playerObj || { Name: 'Player' });
+        } else if (!touching) inst._wasTouching = false;
+      }
+      inst.children?.forEach(walk);
+    };
+    walk(this.tree.workspace);
   },
 
   _bindUI() {
