@@ -14,7 +14,7 @@ WS_MAGIC = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
-# Estado global
+# Global state
 # ============================================================
 clients = {}            # player_id -> ClientState
 next_player_id = 1
@@ -86,7 +86,7 @@ async def ws_send(writer, data):
         return False
 
 # ============================================================
-# Estado de jogador
+# Player state
 # ============================================================
 class ClientState:
     __slots__ = ('id', 'writer', 'name', 'avatar_colors', 'is_adm',
@@ -117,7 +117,7 @@ def _cleanup_client(pid):
         del active_users[c.user_id]
 
 # ============================================================
-# Broadcast por sala
+# Room broadcast
 # ============================================================
 async def broadcast_room(data, room, exclude_id=None):
     if not clients:
@@ -139,7 +139,7 @@ async def broadcast_room(data, room, exclude_id=None):
         _cleanup_client(pid)
 
 async def simulation_loop():
-    """Envia estados dos jogadores a 20 Hz, por sala."""
+    """Broadcast player states at 20 Hz, per room."""
     interval = 0.05
     while True:
         await asyncio.sleep(interval)
@@ -160,7 +160,7 @@ async def simulation_loop():
             await broadcast_room({'type': 'states', 'states': states}, room)
 
 # ============================================================
-# HTTP estatico
+# Static HTTP
 # ============================================================
 def guess_content_type(path):
     ext = os.path.splitext(path)[1].lower()
@@ -204,7 +204,7 @@ async def serve_static(writer, path):
         await send_response(writer, 403, b'Forbidden', 'text/plain')
         return
 
-    # ---------- Fallback case-insensitive ----------
+    # ---------- Case-insensitive fallback ----------
     if not os.path.isfile(full):
         dir_part = os.path.dirname(full)
         base_part = os.path.basename(full).lower()
@@ -279,7 +279,7 @@ async def handle_client(reader, writer):
         else:
             await send_response(writer, 404, b'Not Found', 'text/plain')
     except Exception as e:
-        print(f'[erro] {e}')
+        print(f'[error] {e}')
     finally:
         try:
             writer.close()
@@ -320,12 +320,11 @@ async def handle_websocket(reader, writer, headers):
     room = str(data.get('game', 'default'))[:64].strip() or 'default'
     user_id = str(data.get('user_id', '')).strip() or None
 
-    # -------- Session lock: um user_id = uma sessao --------
+    # -------- Session lock: one user_id = one session --------
     if user_id:
         old_pid = active_users.get(user_id)
         if old_pid is not None:
             old = clients.get(old_pid)
-            # Se a sessao antiga esta viva (atividade < 15s), rejeita a nova
             if old is not None and (time.time() - old.last_activity) < 15:
                 await ws_send(writer, {
                     'type': 'error',
@@ -341,9 +340,8 @@ async def handle_websocket(reader, writer, headers):
                     await writer.wait_closed()
                 except Exception:
                     pass
-                print(f'[x] Sessao duplicada rejeitada: {name} ({user_id[:8]})')
+                print(f'[x] Duplicate session rejected: {name} ({user_id[:8]})')
                 return
-            # Sessao antiga morta - remove
             _cleanup_client(old_pid)
 
     pid = next_player_id
@@ -354,9 +352,8 @@ async def handle_websocket(reader, writer, headers):
     if user_id:
         active_users[user_id] = pid
 
-    print(f'[+] {name} (id={pid}, room={room}) entrou. Total: {len(clients)}')
+    print(f'[+] {name} (id={pid}, room={room}) joined. Total: {len(clients)}')
 
-    # Welcome: so os da mesma sala
     existing = []
     for c in clients.values():
         if c.id == pid:
@@ -378,7 +375,6 @@ async def handle_websocket(reader, writer, headers):
         'you': {'name': name, 'is_adm': is_adm}
     })
 
-    # Avisa os outros da mesma sala
     await broadcast_room({
         'type': 'player_join',
         'player': {
@@ -433,7 +429,7 @@ async def handle_websocket(reader, writer, headers):
                     }, room, exclude_id=pid)
     finally:
         _cleanup_client(pid)
-        print(f'[-] {name} (id={pid}) saiu. Total: {len(clients)}')
+        print(f'[-] {name} (id={pid}) left. Total: {len(clients)}')
         await broadcast_room({'type': 'player_leave', 'id': pid}, room)
         try:
             writer.close()
@@ -446,10 +442,10 @@ async def handle_websocket(reader, writer, headers):
 # ============================================================
 async def main():
     print(f'\n  ============================================')
-    print(f'   HTMLBLOX - servidor rodando (salas por jogo)')
+    print(f'   HTMLBLOX - server running (rooms per game)')
     print(f'  ============================================')
-    print(f'   Abra: http://localhost:{PORT}')
-    print(f'   Ctrl+C para encerrar.\n')
+    print(f'   Open: http://localhost:{PORT}')
+    print(f'   Ctrl+C to stop.\n')
     asyncio.create_task(simulation_loop())
     server = await asyncio.start_server(handle_client, HOST, PORT)
     async with server:
@@ -459,4 +455,4 @@ if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print('\nEncerrado.')
+        print('\nStopped.')
