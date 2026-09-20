@@ -232,6 +232,16 @@ const SHARED_GEO = {
   head:  new THREE.BoxGeometry(1.25, 1.25, 1.25)
 };
 
+/* ---------- Materiais planos (cache) ---------- */
+const materialCache = new Map();
+function getPlainMaterial(color) {
+  if (!materialCache.has(color)) {
+    materialCache.set(color, new THREE.MeshLambertMaterial({ color }));
+  }
+  return materialCache.get(color);
+}
+
+/* ---------- Materiais da cabeça (rosto só na frente) ---------- */
 const faceMaterialCache = new Map();
 function getFaceMaterials(headColorHex) {
   if (faceMaterialCache.has(headColorHex)) return faceMaterialCache.get(headColorHex);
@@ -250,13 +260,14 @@ function getFaceMaterials(headColorHex) {
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
 
   const faceMat  = new THREE.MeshLambertMaterial({ map: tex });
   const plainMat = new THREE.MeshLambertMaterial({ color: headColorHex });
 
-  // ordem: +X, -X, +Y, -Y, +Z(frente), -Z(trás)
+  // ordem do BoxGeometry: +X, -X, +Y, -Y, +Z (frente), -Z (trás)
   const mats = [plainMat, plainMat, plainMat, plainMat, faceMat, plainMat];
 
   faceMaterialCache.set(headColorHex, mats);
