@@ -68,6 +68,7 @@
   .game-card:hover{border-color:#4a7ab8;box-shadow:0 0 0 2px rgba(74,122,184,.25);transform:translateY(-1px)}
   .game-thumb{height:130px;position:relative;overflow:hidden;background:linear-gradient(180deg,#87ceeb 0%,#6ab04c 100%)}
   .game-thumb canvas{width:100%;height:100%;display:block}
+  .game-thumb-img{width:100%;height:100%;background-size:cover;background-position:center center;background-repeat:no-repeat;display:block}
   .game-badge{position:absolute;top:6px;left:6px;background:#fbff25;color:#000000;font-size:9px;font-weight:bold;padding:2px 6px;border-radius:3px;border:1px solid #fde584;letter-spacing:.5px;z-index:2}
   .game-info{padding:10px 12px}
   .game-name{font-size:13px;font-weight:bold;color:#1a4a9c;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -80,6 +81,7 @@
   .game-detail{display:grid;grid-template-columns:minmax(320px,1.1fr) 1fr;gap:24px;align-items:start}
   .game-detail-hero{aspect-ratio:16/10;background:#111;border:2px solid #c8c8c8;border-radius:6px;overflow:hidden;position:relative}
   .game-detail-hero canvas{width:100%;height:100%;display:block}
+  .game-detail-hero-img{width:100%;height:100%;background-size:cover;background-position:center center;background-repeat:no-repeat;display:block}
   .game-detail-info h2{font-family:'Arial Black',Arial,sans-serif;font-size:26px;color:#003366;margin-bottom:6px;letter-spacing:-.5px}
   .game-author-lg{color:#555;font-size:13px;margin-bottom:12px}
   .game-author-lg b{color:#1a4a9c}
@@ -492,6 +494,13 @@ function normalizeAvatarColors(a){
 }
 function admBadge(cls){return '<span class="adm-badge'+(cls?' '+cls:'')+'">ADM</span>'}
 
+/* Escapa string para uso seguro dentro de url("...") em CSS */
+function cssUrlSafe(url){
+  return String(url).replace(/["\\\n\r]/g, ch => ({
+    '"': '%22', '\\': '%5C', '\n': '', '\r': ''
+  })[ch] || ch);
+}
+
 /* ============================================================
    AVATAR 3D
    ============================================================ */
@@ -688,6 +697,17 @@ async function loadGameCards(){
   let games=[];
   const{data,error}=await sb.from('games').select('*').order('created_at');
   if(!error&&data)games=data;
+
+  // Filtra visibilidade:
+  // - Jogos públicos (is_public !== false) aparecem pra todos
+  // - Jogos privados só aparecem pro próprio autor
+  const myId = state.user ? state.user.id : null;
+  if (myId) {
+    games = games.filter(g => g.is_public !== false || g.author_id === myId);
+  } else {
+    games = games.filter(g => g.is_public !== false);
+  }
+
   state.gamesCache=games;
   const homeGrid=$('home-game-grid'),gamesGrid=$('games-grid'),profileGrid=$('profile-games-grid');
   homeGrid.innerHTML='';gamesGrid.innerHTML='';profileGrid.innerHTML='';
@@ -708,10 +728,14 @@ async function loadGameCards(){
 function buildGameCard(game){
   const card=document.createElement('button');
   card.className='game-card';card.type='button';
+
+  const hasThumb = game.thumbnail_url && String(game.thumbnail_url).trim();
+  const thumbHTML = hasThumb ? '<div class="game-thumb-img"></div>' : '<canvas></canvas>';
+
   card.innerHTML=
     '<div class="game-thumb">'+
       (game.featured?'<div class="game-badge">FEATURED</div>':'')+
-      '<canvas></canvas>'+
+      thumbHTML +
     '</div>'+
     '<div class="game-info">'+
       '<div class="game-name">'+esc(game.name)+'</div>'+
@@ -721,8 +745,16 @@ function buildGameCard(game){
         '<span class="game-play">VIEW</span>' +
       '</div>' +
     '</div>';
+
   card.addEventListener('click',()=>openGameDetail(game));
-  setTimeout(()=>{const cv=card.querySelector('canvas');if(cv)drawGamePreview(cv)},10);
+
+  if (hasThumb) {
+    const imgDiv = card.querySelector('.game-thumb-img');
+    imgDiv.style.backgroundImage = 'url("' + cssUrlSafe(game.thumbnail_url) + '")';
+  } else {
+    setTimeout(()=>{const cv=card.querySelector('canvas');if(cv)drawGamePreview(cv)},10);
+  }
+
   return card;
 }
 
@@ -784,11 +816,22 @@ function openGameDetail(game){
   const _c = state.gameCounts[game.slug] || 0;
   $('detail-players').textContent = _c;
   $('detail-online').textContent = _c === 1 ? '1 online' : _c + ' online';
-  const hero=$('detail-hero');
-  hero.innerHTML='';
-  const cv=document.createElement('canvas');
-  hero.appendChild(cv);
-  setTimeout(()=>drawGamePreview(cv),10);
+
+  const hero = $('detail-hero');
+  hero.innerHTML = '';
+
+  const hasThumb = game.thumbnail_url && String(game.thumbnail_url).trim();
+  if (hasThumb) {
+    const div = document.createElement('div');
+    div.className = 'game-detail-hero-img';
+    div.style.backgroundImage = 'url("' + cssUrlSafe(game.thumbnail_url) + '")';
+    hero.appendChild(div);
+  } else {
+    const cv=document.createElement('canvas');
+    hero.appendChild(cv);
+    setTimeout(()=>drawGamePreview(cv),10);
+  }
+
   navigate('gamedetail');
 }
 
