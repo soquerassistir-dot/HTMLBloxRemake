@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""
-HTMLBlox - Servidor HTTP + WebSocket em Python puro (sem dependencias).
-Serve os arquivos estaticos e sincroniza jogadores em tempo real.
-Suporta multiplas salas (uma por jogo) e bloqueia mesmo user_id em duas sessoes.
-
-Uso:
-    python server.py
-"""
 
 import asyncio
 import base64
@@ -26,7 +18,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # ============================================================
 clients = {}            # player_id -> ClientState
 next_player_id = 1
-active_users = {}       # user_id -> player_id  (uma sessao por user)
+active_users = {}       # user_id -> player_id
 
 # ============================================================
 # WebSocket helpers
@@ -211,15 +203,35 @@ async def serve_static(writer, path):
     if not full.startswith(ROOT):
         await send_response(writer, 403, b'Forbidden', 'text/plain')
         return
+
+    # ---------- Fallback case-insensitive ----------
     if not os.path.isfile(full):
+        dir_part = os.path.dirname(full)
+        base_part = os.path.basename(full).lower()
+        if os.path.isdir(dir_part):
+            try:
+                for f in os.listdir(dir_part):
+                    if f.lower() == base_part:
+                        full = os.path.join(dir_part, f)
+                        print(f'[serve] case-fix: {rel} -> {os.path.basename(full)}')
+                        break
+            except OSError:
+                pass
+
+    if not os.path.isfile(full):
+        print(f'[serve] 404: {rel} (tried {full})')
         await send_response(writer, 404, b'Not Found', 'text/plain')
         return
+
     try:
         with open(full, 'rb') as f:
             body = f.read()
-    except OSError:
+        print(f'[serve] 200: {rel} ({len(body)} bytes)')
+    except OSError as e:
+        print(f'[serve] 500: {rel} -> {e}')
         await send_response(writer, 500, b'Error', 'text/plain')
         return
+
     await send_response(writer, 200, body, guess_content_type(full))
 
 # ============================================================
