@@ -405,12 +405,15 @@ function createNameSprite(name, opts) {
 }
 
 /* ============================================================
-   STUD TEXTURE — stud.png (64x64, 1 stud per tile)
+   STUD TEXTURE — Promise-based with procedural fallback
    ============================================================ */
 const __texLoader = new THREE.TextureLoader();
 let __studBase = null;
 let __studLoaded = false;
 const __studReadyCallbacks = [];
+
+let __studReadyResolve = null;
+const __studReadyPromise = new Promise((resolve) => { __studReadyResolve = resolve; });
 
 function __makeProceduralStudTexture() {
   const c = document.createElement('canvas');
@@ -418,16 +421,19 @@ function __makeProceduralStudTexture() {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 64, 64);
 
-  // Stud base (círculo com sombra)
+  // Shadow under the stud
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.arc(32, 33, 12, 0, Math.PI * 2); ctx.fill();
 
+  // Outer ring (subtle)
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.beginPath(); ctx.arc(32, 31, 12, 0, Math.PI * 2); ctx.fill();
 
+  // Main stud body
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   ctx.beginPath(); ctx.arc(32, 30, 10, 0, Math.PI * 2); ctx.fill();
 
+  // Center depression
   ctx.fillStyle = 'rgba(0,0,0,0.08)';
   ctx.beginPath(); ctx.arc(32, 32, 8, 0, Math.PI * 2); ctx.fill();
 
@@ -438,7 +444,7 @@ function __makeProceduralStudTexture() {
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
   tex.anisotropy = 8;
-  console.log('[game] using procedural stud texture (fallback)');
+  console.log('[game] procedural stud texture created');
   return tex;
 }
 
@@ -446,18 +452,23 @@ function __makeProceduralStudTexture() {
   const candidates = ['stud.png', 'Stud.png', 'STUD.png', '/stud.png'];
   let idx = 0;
 
-  function useFallback() {
-    console.warn('[game] stud.png not found in any variant, using procedural fallback');
-    __studBase = __makeProceduralStudTexture();
+  function finish(tex) {
+    __studBase = tex;
     __studLoaded = true;
     for (const cb of __studReadyCallbacks) cb();
     __studReadyCallbacks.length = 0;
+    if (__studReadyResolve) __studReadyResolve();
+  }
+
+  function useFallback() {
+    console.warn('[game] stud.png not found in any variant — using procedural fallback');
+    finish(__makeProceduralStudTexture());
   }
 
   function tryNext() {
     if (idx >= candidates.length) return useFallback();
     const url = candidates[idx++];
-    console.log('[game] → trying:', url);
+    console.log('[game] → trying texture:', url);
     __texLoader.load(
       url,
       (tex) => {
@@ -467,11 +478,8 @@ function __makeProceduralStudTexture() {
         tex.minFilter = THREE.LinearMipmapLinearFilter;
         tex.generateMipmaps = true;
         tex.anisotropy = 8;
-        __studBase = tex;
-        __studLoaded = true;
         console.log('[game] ✅ stud loaded from:', url);
-        for (const cb of __studReadyCallbacks) cb();
-        __studReadyCallbacks.length = 0;
+        finish(tex);
       },
       undefined,
       () => {
@@ -778,8 +786,8 @@ class Network {
     this.username = 'Player';
     this.avatar_colors = null;
     this.isAdm = false;
-    this.room = 'default';      // game slug
-    this.userId = null;         // supabase uuid
+    this.room = 'default';
+    this.userId = null;
     this.reconnectTimer = 0;
     this.shouldReconnect = true;
     this.onStatusChange = null;
@@ -995,6 +1003,7 @@ class InputManager {
     this.jumpHeld = false;
   }
 }
+
 /* ============================================================
    11. HUD
    ============================================================ */
@@ -1583,6 +1592,30 @@ class Game {
     this.network.connect();
   }
 
+  _setupPresence() {
+    if (!this.profile || !this.profile.id) return;
+    this.presenceChannel = sb.channel('online-players', {
+      config: { presence: { key: this.profile.id } }
+    });
+    this.presenceChannel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          await this.presenceChannel.track({
+            username: this.username,
+            game: this.gameRow.slug,
+            room: this.gameRow.slug,
+            online_at: new Date().toISOString()
+          });
+        } catch (e) {}
+      }
+    });
+  }
+
+  _setupTouch() {
+    if (!this.isTouchDevice) return;
+    this.touchControls = new TouchControls(this);
+  }
+
   _showFatalError(message) {
     this.fatalError = true;
     const overlay = document.getElementById('error-overlay');
@@ -1593,33 +1626,10 @@ class Game {
     const loading = document.getElementById('loading-game');
     if (loading) loading.classList.add('hidden');
   }
-    _setupPresence() {
-      if (!this.profile || !this.profile.id) return;
-      this.presenceChannel = sb.channel('online-players', {
-        config: { presence: { key: this.profile.id } }
-      });
-      this.presenceChannel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          try {
-            await this.presenceChannel.track({
-              username: this.username,
-              game: this.gameRow.slug,
-              room: this.gameRow.slug,
-              online_at: new Date().toISOString()
-            });
-          } catch (e) {}
-        }
-      });
-    }
 
   _updateHudPlayers() {
     const remote = this.network ? this.network.realPlayerCount : 0;
     this.hud.setPlayers(1 + remote);
-  }
-
-    _setupTouch() {
-    if (!this.isTouchDevice) return;
-    this.touchControls = new TouchControls(this);
   }
 
   _setupEvents() {
@@ -1680,13 +1690,13 @@ class Game {
     if (e.target && e.target.closest && e.target.closest('#esc-menu')) return;
     if (e.target && e.target.closest && e.target.closest('#error-overlay')) return;
     if (e.target && e.target.closest && e.target.closest('#touch-controls')) return;
-    if (this.isTouchDevice) return; // Touch devices use drag-to-look instead
+    if (this.isTouchDevice) return;
     if (!this.input.locked) this._requestLock();
   }
   _requestLock() {
     if (this.fatalError) return;
     if (this.escMenu && this.escMenu.isOpen) return;
-    if (this.isTouchDevice) return; // no pointer lock on touch
+    if (this.isTouchDevice) return;
     try {
       const p = this.canvas.requestPointerLock();
       if (p && typeof p.catch === 'function') p.catch(() => {});
@@ -1786,7 +1796,7 @@ class Game {
     // Run when keyboard shift OR joystick pushed past ~85%
     const kbRunning = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
     const touchMag2 = tmX * tmX + tmZ * tmZ;
-    const touchRunning = touchMag2 > 0.72; // 0.85²
+    const touchRunning = touchMag2 > 0.72;
     const running = kbRunning || touchRunning;
     const speed = running ? CONFIG.runSpeed : CONFIG.walkSpeed;
 
@@ -1921,7 +1931,7 @@ class Game {
 }
 
 /* ============================================================
-   14. BOOT
+   14. BOOT — awaits stud texture BEFORE creating Game
    ============================================================ */
 (async function boot() {
   const params = new URLSearchParams(location.search);
@@ -1929,6 +1939,12 @@ class Game {
   const statusEl = document.getElementById('loading-status');
 
   try {
+    // ⭐ ESPERA a textura do stud carregar (ou fallback) antes de qualquer coisa.
+    // Sem isso, as Parts são criadas com o material sem stud e a textura
+    // chega depois — bug clássico de "stud.png carregou mas não aparece".
+    statusEl.textContent = 'Loading textures...';
+    await __studReadyPromise;
+
     statusEl.textContent = 'Checking session...';
     const { data: { session } } = await sb.auth.getSession();
     if (!session || !session.user) {
