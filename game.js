@@ -232,15 +232,10 @@ const SHARED_GEO = {
   head:  new THREE.BoxGeometry(1.25, 1.25, 1.25)
 };
 
-const materialCache = new Map();
-function getPlainMaterial(color) {
-  if (!materialCache.has(color)) materialCache.set(color, new THREE.MeshLambertMaterial({ color }));
-  return materialCache.get(color);
-}
-
 const faceMaterialCache = new Map();
-function getFaceMaterial(headColorHex) {
+function getFaceMaterials(headColorHex) {
   if (faceMaterialCache.has(headColorHex)) return faceMaterialCache.get(headColorHex);
+
   const c = document.createElement('canvas');
   c.width = 128; c.height = 128;
   const ctx = c.getContext('2d');
@@ -252,13 +247,20 @@ function getFaceMaterial(headColorHex) {
   ctx.strokeStyle = '#1a1a1a';
   ctx.lineWidth = 7; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.arc(64, 60, 28, 0.14 * Math.PI, 0.86 * Math.PI); ctx.stroke();
+
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
-  const mat = new THREE.MeshLambertMaterial({ map: tex });
-  faceMaterialCache.set(headColorHex, mat);
-  return mat;
+
+  const faceMat  = new THREE.MeshLambertMaterial({ map: tex });
+  const plainMat = new THREE.MeshLambertMaterial({ color: headColorHex });
+
+  // ordem: +X, -X, +Y, -Y, +Z(frente), -Z(trás)
+  const mats = [plainMat, plainMat, plainMat, plainMat, faceMat, plainMat];
+
+  faceMaterialCache.set(headColorHex, mats);
+  return mats;
 }
 
 class Character {
@@ -282,7 +284,7 @@ class Character {
   }
   _buildBody() {
     const c = this.colors, g = this.group;
-    const matHead = getFaceMaterial(c.head);
+    const matHead = getFaceMaterials(c.head);
     const matArmL = getPlainMaterial(c.leftArm);
     const matArmR = getPlainMaterial(c.rightArm);
     const matTorso = getPlainMaterial(c.torso);
