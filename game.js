@@ -1,7 +1,6 @@
 /* ============================================================
    HTMLBLOX ENGINE — game.js
-   Suporta: multiplayer por sala, session lock, decals, sounds,
-   touch controls, ESC menu, baseplate editável via noBaseplate.
+
    ============================================================ */
 
 import * as THREE from 'three';
