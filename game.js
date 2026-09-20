@@ -1,5 +1,7 @@
 /* ============================================================
    HTMLBLOX ENGINE — game.js
+   Suporta: multiplayer por sala, session lock, decals, sounds,
+   touch controls, ESC menu, baseplate editável via noBaseplate.
    ============================================================ */
 
 import * as THREE from 'three';
@@ -127,8 +129,8 @@ class PhysicsWorld {
   constructor() { this.boxes = []; }
   addBox(cx, cy, cz, sx, sy, sz) {
     const box = new THREE.Box3(
-      new THREE.Vector3(cx - sx/2, cy - sy/2, cz - sz/2),
-      new THREE.Vector3(cx + sx/2, cy + sy/2, cz + sz/2)
+      new THREE.Vector3(cx - sx / 2, cy - sy / 2, cz - sz / 2),
+      new THREE.Vector3(cx + sx / 2, cy + sy / 2, cz + sz / 2)
     );
     this.boxes.push(box);
     return box;
@@ -405,13 +407,11 @@ function createNameSprite(name, opts) {
 }
 
 /* ============================================================
-   STUD TEXTURE — Promise-based with procedural fallback
+   6. STUD TEXTURE — Promise based, procedural fallback
    ============================================================ */
 const __texLoader = new THREE.TextureLoader();
 let __studBase = null;
 let __studLoaded = false;
-const __studReadyCallbacks = [];
-
 let __studReadyResolve = null;
 const __studReadyPromise = new Promise((resolve) => { __studReadyResolve = resolve; });
 
@@ -425,7 +425,7 @@ function __makeProceduralStudTexture() {
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.arc(32, 33, 12, 0, Math.PI * 2); ctx.fill();
 
-  // Outer ring (subtle)
+  // Outer ring
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.beginPath(); ctx.arc(32, 31, 12, 0, Math.PI * 2); ctx.fill();
 
@@ -455,13 +455,11 @@ function __makeProceduralStudTexture() {
   function finish(tex) {
     __studBase = tex;
     __studLoaded = true;
-    for (const cb of __studReadyCallbacks) cb();
-    __studReadyCallbacks.length = 0;
     if (__studReadyResolve) __studReadyResolve();
   }
 
   function useFallback() {
-    console.warn('[game] stud.png not found in any variant — using procedural fallback');
+    console.warn('[game] stud.png not found — using procedural fallback');
     finish(__makeProceduralStudTexture());
   }
 
@@ -516,7 +514,7 @@ function makeStuddedMaterials(colorNum, sx, sz, transparency) {
 }
 
 /* ============================================================
-   GENERATORS
+   7. GENERATORS
    ============================================================ */
 const GENERATORS = {
   empty(scene, physics) {
@@ -691,119 +689,155 @@ const GENERATORS = {
     box(60, 8, 0, 2, 16, 122, boundColor);
   },
 
-custom_build(scene, physics, data) {
-  const skipBP = data && data.noBaseplate === true;
+  custom_build(scene, physics, data) {
+    /* ---------- BASEPLATE (respeita noBaseplate) ---------- */
+    const skipBP = data && data.noBaseplate === true;
+    if (!skipBP) {
+      const BP = 256;
+      const bpTex = getStudTexture(BP, BP);
+      const bpSide = new THREE.MeshLambertMaterial({ color: 0xcfcfcf });
+      const bpTop = bpTex
+        ? new THREE.MeshLambertMaterial({ color: 0xcfcfcf, map: bpTex })
+        : new THREE.MeshLambertMaterial({ color: 0xcfcfcf });
+      const bpMats = [bpSide, bpSide, bpTop, bpSide, bpSide, bpSide];
+      const baseplate = new THREE.Mesh(new THREE.BoxGeometry(BP, 2, BP), bpMats);
+      baseplate.position.set(0, -1, 0);
+      baseplate.receiveShadow = true;
+      baseplate.castShadow = false;
+      scene.add(baseplate);
+      physics.addBox(0, -1, 0, BP, 2, BP);
+    }
 
-custom_build(scene, physics, data) {
-  const skipBP = data && data.noBaseplate === true;
-  if (!skipBP) {
-    const BP = 256;
-    const bpTex = getStudTexture(BP, BP);
-    const bpSide = new THREE.MeshLambertMaterial({ color: 0xcfcfcf });
-    const bpTop = bpTex
-      ? new THREE.MeshLambertMaterial({ color: 0xcfcfcf, map: bpTex })
-      : new THREE.MeshLambertMaterial({ color: 0xcfcfcf });
-    const bpMats = [bpSide, bpSide, bpTop, bpSide, bpSide, bpSide];
-    const baseplate = new THREE.Mesh(new THREE.BoxGeometry(BP, 2, BP), bpMats);
-    baseplate.position.set(0, -1, 0);
-    baseplate.receiveShadow = true;
-    scene.add(baseplate);
-    physics.addBox(0, -1, 0, BP, 2, BP);
-  }
+    /* ---------- PARTS ---------- */
+    const parts = (data && data.parts) || [];
+    for (const p of parts) {
+      const colorNum = typeof p.color === 'number'
+        ? p.color
+        : parseInt(String(p.color).replace('#', ''), 16);
 
-  const parts = (data && data.parts) || [];
-  for (const p of parts) {
-    const colorNum = typeof p.color === 'number'
-      ? p.color
-      : parseInt(String(p.color).replace('#', ''), 16);
+      const geo = new THREE.BoxGeometry(p.sx, p.sy, p.sz);
+      const mats = makeStuddedMaterials(colorNum, p.sx, p.sz, p.transparency || 0);
+      const mesh = new THREE.Mesh(geo, mats);
+      mesh.position.set(p.x, p.y, p.z);
+      if (p.rx) mesh.rotation.x = THREE.MathUtils.degToRad(p.rx);
+      if (p.ry) mesh.rotation.y = THREE.MathUtils.degToRad(p.ry);
+      if (p.rz) mesh.rotation.z = THREE.MathUtils.degToRad(p.rz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      if (p.anchored !== false) physics.addBox(p.x, p.y, p.z, p.sx, p.sy, p.sz);
 
-    const geo = new THREE.BoxGeometry(p.sx, p.sy, p.sz);
-    const mats = makeStuddedMaterials(colorNum, p.sx, p.sz, p.transparency || 0);
-    const mesh = new THREE.Mesh(geo, mats);
-    mesh.position.set(p.x, p.y, p.z);
-    if (p.rx) mesh.rotation.x = THREE.MathUtils.degToRad(p.rx);
-    if (p.ry) mesh.rotation.y = THREE.MathUtils.degToRad(p.ry);
-    if (p.rz) mesh.rotation.z = THREE.MathUtils.degToRad(p.rz);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    if (p.anchored !== false) physics.addBox(p.x, p.y, p.z, p.sx, p.sy, p.sz);
+      /* ---------- DECALS ---------- */
+      if (Array.isArray(p.decals) && p.decals.length) {
+        const sz = { x: p.sx, y: p.sy, z: p.sz };
+        const off = 0.02;
+        for (const d of p.decals) {
+          if (!d.url) continue;
+          try {
+            const tex = new THREE.TextureLoader().load(d.url);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            const op = 1 - (d.transparency || 0);
+            const dm = new THREE.MeshStandardMaterial({
+              map: tex,
+              transparent: true,
+              opacity: op,
+              roughness: 0.9,
+              metalness: 0,
+              depthWrite: false,
+              polygonOffset: true,
+              polygonOffsetFactor: -4,
+              polygonOffsetUnits: -4
+            });
 
-    // -------- DECALS --------
-    if (Array.isArray(p.decals) && p.decals.length) {
-      const s = { x: p.sx, y: p.sy, z: p.sz };
-      const off = 0.02;
-      for (const d of p.decals) {
-        if (!d.url) continue;
-        const tex = new THREE.TextureLoader().load(d.url);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        const op = 1 - (d.transparency || 0);
-        const dm = new THREE.MeshStandardMaterial({
-          map: tex, transparent: true, opacity: op, roughness: 0.9, metalness: 0,
-          depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
-        });
-        let pw, ph, x=0,y=0,z=0,rx=0,ry=0;
-        switch (d.face) {
-          case 'Front':  pw=s.x*.98; ph=s.y*.98; z= s.z/2+off; break;
-          case 'Back':   pw=s.x*.98; ph=s.y*.98; z=-s.z/2-off; ry=Math.PI; break;
-          case 'Left':   pw=s.z*.98; ph=s.y*.98; x=-s.x/2-off; ry=-Math.PI/2; break;
-          case 'Right':  pw=s.z*.98; ph=s.y*.98; x= s.x/2+off; ry= Math.PI/2; break;
-          case 'Top':    pw=s.x*.98; ph=s.z*.98; y= s.y/2+off; rx=-Math.PI/2; break;
-          case 'Bottom': pw=s.x*.98; ph=s.z*.98; y=-s.y/2-off; rx= Math.PI/2; break;
-          default: continue;
+            let pw, ph, x = 0, y = 0, z = 0, rx = 0, ry = 0;
+            switch (d.face) {
+              case 'Front':  pw = sz.x * 0.98; ph = sz.y * 0.98; z =  sz.z/2 + off; break;
+              case 'Back':   pw = sz.x * 0.98; ph = sz.y * 0.98; z = -sz.z/2 - off; ry = Math.PI; break;
+              case 'Left':   pw = sz.z * 0.98; ph = sz.y * 0.98; x = -sz.x/2 - off; ry = -Math.PI/2; break;
+              case 'Right':  pw = sz.z * 0.98; ph = sz.y * 0.98; x =  sz.x/2 + off; ry =  Math.PI/2; break;
+              case 'Top':    pw = sz.x * 0.98; ph = sz.z * 0.98; y =  sz.y/2 + off; rx = -Math.PI/2; break;
+              case 'Bottom': pw = sz.x * 0.98; ph = sz.z * 0.98; y = -sz.y/2 - off; rx =  Math.PI/2; break;
+              default: continue;
+            }
+
+            const dg = new THREE.PlaneGeometry(pw, ph);
+            const dmesh = new THREE.Mesh(dg, dm);
+            dmesh.position.set(x, y, z);
+            dmesh.rotation.set(rx, ry, 0);
+            mesh.add(dmesh);
+          } catch (e) {
+            console.warn('[game] decal load failed:', d.url, e);
+          }
         }
-        const dg = new THREE.PlaneGeometry(pw, ph);
-        const dmesh = new THREE.Mesh(dg, dm);
-        dmesh.position.set(x, y, z);
-        dmesh.rotation.set(rx, ry, 0);
-        mesh.add(dmesh);
       }
     }
-  }
 
-  // -------- SOUNDS --------
-  if (Array.isArray(data.sounds) && data.sounds.length) {
-    const listener = new THREE.AudioListener();
-    scene.add(listener);
-    data.sounds.forEach((sd, i) => {
+    /* ---------- SOUNDS ---------- */
+    if (Array.isArray(data.sounds) && data.sounds.length) {
       try {
-        const audio = sd.positional
-          ? new THREE.PositionalAudio(listener)
-          : new THREE.Audio(listener);
-        if (sd.positional) {
-          const proxy = new THREE.Object3D();
-          proxy.position.set(sd.x || 0, sd.y || 0, sd.z || 0);
-          scene.add(proxy);
-          proxy.add(audio);
-          audio.setRefDistance(6);
-          audio.setRolloffFactor(1.2);
-        }
-        const loader = new THREE.AudioLoader();
-        loader.load(sd.url, (buffer) => {
-          audio.setBuffer(buffer);
-          audio.setLoop(!!sd.loop);
-          audio.setVolume(typeof sd.volume === 'number' ? sd.volume : 0.8);
-          if (sd.autoplay) {
-            // Try autoplay. Browser needs user gesture, which happens when player clicks PLAY.
-            const tryPlay = () => {
-              if (audio.context.state === 'suspended') {
-                audio.context.resume().then(() => audio.play()).catch(() => {});
-              } else {
-                audio.play().catch(() => {});
-              }
-            };
-            tryPlay();
+        const listener = new THREE.AudioListener();
+        scene.add(listener);
+
+        data.sounds.forEach((sd) => {
+          try {
+            if (!sd.url) return;
+
+            const audio = sd.positional
+              ? new THREE.PositionalAudio(listener)
+              : new THREE.Audio(listener);
+
+            if (sd.positional) {
+              const proxy = new THREE.Object3D();
+              proxy.position.set(
+                typeof sd.x === 'number' ? sd.x : 0,
+                typeof sd.y === 'number' ? sd.y : 5,
+                typeof sd.z === 'number' ? sd.z : 0
+              );
+              scene.add(proxy);
+              proxy.add(audio);
+              audio.setRefDistance(6);
+              audio.setRolloffFactor(1.2);
+            }
+
+            const loader = new THREE.AudioLoader();
+            loader.load(
+              sd.url,
+              (buffer) => {
+                audio.setBuffer(buffer);
+                audio.setLoop(!!sd.loop);
+                audio.setVolume(typeof sd.volume === 'number' ? sd.volume : 0.8);
+
+                if (sd.autoplay) {
+                  const tryPlay = () => {
+                    try {
+                      if (audio.context.state === 'suspended') {
+                        audio.context.resume().then(() => audio.play().catch(() => {}));
+                      } else {
+                        audio.play().catch(() => {});
+                      }
+                    } catch (e) {
+                      console.warn('[game] autoplay failed:', sd.name, e);
+                    }
+                  };
+                  tryPlay();
+                }
+              },
+              undefined,
+              (err) => console.warn('[game] audio load failed:', sd.name, err)
+            );
+          } catch (e) {
+            console.warn('[game] audio setup error:', sd.name, e);
           }
-        }, undefined, (err) => console.warn('[audio] load failed:', sd.name, err));
+        });
       } catch (e) {
-        console.warn('[audio] error setting up sound:', sd.name, e);
+        console.warn('[game] sound system error:', e);
       }
-    });
+    }
   }
 };
 
 /* ============================================================
-   7. REMOTE PLAYER
+   8. REMOTE PLAYER
    ============================================================ */
 class RemotePlayer {
   constructor(info) {
@@ -847,7 +881,7 @@ class RemotePlayer {
 }
 
 /* ============================================================
-   8. NETWORK
+   9. NETWORK
    ============================================================ */
 class Network {
   constructor(game) {
@@ -1003,7 +1037,7 @@ class Network {
 }
 
 /* ============================================================
-   9. CHAT
+   10. CHAT
    ============================================================ */
 class ChatSystem {
   constructor() {
@@ -1059,14 +1093,13 @@ class ChatSystem {
 }
 
 /* ============================================================
-   10. INPUT
+   11. INPUT
    ============================================================ */
 class InputManager {
   constructor() {
     this.keys = new Set();
     this.mouseDX = 0; this.mouseDY = 0;
     this.locked = false; this.jumpQueued = false;
-    // Touch inputs (analog, -1..1)
     this.touchMoveX = 0;
     this.touchMoveZ = 0;
     this.jumpHeld = false;
@@ -1080,7 +1113,7 @@ class InputManager {
 }
 
 /* ============================================================
-   11. HUD
+   12. HUD
    ============================================================ */
 class HUD {
   constructor() {
@@ -1104,7 +1137,7 @@ class HUD {
 }
 
 /* ============================================================
-   12. ESC MENU
+   13. ESC MENU
    ============================================================ */
 class EscMenu {
   constructor(game) {
@@ -1324,7 +1357,7 @@ class EscMenu {
 }
 
 /* ============================================================
-   12.5 TOUCH CONTROLS — joystick + camera drag + jump
+   14. TOUCH CONTROLS
    ============================================================ */
 class TouchControls {
   constructor(game) {
@@ -1360,7 +1393,6 @@ class TouchControls {
     const isMenuOpen = () =>
       (this.game.escMenu && this.game.escMenu.isOpen) || this.game.fatalError;
 
-    // ---------- Joystick ----------
     const joyDown = (e) => {
       if (isMenuOpen()) return;
       if (this.joyId !== null) return;
@@ -1400,7 +1432,6 @@ class TouchControls {
     joyZone.addEventListener('pointerup', joyUp);
     joyZone.addEventListener('pointercancel', joyUp);
 
-    // ---------- Camera drag ----------
     const camDown = (e) => {
       if (isMenuOpen()) return;
       if (this.camId !== null) return;
@@ -1438,7 +1469,6 @@ class TouchControls {
     camZone.addEventListener('pointerup', camUp);
     camZone.addEventListener('pointercancel', camUp);
 
-    // ---------- Jump ----------
     const jumpDown = (e) => {
       e.preventDefault();
       if (isMenuOpen()) return;
@@ -1454,7 +1484,6 @@ class TouchControls {
     jumpBtn.addEventListener('pointerleave', jumpUp);
     jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // ---------- Chat ----------
     chatBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (isMenuOpen()) return;
@@ -1462,7 +1491,6 @@ class TouchControls {
     });
     chatBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // ---------- Menu ----------
     menuBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (this.game.escMenu) this.game.escMenu.toggle();
@@ -1479,17 +1507,14 @@ class TouchControls {
       dx = (dx / dist) * max;
       dy = (dy / dist) * max;
     }
-    // Update knob visual
     this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
-
-    // Output analog -1..1
     this.game.input.touchMoveX = dx / max;
     this.game.input.touchMoveZ = dy / max;
   }
 }
 
 /* ============================================================
-   13. GAME
+   15. GAME
    ============================================================ */
 class Game {
   constructor({ gameRow, profile }) {
@@ -1634,7 +1659,7 @@ class Game {
       generator(this.scene, this.physics, this.gameRow.data || {});
     } catch (e) {
       console.warn('Generator error:', e);
-      GENERATORS.empty(this.scene, this.physics);
+      try { GENERATORS.empty(this.scene, this.physics); } catch (_) {}
     }
   }
 
@@ -1845,20 +1870,17 @@ class Game {
     if (this._restartLock) return;
     const body = this.player.body;
 
-    // --- Keyboard ---
     let ix = 0, iz = 0;
     if (this.input.isDown('KeyW') || this.input.isDown('ArrowUp'))    iz += 1;
     if (this.input.isDown('KeyS') || this.input.isDown('ArrowDown'))  iz -= 1;
     if (this.input.isDown('KeyA') || this.input.isDown('ArrowLeft'))  ix -= 1;
     if (this.input.isDown('KeyD') || this.input.isDown('ArrowRight')) ix += 1;
 
-    // --- Touch joystick (analog) ---
     const tmX = this.input.touchMoveX || 0;
     const tmZ = this.input.touchMoveZ || 0;
     ix += tmX;
     iz += tmZ;
 
-    // Normalize if > 1 (allows analog < 1 for slower walk)
     const len = Math.hypot(ix, iz);
     if (len > 1) { ix /= len; iz /= len; }
 
@@ -1868,7 +1890,6 @@ class Game {
     const moveX = fx * iz + rx * ix;
     const moveZ = fz * iz + rz * ix;
 
-    // Run when keyboard shift OR joystick pushed past ~85%
     const kbRunning = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
     const touchMag2 = tmX * tmX + tmZ * tmZ;
     const touchRunning = touchMag2 > 0.72;
@@ -2006,7 +2027,7 @@ class Game {
 }
 
 /* ============================================================
-   14. BOOT — awaits stud texture BEFORE creating Game
+   16. BOOT
    ============================================================ */
 (async function boot() {
   const params = new URLSearchParams(location.search);
@@ -2014,9 +2035,7 @@ class Game {
   const statusEl = document.getElementById('loading-status');
 
   try {
-    // ⭐ ESPERA a textura do stud carregar (ou fallback) antes de qualquer coisa.
-    // Sem isso, as Parts são criadas com o material sem stud e a textura
-    // chega depois — bug clássico de "stud.png carregou mas não aparece".
+    /* ⭐ ESPERA a textura do stud carregar (ou fallback) ANTES de criar o Game */
     statusEl.textContent = 'Loading textures...';
     await __studReadyPromise;
 
