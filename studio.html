@@ -219,6 +219,35 @@
   .manual-body th,.manual-body td{border:1px solid #c8c8c8;padding:5px 8px;text-align:left}
   .manual-body th{background:#e8e8e8;color:#003366;font-weight:bold}
 
+  /* ============================================================
+     LOCKED / COMING SOON SERVICE STYLES
+     ============================================================ */
+  .tree-node.service-locked{
+    opacity:.55;cursor:not-allowed;
+    background:repeating-linear-gradient(45deg,#fbfbfb,#fbfbfb 6px,#f2f2f2 6px,#f2f2f2 12px);
+  }
+  .tree-node.service-locked:hover{
+    background:repeating-linear-gradient(45deg,#fbfbfb,#fbfbfb 6px,#f2f2f2 6px,#f2f2f2 12px);
+  }
+  .tree-node.service-locked .tree-name{font-style:italic;color:#666}
+  .tree-node.service-locked .tree-add{display:none!important}
+  .tree-node.service-locked .soon-badge{
+    display:inline-block;margin-left:6px;
+    padding:1px 5px;background:#c8b8d8;color:#5a3fad;
+    font-size:8px;font-weight:900;letter-spacing:.6px;border-radius:3px;
+    vertical-align:middle;
+  }
+  .tree-node .soon-badge{display:none}
+
+  /* Anchor indicator on tree */
+  .tree-node .anchor-dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#c8c8c8;margin-left:4px;flex-shrink:0;
+    border:1px solid #999;
+  }
+  .tree-node .anchor-dot.on{background:#4a9948;border-color:#2e7d32}
+  .tree-node .anchor-dot.off{background:#e0e0e0;border-color:#bbb}
+
   #cloud-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:#2e7d32;color:#fff;padding:10px 20px;border-radius:6px;font-size:12px;font-weight:bold;z-index:900;transition:transform .3s;box-shadow:0 4px 20px rgba(0,0,0,.4)}
   #cloud-toast.show{transform:translateX(-50%) translateY(0)}
 
@@ -703,7 +732,7 @@ function cssUrlSafe(url) {
 }
 
 /* ============================================================
-   STUD TEXTURE — Promise based, procedural fallback
+   STUD TEXTURE
    ============================================================ */
 const __texLoader = new THREE.TextureLoader();
 let __studBase = null;
@@ -1128,12 +1157,18 @@ class Part extends Instance {
     });
   }
 
-  setAnchored(v) { this.props.Anchored = !!v; }
+  setAnchored(v) {
+    this.props.Anchored = !!v;
+    if (window.Studio && Studio.refreshExplorer) Studio.refreshExplorer();
+  }
+
   setCanCollide(v) { this.props.CanCollide = !!v; }
+
   setCastShadow(v) {
     this.props.CastShadow = !!v;
     this.mesh.castShadow = !!v;
   }
+
   setReflectance(v) {
     v = Math.max(0, Math.min(1, +v));
     this.props.Reflectance = v;
@@ -1831,6 +1866,7 @@ const Studio = {
 
     this.log('HTMLBlox Studio ready', 'success');
     this.log('Baseplate is a Part. Only Workspace children render. Scripts run on Play.', 'info');
+    this.log('Players, Lighting, ReplicatedStorage, ServerScriptService, StarterPlayer, StarterGui, StarterPack are coming soon.', 'warn');
 
     setLoad(100, 'Ready');
     setTimeout(() => document.getElementById('loading').classList.add('hidden'), 300);
@@ -2079,14 +2115,35 @@ const Studio = {
     return pw;
   },
 
+  /* ============================================================
+     HELPERS: locked services
+     ============================================================ */
+  _isServiceLocked(inst) {
+    return inst instanceof PlayersService ||
+           inst instanceof LightingService ||
+           inst instanceof ReplicatedStorage ||
+           inst instanceof ServerScriptService ||
+           inst instanceof StarterPlayer ||
+           inst instanceof StarterGui ||
+           inst instanceof StarterPack;
+  },
+
+  /* ============================================================
+     EXPLORER
+     ============================================================ */
   refreshExplorer() {
     const tree = document.getElementById('tree');
     tree.innerHTML = '';
+
     const render = (inst, depth, container) => {
       const el = document.createElement('div');
       el.className = 'tree-node';
       if (this.selection.includes(inst)) el.classList.add('selected');
       if (!inst._isInWorkspace() && depth > 0) el.classList.add('disabled');
+
+      const locked = this._isServiceLocked(inst);
+      if (locked) el.classList.add('service-locked');
+
       el.style.paddingLeft = (6 + depth * 11) + 'px';
 
       const kids = inst.children;
@@ -2106,24 +2163,49 @@ const Studio = {
       name.textContent = inst.name;
       el.appendChild(name);
 
-      const add = document.createElement('span');
-      add.className = 'tree-add';
-      add.textContent = '+';
-      add.title = 'Insert child';
-      add.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._showInsertMenu(e.clientX, e.clientY, inst);
-      });
-      el.appendChild(add);
+      if (locked) {
+        const badge = document.createElement('span');
+        badge.className = 'soon-badge';
+        badge.textContent = 'SOON';
+        el.appendChild(badge);
+      }
+
+      if (inst instanceof Part && !inst._rigPart && !inst.isBaseplate) {
+        const dot = document.createElement('span');
+        dot.className = 'anchor-dot ' + (inst.props.Anchored ? 'on' : 'off');
+        dot.title = inst.props.Anchored ? 'Anchored' : 'Unanchored';
+        el.appendChild(dot);
+      }
+
+      if (!locked) {
+        const add = document.createElement('span');
+        add.className = 'tree-add';
+        add.textContent = '+';
+        add.title = 'Insert child';
+        add.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._showInsertMenu(e.clientX, e.clientY, inst);
+        });
+        el.appendChild(add);
+      }
 
       el.addEventListener('click', (e) => {
         e.stopPropagation();
+
+        if (locked) {
+          this.notify('Coming soon!', 'info');
+          this.log(`"${inst.name}" is not available yet. Coming soon.`, 'warn');
+          return;
+        }
+
         if (e.ctrlKey || e.shiftKey) {
           const i = this.selection.indexOf(inst);
           if (i >= 0) this.selection.splice(i, 1); else this.selection.push(inst);
         } else this.selection = [inst];
+
         if (inst instanceof Script) this.openScript(inst);
         if (inst instanceof Rig) this.openRig(inst);
+
         this.refreshExplorer();
         this.refreshProps();
         this._updHUD();
@@ -2133,6 +2215,8 @@ const Studio = {
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (locked) { this.notify('Coming soon!', 'info'); return; }
+
         if (!this.selection.includes(inst)) this.selection = [inst];
         this.refreshExplorer();
         this.refreshProps();
@@ -2149,6 +2233,7 @@ const Studio = {
         kids.forEach(c => render(c, depth + 1, cc));
       }
     };
+
     render(this.tree.game, 0, tree);
     document.getElementById('exp-count').textContent = this._countAll(this.tree.game);
   },
@@ -2162,6 +2247,16 @@ const Studio = {
   _showContextMenu(x, y) {
     const m = document.getElementById('ctx-menu');
     m.innerHTML = '';
+
+    // If a locked service is selected, block the whole context menu
+    if (this.selection.length === 1 && this._isServiceLocked(this.selection[0])) {
+      m.appendChild(this._ctxItem('Coming soon...', () => {}, true));
+      m.style.left = x + 'px';
+      m.style.top = y + 'px';
+      m.classList.add('open');
+      return;
+    }
+
     if (this.selection.length === 1) {
       const inst = this.selection[0];
       m.appendChild(this._ctxItem('Rename', () => {
@@ -2190,6 +2285,10 @@ const Studio = {
   },
 
   _showInsertMenu(x, y, parent) {
+    if (this._isServiceLocked(parent)) {
+      this.notify('Coming soon!', 'info');
+      return;
+    }
     const m = document.getElementById('ctx-menu');
     m.innerHTML = '';
     ['Part', 'Wedge', 'Sphere', 'Cylinder'].forEach(kind => {
@@ -2235,6 +2334,9 @@ const Studio = {
     return s;
   },
 
+  /* ============================================================
+     PROPERTIES
+     ============================================================ */
   refreshProps() {
     const el = document.getElementById('props');
     el.innerHTML = '';
@@ -2251,6 +2353,15 @@ const Studio = {
       return;
     }
     const inst = this.selection[0];
+
+    if (this._isServiceLocked(inst)) {
+      const info = document.createElement('div');
+      info.className = 'prop-empty';
+      info.innerHTML = `<b>${inst.name}</b><br><br>This service is not available yet.<br><br>Coming soon!`;
+      info.style.textAlign = 'center';
+      el.appendChild(info);
+      return;
+    }
 
     this._addProp(el, 'Name', 'text', inst.name, v => { inst.name = v; this.refreshExplorer(); });
     const sec = document.createElement('div');
@@ -2371,7 +2482,10 @@ const Studio = {
     if (type === 'bool') {
       const cb = document.createElement('input');
       cb.type = 'checkbox'; cb.checked = !!value;
-      cb.addEventListener('change', () => onChange(cb.checked));
+      cb.addEventListener('change', () => {
+        onChange(cb.checked);
+        Studio.refreshExplorer();
+      });
       v.appendChild(cb);
     } else if (type === 'range') {
       const inp = document.createElement('input');
@@ -2428,8 +2542,12 @@ const Studio = {
     parent.appendChild(row);
   },
 
+  /* ============================================================
+     CREATE / DELETE / DUPLICATE
+     ============================================================ */
   createPart(kind, parent = null) {
     const target = parent || this.tree.workspace;
+    if (this._isServiceLocked(target)) { this.notify('Coming soon!', 'info'); return; }
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     const t = new THREE.Vector3().addVectors(this.camera.position, dir.multiplyScalar(20));
@@ -2497,8 +2615,16 @@ const Studio = {
   },
 
   toggleAnchor() {
-    for (const i of this.selection) if (i instanceof Part) i.setAnchored(!i.props.Anchored);
+    let any = null;
+    for (const i of this.selection) {
+      if (i instanceof Part && !this._isServiceLocked(i)) {
+        i.setAnchored(!i.props.Anchored);
+        any = i;
+      }
+    }
     this.refreshProps();
+    this.refreshExplorer();
+    if (any) this.notify(any.props.Anchored ? 'Anchored' : 'Unanchored');
   },
 
   weldSelection() {
@@ -2541,6 +2667,9 @@ const Studio = {
     this.refreshExplorer(); this.refreshProps();
   },
 
+  /* ============================================================
+     PLAY MODE
+     ============================================================ */
   togglePlay() {
     if (this.playing) this._stopPlay();
     else this._startPlay();
@@ -2622,6 +2751,9 @@ const Studio = {
     this.log('Play stopped', 'info');
   },
 
+  /* ============================================================
+     RIG EDITOR
+     ============================================================ */
   openRig(rig) {
     this.currentRig = rig;
     this.currentRigAnim = new RigAnimation(rig);
@@ -2755,6 +2887,9 @@ const Studio = {
       `${t.toFixed(2)}s / ${d.toFixed(2)}s`;
   },
 
+  /* ============================================================
+     SCRIPTING (simple interpreter)
+     ============================================================ */
   runScript(src, name = 'Script') {
     const lines = (src || '').split('\n');
     const ctx = {
@@ -2868,7 +3003,7 @@ const Studio = {
     const sel = this.selection;
     const badge = document.getElementById('hud-gizmo');
 
-    if (sel.length !== 1) {
+    if (sel.length !== 1 || this._isServiceLocked(sel[0])) {
       this.gizmo.detach();
       badge.textContent = 'OFF';
       badge.style.background = '#888';
@@ -2920,6 +3055,9 @@ const Studio = {
     else el.textContent = `${this.selection.length} objects`;
   },
 
+  /* ============================================================
+     UI BINDINGS
+     ============================================================ */
   _bindUI() {
     document.querySelectorAll('.tool[data-tool]').forEach(b => {
       b.addEventListener('click', () => {
@@ -3151,7 +3289,7 @@ const Studio = {
     document.getElementById('publish-cancel').addEventListener('click', closePublish);
     document.getElementById('publish-confirm').addEventListener('click', doPublish);
 
-    /* ---------- UPLOAD DE IMAGEM DO PC ---------- */
+    /* ---------- UPLOAD IMAGE FROM PC ---------- */
     document.getElementById('pub-file-btn').addEventListener('click', () => {
       document.getElementById('pub-file').click();
     });
