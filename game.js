@@ -418,6 +418,7 @@ function __makeProceduralStudTexture() {
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 64, 64);
 
+  // Stud base (círculo com sombra)
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.beginPath(); ctx.arc(32, 33, 12, 0, Math.PI * 2); ctx.fill();
 
@@ -437,7 +438,7 @@ function __makeProceduralStudTexture() {
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
   tex.anisotropy = 8;
-  console.log('[studio] using procedural stud texture (fallback)');
+  console.log('[game] using procedural stud texture (fallback)');
   return tex;
 }
 
@@ -446,7 +447,7 @@ function __makeProceduralStudTexture() {
   let idx = 0;
 
   function useFallback() {
-    console.warn('[studio] stud.png not found, using procedural fallback');
+    console.warn('[game] stud.png not found in any variant, using procedural fallback');
     __studBase = __makeProceduralStudTexture();
     __studLoaded = true;
     for (const cb of __studReadyCallbacks) cb();
@@ -456,7 +457,7 @@ function __makeProceduralStudTexture() {
   function tryNext() {
     if (idx >= candidates.length) return useFallback();
     const url = candidates[idx++];
-    console.log('[studio] → trying:', url);
+    console.log('[game] → trying:', url);
     __texLoader.load(
       url,
       (tex) => {
@@ -468,13 +469,13 @@ function __makeProceduralStudTexture() {
         tex.anisotropy = 8;
         __studBase = tex;
         __studLoaded = true;
-        console.log('[studio] ✅ stud loaded from:', url);
+        console.log('[game] ✅ stud loaded from:', url);
         for (const cb of __studReadyCallbacks) cb();
         __studReadyCallbacks.length = 0;
       },
       undefined,
       () => {
-        console.warn('[studio] ✗ failed:', url);
+        console.warn('[game] ✗ failed:', url);
         tryNext();
       }
     );
