@@ -240,7 +240,7 @@ const SHARED_GEO = {
   head:  new THREE.BoxGeometry(1.25, 1.25, 1.25)
 };
 
-/* ---------- Materiais planos (cache) ---------- */
+/* ---------- Plain materials (cache) ---------- */
 const materialCache = new Map();
 function getPlainMaterial(color) {
   if (!materialCache.has(color)) {
@@ -249,7 +249,7 @@ function getPlainMaterial(color) {
   return materialCache.get(color);
 }
 
-/* ---------- Materiais da cabeça (rosto só na frente) ---------- */
+/* ---------- Head materials (face only on the front) ---------- */
 const faceMaterialCache = new Map();
 function getFaceMaterials(headColorHex) {
   if (faceMaterialCache.has(headColorHex)) return faceMaterialCache.get(headColorHex);
@@ -275,7 +275,7 @@ function getFaceMaterials(headColorHex) {
   const faceMat  = new THREE.MeshLambertMaterial({ map: tex });
   const plainMat = new THREE.MeshLambertMaterial({ color: headColorHex });
 
-  // ordem do BoxGeometry: +X, -X, +Y, -Y, +Z (frente), -Z (trás)
+  // BoxGeometry face order: +X, -X, +Y, -Y, +Z (front), -Z (back)
   const mats = [plainMat, plainMat, plainMat, plainMat, faceMat, plainMat];
 
   faceMaterialCache.set(headColorHex, mats);
@@ -299,12 +299,12 @@ class Character {
     this.walkPhase = 0;
     this.group = new THREE.Group();
 
-    /* ---------- VIDA ---------- */
+    /* ---------- HEALTH ---------- */
     this.maxHealth = CONFIG.health.max;
     this.health = this.maxHealth;
     this.dead = false;
     this.lastDamageTime = -Infinity;
-    this.idleTime = Math.random() * 10; // dessincroniza o idle entre players
+    this.idleTime = Math.random() * 10; // desync idle between players
 
     this._buildBody();
     this._buildNameTag(subtitle, subtitleColor);
@@ -363,7 +363,7 @@ class Character {
   setYaw(y) { this.visualYaw = y; this.targetYaw = y; this.group.rotation.y = y; }
   setVisible(v) { this.group.visible = v; }
 
-  /* ---------- VIDA ---------- */
+  /* ---------- HEALTH ---------- */
   takeDamage(amount) {
     if (this.dead) return false;
     const amt = Number(amount) || 0;
@@ -372,7 +372,7 @@ class Character {
     this.lastDamageTime = performance.now() / 1000;
     if (this.health <= CONFIG.health.deathThreshold) {
       this.health = 0;
-      return true; // morreu
+      return true; // died
     }
     return false;
   }
@@ -388,7 +388,7 @@ class Character {
     this.lastDamageTime = -Infinity;
   }
 
-  /* ---------- ANIMAÇÃO ---------- */
+  /* ---------- ANIMATION ---------- */
   updateVisual(dt, horizontalSpeed) {
     const diff = shortAngleDist(this.visualYaw, this.targetYaw);
     this.visualYaw += diff * Math.min(1, dt * 12);
@@ -442,7 +442,7 @@ class Character {
 }
 
 /* ============================================================
-   4.5 RAGDOLL — partes soltas com colisão simples
+   4.5 RAGDOLL — detached parts with simple collision
    ============================================================ */
 class Ragdoll {
   constructor(character, scene, physics) {
@@ -454,12 +454,12 @@ class Ragdoll {
     character.group.updateMatrixWorld(true);
 
     const entries = [];
-    if (character.torsoMesh) entries.push({ mesh: character.torsoMesh, sy: 2, sx: 2, sz: 1 });
-    if (character.headMesh)  entries.push({ mesh: character.headMesh,  sy: 1.25, sx: 1.25, sz: 1.25 });
-    if (character.legL?.children[0]) entries.push({ mesh: character.legL.children[0], sy: 2, sx: 1, sz: 1 });
-    if (character.legR?.children[0]) entries.push({ mesh: character.legR.children[0], sy: 2, sx: 1, sz: 1 });
-    if (character.armL?.children[0]) entries.push({ mesh: character.armL.children[0], sy: 2, sx: 1, sz: 1 });
-    if (character.armR?.children[0]) entries.push({ mesh: character.armR.children[0], sy: 2, sx: 1, sz: 1 });
+    if (character.torsoMesh) entries.push({ mesh: character.torsoMesh, sy: 2 });
+    if (character.headMesh)  entries.push({ mesh: character.headMesh,  sy: 1.25 });
+    if (character.legL?.children[0]) entries.push({ mesh: character.legL.children[0], sy: 2 });
+    if (character.legR?.children[0]) entries.push({ mesh: character.legR.children[0], sy: 2 });
+    if (character.armL?.children[0]) entries.push({ mesh: character.armL.children[0], sy: 2 });
+    if (character.armR?.children[0]) entries.push({ mesh: character.armR.children[0], sy: 2 });
 
     const wp = new THREE.Vector3();
     const wq = new THREE.Quaternion();
@@ -702,7 +702,7 @@ function makeStuddedMaterials(colorNum, sx, sz, transparency) {
 }
 
 /* ============================================================
-   GEOMETRY HELPERS — cria a geometria correta por kind de Part
+   GEOMETRY HELPERS — build correct geometry per Part kind
    ============================================================ */
 function makeGeometryForPart(p) {
   const kind = p.kind || 'Part';
@@ -1168,7 +1168,7 @@ class RemotePlayer {
     this.hSpeed = 0;
     this.grounded = true;
 
-    /* vida remota (não é fonte de verdade, apenas espelho visual) */
+    /* remote health (not source of truth, just a visual mirror) */
     this.health = this.character.maxHealth;
     this.dead = false;
   }
@@ -1352,7 +1352,7 @@ class Network {
 }
 
 /* ============================================================
-   10. CHAT (com suporte a comandos)
+   10. CHAT (with command support)
    ============================================================ */
 class ChatSystem {
   constructor() {
@@ -1845,8 +1845,11 @@ class TouchControls {
       dy = (dy / dist) * max;
     }
     this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
+
+    // X maps directly (right = strafe right)
+    // Y is INVERTED: pushing up (negative dy) = forward (positive touchMoveZ)
     this.game.input.touchMoveX = dx / max;
-    this.game.input.touchMoveZ = dy / max;
+    this.game.input.touchMoveZ = -dy / max;
   }
 }
 
@@ -1903,7 +1906,6 @@ class Game {
 
     this.ragdoll = null;
     this._respawnTimer = null;
-    this._lastRegenTick = 0;
 
     this._build();
   }
@@ -2077,7 +2079,8 @@ class Game {
   }
 
   /* ============================================================
-     HEALTH BAR (criada dinamicamente, estilo Roblox)
+     HEALTH BAR (dynamically created, Roblox-style)
+     — positioned on the RIGHT side of the screen
      ============================================================ */
   _setupHealthBar() {
     if (document.getElementById('health-bar')) {
@@ -2089,7 +2092,7 @@ class Game {
     bar.id = 'health-bar';
     bar.style.cssText = [
       'position:fixed',
-      'left:18px',
+      'right:18px',
       'bottom:18px',
       'width:250px',
       'padding:8px 12px 10px',
@@ -2131,7 +2134,7 @@ class Game {
   }
 
   /* ============================================================
-     BURST de partículas
+     Particle burst
      ============================================================ */
   _spawnBurst(pos, count = 40) {
     const colors = [0xf5cd30, 0x0d69ac, 0x4b974b, 0xa3a2a5, 0xff4444];
@@ -2157,7 +2160,7 @@ class Game {
   }
 
   /* ============================================================
-     DANO / MORTE / RESPAWN
+     DAMAGE / DEATH / RESPAWN
      ============================================================ */
   damagePlayer(amount) {
     if (!this.player || this.player.dead) return;
@@ -2171,16 +2174,19 @@ class Game {
     this.player.dead = true;
     this.input.clear();
 
+    // Spawn ragdoll
     if (this.ragdoll) { try { this.ragdoll.dispose(); } catch(_) {} this.ragdoll = null; }
     this.ragdoll = new Ragdoll(this.player, this.scene, this.physics);
 
+    // Hide original body (name tag goes with it)
     this.player.setVisible(false);
 
+    // Particle burst at death point
     const p = this.player.body.pos.clone();
     p.y += 3;
     this._spawnBurst(p, 50);
 
-    this.chat.addMessage('SYSTEM', `${this.player.name} morreu!`, '#ff5555');
+    this.chat.addMessage('SYSTEM', `${this.player.name} died!`, '#ff5555');
 
     clearTimeout(this._respawnTimer);
     this._respawnTimer = setTimeout(() => this._respawnPlayer(), CONFIG.health.respawnDelay * 1000);
@@ -2201,12 +2207,12 @@ class Game {
     this.camDistance = CONFIG.camera.distance;
 
     this._updateHealthBar();
-    this.chat.addMessage('SYSTEM', `${this.player.name} respawnou.`, '#6fe36f');
+    this.chat.addMessage('SYSTEM', `${this.player.name} respawned.`, '#6fe36f');
     this._requestLock();
   }
 
   /* ============================================================
-     Comandos de chat
+     Chat commands
      ============================================================ */
   _handleChatCommand(cmd, args) {
     if (cmd === 'damage' || cmd === 'dmg') {
@@ -2215,23 +2221,23 @@ class Game {
         this.damagePlayer(amt);
         this.chat.addMessage('SYSTEM', `-${amt} HP`, '#ffd166');
       } else {
-        this.chat.addMessage('SYSTEM', 'Uso: /damage <quantidade>', '#ff8888');
+        this.chat.addMessage('SYSTEM', 'Usage: /damage <amount>', '#ff8888');
       }
     } else if (cmd === 'kill') {
       this.damagePlayer(this.player.maxHealth + 1000);
     } else if (cmd === 'heal') {
       this.player.resetHealth();
       this._updateHealthBar();
-      this.chat.addMessage('SYSTEM', 'Vida cheia.', '#6fe36f');
+      this.chat.addMessage('SYSTEM', 'Health restored.', '#6fe36f');
     } else if (cmd === 'respawn' || cmd === 'r') {
       if (this.player.dead) {
         clearTimeout(this._respawnTimer);
         this._respawnPlayer();
       } else {
-        this.chat.addMessage('SYSTEM', 'Você não está morto.', '#ff8888');
+        this.chat.addMessage('SYSTEM', 'You are not dead.', '#ff8888');
       }
     } else {
-      this.chat.addMessage('SYSTEM', `Comando desconhecido: /${cmd}`, '#ff8888');
+      this.chat.addMessage('SYSTEM', `Unknown command: /${cmd}`, '#ff8888');
     }
   }
 
@@ -2419,7 +2425,7 @@ class Game {
     if (len > 0.01) this.player.targetYaw = Math.atan2(moveX, moveZ);
   }
 
-  /* Regeneração passiva de vida */
+  /* Passive health regeneration */
   _updateHealthRegen(dt) {
     if (!this.player || this.player.dead) return;
     if (this.player.health >= this.player.maxHealth) return;
@@ -2445,7 +2451,7 @@ class Game {
     p.y += 2;
     this._spawnBurst(p, 40);
 
-    this.chat.addMessage('SYSTEM', 'Reiniciando personagem...', '#ffd166');
+    this.chat.addMessage('SYSTEM', 'Restarting character...', '#ffd166');
 
     clearTimeout(this._respawnTimer);
     this._respawnTimer = setTimeout(() => {
@@ -2461,7 +2467,7 @@ class Game {
       this.camDistance = CONFIG.camera.distance;
       this._restartLock = false;
       this._updateHealthBar();
-      this.chat.addMessage('SYSTEM', 'Personagem respawnou.', '#6fe36f');
+      this.chat.addMessage('SYSTEM', 'Character respawned.', '#6fe36f');
       this._requestLock();
     }, CONFIG.health.restartRespawnDelay * 1000);
   }
