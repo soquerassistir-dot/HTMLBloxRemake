@@ -694,6 +694,8 @@ const GENERATORS = {
 custom_build(scene, physics, data) {
   const skipBP = data && data.noBaseplate === true;
 
+custom_build(scene, physics, data) {
+  const skipBP = data && data.noBaseplate === true;
   if (!skipBP) {
     const BP = 256;
     const bpTex = getStudTexture(BP, BP);
@@ -705,29 +707,98 @@ custom_build(scene, physics, data) {
     const baseplate = new THREE.Mesh(new THREE.BoxGeometry(BP, 2, BP), bpMats);
     baseplate.position.set(0, -1, 0);
     baseplate.receiveShadow = true;
-    baseplate.castShadow = false;
     scene.add(baseplate);
     physics.addBox(0, -1, 0, BP, 2, BP);
   }
 
   const parts = (data && data.parts) || [];
   for (const p of parts) {
-      const colorNum = typeof p.color === 'number'
-        ? p.color
-        : parseInt(String(p.color).replace('#', ''), 16);
+    const colorNum = typeof p.color === 'number'
+      ? p.color
+      : parseInt(String(p.color).replace('#', ''), 16);
 
-      const geo = new THREE.BoxGeometry(p.sx, p.sy, p.sz);
-      const mats = makeStuddedMaterials(colorNum, p.sx, p.sz, p.transparency || 0);
-      const mesh = new THREE.Mesh(geo, mats);
-      mesh.position.set(p.x, p.y, p.z);
-      if (p.rx) mesh.rotation.x = THREE.MathUtils.degToRad(p.rx);
-      if (p.ry) mesh.rotation.y = THREE.MathUtils.degToRad(p.ry);
-      if (p.rz) mesh.rotation.z = THREE.MathUtils.degToRad(p.rz);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-      if (p.anchored !== false) physics.addBox(p.x, p.y, p.z, p.sx, p.sy, p.sz);
+    const geo = new THREE.BoxGeometry(p.sx, p.sy, p.sz);
+    const mats = makeStuddedMaterials(colorNum, p.sx, p.sz, p.transparency || 0);
+    const mesh = new THREE.Mesh(geo, mats);
+    mesh.position.set(p.x, p.y, p.z);
+    if (p.rx) mesh.rotation.x = THREE.MathUtils.degToRad(p.rx);
+    if (p.ry) mesh.rotation.y = THREE.MathUtils.degToRad(p.ry);
+    if (p.rz) mesh.rotation.z = THREE.MathUtils.degToRad(p.rz);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    if (p.anchored !== false) physics.addBox(p.x, p.y, p.z, p.sx, p.sy, p.sz);
+
+    // -------- DECALS --------
+    if (Array.isArray(p.decals) && p.decals.length) {
+      const s = { x: p.sx, y: p.sy, z: p.sz };
+      const off = 0.02;
+      for (const d of p.decals) {
+        if (!d.url) continue;
+        const tex = new THREE.TextureLoader().load(d.url);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const op = 1 - (d.transparency || 0);
+        const dm = new THREE.MeshStandardMaterial({
+          map: tex, transparent: true, opacity: op, roughness: 0.9, metalness: 0,
+          depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+        });
+        let pw, ph, x=0,y=0,z=0,rx=0,ry=0;
+        switch (d.face) {
+          case 'Front':  pw=s.x*.98; ph=s.y*.98; z= s.z/2+off; break;
+          case 'Back':   pw=s.x*.98; ph=s.y*.98; z=-s.z/2-off; ry=Math.PI; break;
+          case 'Left':   pw=s.z*.98; ph=s.y*.98; x=-s.x/2-off; ry=-Math.PI/2; break;
+          case 'Right':  pw=s.z*.98; ph=s.y*.98; x= s.x/2+off; ry= Math.PI/2; break;
+          case 'Top':    pw=s.x*.98; ph=s.z*.98; y= s.y/2+off; rx=-Math.PI/2; break;
+          case 'Bottom': pw=s.x*.98; ph=s.z*.98; y=-s.y/2-off; rx= Math.PI/2; break;
+          default: continue;
+        }
+        const dg = new THREE.PlaneGeometry(pw, ph);
+        const dmesh = new THREE.Mesh(dg, dm);
+        dmesh.position.set(x, y, z);
+        dmesh.rotation.set(rx, ry, 0);
+        mesh.add(dmesh);
+      }
     }
+  }
+
+  // -------- SOUNDS --------
+  if (Array.isArray(data.sounds) && data.sounds.length) {
+    const listener = new THREE.AudioListener();
+    scene.add(listener);
+    data.sounds.forEach((sd, i) => {
+      try {
+        const audio = sd.positional
+          ? new THREE.PositionalAudio(listener)
+          : new THREE.Audio(listener);
+        if (sd.positional) {
+          const proxy = new THREE.Object3D();
+          proxy.position.set(sd.x || 0, sd.y || 0, sd.z || 0);
+          scene.add(proxy);
+          proxy.add(audio);
+          audio.setRefDistance(6);
+          audio.setRolloffFactor(1.2);
+        }
+        const loader = new THREE.AudioLoader();
+        loader.load(sd.url, (buffer) => {
+          audio.setBuffer(buffer);
+          audio.setLoop(!!sd.loop);
+          audio.setVolume(typeof sd.volume === 'number' ? sd.volume : 0.8);
+          if (sd.autoplay) {
+            // Try autoplay. Browser needs user gesture, which happens when player clicks PLAY.
+            const tryPlay = () => {
+              if (audio.context.state === 'suspended') {
+                audio.context.resume().then(() => audio.play()).catch(() => {});
+              } else {
+                audio.play().catch(() => {});
+              }
+            };
+            tryPlay();
+          }
+        }, undefined, (err) => console.warn('[audio] load failed:', sd.name, err));
+      } catch (e) {
+        console.warn('[audio] error setting up sound:', sd.name, e);
+      }
+    });
   }
 };
 
