@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>HTMLBlox Keep-Alive</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{
+    width:100%;height:100%;overflow:hidden;
+    background:#0a0a0f;color:#e6ecf5;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    user-select:none;-webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none;touch-action:manipulation;
+  }
+  #app{
+    position:fixed;inset:0;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    padding:24px 20px 140px;text-align:center;
+  }
+  .logo{
+    width:64px;height:64px;border-radius:16px;
+    background:linear-gradient(135deg,#1f4d8f,#16407a);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:22px;color:#ffdd00;
+    border:3px solid #0a2450;
+    box-shadow:0 8px 30px rgba(31,77,143,.4);
+    margin-bottom:18px;text-shadow:2px 2px 0 #0a2450;
+  }
+  .title{
+    font-size:18px;font-weight:800;letter-spacing:1px;
+    margin-bottom:4px;color:#ffdd00;
+    text-shadow:0 2px 4px rgba(0,0,0,.6);
+  }
+  .sub{
+    font-size:10px;color:#6d7d94;letter-spacing:2.5px;
+    text-transform:uppercase;margin-bottom:24px;
+  }
+
+  .dot{
+    display:inline-block;width:10px;height:10px;border-radius:50%;
+    background:#666;margin-right:8px;vertical-align:middle;
+    transition:background .3s,box-shadow .3s;
+  }
+  .dot.ok{background:#4ade80;box-shadow:0 0 12px #4ade80}
+  .dot.err{background:#ff5555;box-shadow:0 0 12px #ff5555}
+  .dot.wait{background:#ffdd00;box-shadow:0 0 12px #ffdd00;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .uptime{
+    font-size:46px;font-weight:900;font-variant-numeric:tabular-nums;
+    color:#fff;letter-spacing:-1.5px;margin:12px 0 4px;
+    text-shadow:0 4px 24px rgba(74,222,128,.25);
+  }
+  .uptime-label{
+    font-size:9px;color:#6d7d94;letter-spacing:3px;
+    text-transform:uppercase;margin-bottom:22px;
+  }
+
+  .progress-wrap{
+    width:100%;max-width:340px;height:4px;
+    background:rgba(255,255,255,.06);border-radius:2px;
+    overflow:hidden;margin-bottom:18px;
+  }
+  .progress-bar{
+    height:100%;width:0%;
+    background:linear-gradient(90deg,#4ade80,#ffdd00);
+    transition:width .3s linear;
+  }
+
+  .stats{
+    display:grid;grid-template-columns:1fr 1fr;gap:8px;
+    width:100%;max-width:340px;margin-bottom:18px;
+  }
+  .stat{
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:8px;padding:10px 12px;text-align:left;
+  }
+  .stat-label{
+    font-size:9px;color:#6d7d94;text-transform:uppercase;
+    letter-spacing:1.5px;margin-bottom:4px;
+  }
+  .stat-value{
+    font-size:14px;font-weight:700;color:#fff;
+    font-variant-numeric:tabular-nums;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .stat-value.ok{color:#4ade80}
+  .stat-value.err{color:#ff5555}
+
+  .url{
+    font-size:9px;color:#4a5a70;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    max-width:340px;word-break:break-all;
+    margin-bottom:6px;line-height:1.4;
+  }
+  .hint{
+    font-size:10px;color:#4a5a70;
+    max-width:300px;line-height:1.5;
+  }
+  .hint b{color:#6d7d94}
+
+  #log{
+    position:fixed;left:10px;right:10px;bottom:10px;
+    max-height:110px;overflow-y:auto;
+    background:rgba(0,0,0,.6);
+    border:1px solid rgba(255,255,255,.06);
+    border-radius:8px;padding:8px 10px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:10px;color:#6d7d94;line-height:1.5;
+    display:none;
+  }
+  #log.show{display:block}
+  #log .entry{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #log .entry.ok{color:#4ade80}
+  #log .entry.err{color:#ff5555}
+  #log .entry.info{color:#8ac6ff}
+  #log .entry .ts{color:#4a5a70;margin-right:6px}
+
+  @media (max-width:380px){
+    .uptime{font-size:38px}
+    .stats{max-width:300px}
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="logo">HB</div>
+  <div class="title">KEEP-ALIVE</div>
+  <div class="sub">HTMLBlox Render Keeper</div>
+
+  <div class="uptime" id="uptime">00:00:00</div>
+  <div class="uptime-label">Session uptime</div>
+
+  <div class="progress-wrap"><div class="progress-bar" id="progress"></div></div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Status</div>
+      <div class="stat-value"><span class="dot wait" id="dot"></span><span id="statusText">Starting</span></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Last Ping</div>
+      <div class="stat-value" id="lastPing">--</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Pings Sent</div>
+      <div class="stat-value" id="pingCount">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Next In</div>
+      <div class="stat-value" id="nextPing">--</div>
+    </div>
+  </div>
+
+  <div class="url" id="urlDisplay">--</div>
+  <div class="hint">
+    <b>Keep this app open, screen on.</b><br>
+    Tap anywhere to toggle the log.
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+/* ============================================================
+   HTMLBLOX KEEP-ALIVE
+   ============================================================
+   Pings a target URL on a fixed interval to prevent hosting
+   providers (Render, Railway, Fly, etc.) from spinning down
+   the service due to inactivity.
+
+   USAGE
+   -----
+   1. Edit CONFIG.TARGET_URL below (or append ?url=... to the page).
+   2. Host this file on GitHub Pages.
+   3. Wrap into an APK (WebIntoApp / Median / AppsGeyser).
+   4. Install on the phone, disable battery optimization,
+      keep the screen on and the app in the foreground.
+   ============================================================ */
+
+const CONFIG = {
+  /* ▼▼▼ EDIT THIS ▼▼▼ */
+  TARGET_URL: 'https://htmlblox.onrender.com/',
+
+  /* How often to ping, in ms.
+     Render sleeps after 15 min of no traffic.
+     4 minutes is safe and gives ~3 retries of headroom. */
+  PING_INTERVAL: 4 * 60 * 1000,
+
+  /* Ping immediately on startup. */
+  PING_ON_START: true,
+
+  /* Ping immediately when the app becomes visible again. */
+  PING_ON_VISIBLE: true,
+
+  /* Ask the OS to keep the screen awake while the app is open.
+     NOTE: only works in the foreground. */
+  WAKE_LOCK: true,
+
+  /* If no successful ping in this many ms, reload the page.
+     Set to 0 to disable. */
+  RELOAD_IF_STALE_AFTER: 15 * 60 * 1000,
+
+  /* Watchdog check cadence (ms). */
+  WATCHDOG_INTERVAL: 60 * 1000,
+
+  /* Try an Image() beacon as a fallback when fetch fails.
+     Some WebViews block cross-origin fetch but allow <img>. */
+  USE_IMAGE_FALLBACK: true,
+
+  /* Timeout for each ping, in ms. */
+  PING_TIMEOUT: 15000,
+
+  /* Vibrate briefly on successful ping (annoying, off by default). */
+  VIBRATE_ON_PING: false,
+
+  /* Allow ?url=https://... to override TARGET_URL. */
+  ALLOW_URL_PARAM: true,
+
+  /* Show the log overlay (tap screen to toggle). */
+  LOG_ENABLED: true,
+};
+
+/* ---------------------------------------------------------- */
+
+const state = {
+  startTime: Date.now(),
+  pingCount: 0,
+  lastPingTime: null,
+  lastPingOk: null,
+  lastPingMs: null,
+  lastError: null,
+  nextPingAt: null,
+  wakeLock: null,
+  pingTimer: null,
+  tickTimer: null,
+  watchdogTimer: null,
+  isPinging: false,
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ---------- localStorage helpers ---------- */
+const store = {
+  get(key, def) {
+    try {
+      const v = localStorage.getItem('hb_keepalive_' + key);
+      return v === null ? def : JSON.parse(v);
+    } catch { return def; }
+  },
+  set(key, val) {
+    try { localStorage.setItem('hb_keepalive_' + key, JSON.stringify(val)); } catch {}
+  },
+};
+
+/* ---------- log ---------- */
+function log(msg, kind = 'info') {
+  if (!CONFIG.LOG_ENABLED) return;
+  const el = $('log');
+  if (!el) return;
+  const ts = new Date().toTimeString().slice(0, 8);
+  const div = document.createElement('div');
+  div.className = 'entry ' + kind;
+  div.innerHTML = '<span class="ts">' + ts + '</span>' + escapeHtml(msg);
+  el.appendChild(div);
+  while (el.children.length > 80) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+
+/* ---------- formatting ---------- */
+function fmtDuration(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  return pad(h) + ':' + pad(m) + ':' + pad(s);
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function fmtCountdown(ms) {
+  if (ms <= 0) return 'now';
+  const t = Math.ceil(ms / 1000);
+  if (t < 60) return t + 's';
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  return m + 'm ' + pad(s) + 's';
+}
+function fmtTime(ts) {
+  if (!ts) return '--';
+  return new Date(ts).toTimeString().slice(0, 8);
+}
+
+/* ---------- target URL ---------- */
+function getTargetUrl() {
+  if (CONFIG.ALLOW_URL_PARAM) {
+    try {
+      const params = new URLSearchParams(location.search);
+      const override = params.get('url');
+      if (override) return override;
+    } catch {}
+  }
+  return CONFIG.TARGET_URL;
+}
+
+/* ---------- core ping ---------- */
+async function pingOnce(url) {
+  /* Return { ok, ms, error } */
+  const t0 = performance.now();
+
+  /* -- attempt 1: fetch -- */
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), CONFIG.PING_TIMEOUT);
+    await fetch(url, {
+      method: 'GET',
+      mode: 'no-cors',
+      cache: 'no-store',
+      redirect: 'follow',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
+    return { ok: true, ms: Math.round(performance.now() - t0), error: null };
+  } catch (e) {
+    const err1 = e && e.message ? e.message : String(e);
+    if (!CONFIG.USE_IMAGE_FALLBACK) {
+      return { ok: false, ms: Math.round(performance.now() - t0), error: err1 };
+    }
+
+    /* -- attempt 2: Image beacon -- */
+    try {
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        const to = setTimeout(() => reject(new Error('img timeout')), CONFIG.PING_TIMEOUT);
+        img.onload  = () => { clearTimeout(to); resolve(); };
+        img.onerror = () => { clearTimeout(to); resolve(); }; /* 404 still counts */
+        img.src = url + (url.includes('?') ? '&' : '?') + '_hb=' + Date.now();
+      });
+      return { ok: true, ms: Math.round(performance.now() - t0), error: null };
+    } catch (e2) {
+      const err2 = e2 && e2.message ? e2.message : String(e2);
+      return { ok: false, ms: Math.round(performance.now() - t0), error: err1 + ' | ' + err2 };
+    }
+  }
+}
+
+async function doPing(reason = 'timer') {
+  if (state.isPinging) {
+    log('Ping already in progress — skipping', 'info');
+    return;
+  }
+  state.isPinging = true;
+
+  const url = getTargetUrl();
+  log('Pinging (' + reason + ')...', 'info');
+
+  let result;
+  try {
+    result = await pingOnce(url);
+  } catch (e) {
+    result = { ok: false, ms: 0, error: e.message };
+  }
+
+  state.pingCount++;
+  state.lastPingTime = Date.now();
+  state.lastPingOk = result.ok;
+  state.lastPingMs = result.ms;
+  state.lastError = result.error;
+
+  store.set('pingCount', state.pingCount);
+
+  if (result.ok) {
+    log('OK (' + result.ms + 'ms) — server pinged', 'ok');
+    if (CONFIG.VIBRATE_ON_PING && navigator.vibrate) {
+      try { navigator.vibrate(25); } catch {}
+    }
+  } else {
+    log('FAIL (' + result.ms + 'ms) — ' + (result.error || 'unknown'), 'err');
+  }
+
+  state.isPinging = false;
+  updateUI();
+  scheduleNextPing();
+}
+
+/* ---------- scheduling ---------- */
+function scheduleNextPing() {
+  if (state.pingTimer) clearTimeout(state.pingTimer);
+  state.nextPingAt = Date.now() + CONFIG.PING_INTERVAL;
+  state.pingTimer = setTimeout(() => doPing('timer'), CONFIG.PING_INTERVAL);
+}
+
+/* ---------- UI ---------- */
+function updateUI() {
+  $('uptime').textContent = fmtDuration(Date.now() - state.startTime);
+
+  const dot = $('dot');
+  const txt = $('statusText');
+  if (state.lastPingOk === null) {
+    dot.className = 'dot wait';
+    txt.textContent = 'Starting';
+  } else if (state.lastPingOk) {
+    dot.className = 'dot ok';
+    txt.textContent = 'Alive';
+  } else {
+    dot.className = 'dot err';
+    txt.textContent = 'Failed';
+  }
+
+  $('lastPing').textContent = fmtTime(state.lastPingTime);
+  $('lastPing').className = 'stat-value' + (state.lastPingOk === true ? ' ok' : state.lastPingOk === false ? ' err' : '');
+  $('pingCount').textContent = String(state.pingCount);
+
+  if (state.nextPingAt) {
+    const remaining = state.nextPingAt - Date.now();
+    $('nextPing').textContent = fmtCountdown(remaining);
+    const pct = Math.max(0, Math.min(100,
+      ((CONFIG.PING_INTERVAL - remaining) / CONFIG.PING_INTERVAL) * 100));
+    $('progress').style.width = pct + '%';
+  }
+
+  $('urlDisplay').textContent = getTargetUrl();
+}
+
+function tickUI() {
+  $('uptime').textContent = fmtDuration(Date.now() - state.startTime);
+
+  if (state.nextPingAt) {
+    const remaining = state.nextPingAt - Date.now();
+    $('nextPing').textContent = fmtCountdown(remaining);
+    const pct = Math.max(0, Math.min(100,
+      ((CONFIG.PING_INTERVAL - remaining) / CONFIG.PING_INTERVAL) * 100));
+    $('progress').style.width = pct + '%';
+  }
+}
+
+/* ---------- watchdog ---------- */
+function startWatchdog() {
+  if (CONFIG.RELOAD_IF_STALE_AFTER <= 0) return;
+  state.watchdogTimer = setInterval(() => {
+    if (!state.lastPingTime) return;
+    const stale = Date.now() - state.lastPingTime;
+    if (stale > CONFIG.RELOAD_IF_STALE_AFTER) {
+      log('Watchdog: stale ' + Math.round(stale / 1000) + 's — reloading', 'err');
+      location.reload();
+    }
+  }, CONFIG.WATCHDOG_INTERVAL);
+}
+
+/* ---------- wake lock ---------- */
+async function acquireWakeLock() {
+  if (!CONFIG.WAKE_LOCK) return;
+  if (!('wakeLock' in navigator)) return;
+  if (state.wakeLock) return;
+  try {
+    state.wakeLock = await navigator.wakeLock.request('screen');
+    log('Wake lock acquired', 'info');
+    state.wakeLock.addEventListener('release', () => {
+      log('Wake lock released', 'info');
+      state.wakeLock = null;
+    });
+  } catch (e) {
+    log('Wake lock failed: ' + (e && e.message ? e.message : e), 'err');
+  }
+}
+
+/* ---------- visibility ---------- */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    log('App visible again', 'info');
+
+    /* Re-acquire wake lock (it's released when hidden) */
+    acquireWakeLock();
+
+    if (CONFIG.PING_ON_VISIBLE) {
+      const since = state.lastPingTime ? Date.now() - state.lastPingTime : Infinity;
+      if (since > CONFIG.PING_INTERVAL / 2) {
+        doPing('visible');
+      } else if (!state.pingTimer) {
+        scheduleNextPing();
+      }
+    }
+  } else {
+    log('App hidden', 'info');
+  }
+});
+
+/* ---------- tap to toggle log ---------- */
+document.addEventListener('click', () => {
+  const el = $('log');
+  if (el) el.classList.toggle('show');
+});
+
+/* ---------- pageshow (bfcache) ---------- */
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) {
+    log('Restored from bfcache', 'info');
+    if (!state.pingTimer) scheduleNextPing();
+  }
+});
+
+/* ---------- online / offline ---------- */
+window.addEventListener('online', () => {
+  log('Network back online', 'info');
+  if (state.lastPingOk === false) doPing('online');
+});
+window.addEventListener('offline', () => {
+  log('Network offline', 'warn');
+});
+
+/* ---------- boot ---------- */
+function boot() {
+  const saved = store.get('pingCount', 0);
+  if (typeof saved === 'number' && saved > 0) {
+    state.pingCount = saved;
+    log('Restored ping count: ' + saved, 'info');
+  }
+
+  log('HTMLBlox Keep-Alive started', 'info');
+  log('Target: ' + getTargetUrl(), 'info');
+  log('Interval: ' + Math.round(CONFIG.PING_INTERVAL / 1000) + 's', 'info');
+
+  updateUI();
+  state.tickTimer = setInterval(tickUI, 1000);
+  startWatchdog();
+
+  if (CONFIG.PING_ON_START) {
+    setTimeout(() => doPing('startup'), 500);
+  } else {
+    scheduleNextPing();
+  }
+
+  acquireWakeLock();
+}
+
+/* Try to acquire wake lock on first user gesture (required by some browsers) */
+document.addEventListener('touchstart', acquireWakeLock, { once: true, passive: true });
+document.addEventListener('click', acquireWakeLock, { once: true, passive: true });
+
+boot();
+</script>
+</body>
+</html>
