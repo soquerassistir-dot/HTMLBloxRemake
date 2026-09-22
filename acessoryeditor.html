@@ -332,8 +332,13 @@
                 </div>
               </div>
               <div class="group">
-                <h4>Part Scale</h4>
-                <div class="row"><label>Size</label><input type="number" id="part-scale" step="0.1" min="0.05" max="5" value="1" /></div>
+                <h4>Part Size (per-axis)</h4>
+                <div class="row-vec">
+                  <div class="vc" data-l="X"><input type="number" id="part-scale-x" step="0.1" min="0.05" max="20" value="1" /></div>
+                  <div class="vc" data-l="Y"><input type="number" id="part-scale-y" step="0.1" min="0.05" max="20" value="1" /></div>
+                  <div class="vc" data-l="Z"><input type="number" id="part-scale-z" step="0.1" min="0.05" max="20" value="1" /></div>
+                </div>
+                <div class="note" style="text-align:center;margin-top:6px">Drag the scale gizmo to resize. Each axis grows <b>from the corner</b> (opposite side stays fixed).</div>
               </div>
               <div class="group">
                 <h4>3D Model</h4>
@@ -600,7 +605,6 @@ const state = {
   headerAvatarViewer: null,
   alive: true, raf: 0,
 
-  /* Internal flags */
   _gizmoDragging: false,
 };
 
@@ -622,6 +626,23 @@ function clampNum(v, def, min, max) {
   const n = Number(v);
   if (!isFinite(n)) return def;
   return Math.max(min, Math.min(max, n));
+}
+
+/* Normalize a scale (number or {x,y,z}) into {x,y,z} */
+function normalizeScale(raw) {
+  const MIN = 0.01, MAX = 50;
+  if (typeof raw === 'number') {
+    const s = clampNum(raw, 1, MIN, MAX);
+    return { x: s, y: s, z: s };
+  }
+  if (raw && typeof raw === 'object') {
+    return {
+      x: clampNum(raw.x, 1, MIN, MAX),
+      y: clampNum(raw.y, 1, MIN, MAX),
+      z: clampNum(raw.z, 1, MIN, MAX)
+    };
+  }
+  return { x: 1, y: 1, z: 1 };
 }
 
 function normalizeColors(a) {
@@ -693,7 +714,7 @@ function defaultPartData() {
     color: '#4a7ab8',
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },
-    scale: 1,
+    scale: { x: 1, y: 1, z: 1 },
     model_url: null,
     _pendingFile: null
   };
@@ -772,7 +793,7 @@ function applyPartTransform(mesh, data) {
   const rx = clampNum(data.rotation?.x, 0, -3600, 3600);
   const ry = clampNum(data.rotation?.y, 0, -3600, 3600);
   const rz = clampNum(data.rotation?.z, 0, -3600, 3600);
-  const sc = clampNum(data.scale, 1, 0.01, 50);
+  const sc = normalizeScale(data.scale);
 
   mesh.position.set(px, py, pz);
   mesh.rotation.set(
@@ -780,7 +801,7 @@ function applyPartTransform(mesh, data) {
     THREE.MathUtils.degToRad(ry),
     THREE.MathUtils.degToRad(rz)
   );
-  mesh.scale.setScalar(sc);
+  mesh.scale.set(sc.x, sc.y, sc.z);
 }
 
 /* ============================================================
@@ -858,13 +879,54 @@ function initAccessoryScene() {
   scene.add(accGroup);
   state.accGroup = accGroup;
 
+  /* ============================================================
+     GIZMO — local space + keep opposite side fixed when scaling
+     ============================================================ */
   const gizmo = new TransformControls(camera, renderer.domElement);
-  gizmo.setMode('translate'); gizmo.setSize(0.65);
+  gizmo.setMode('translate');
+  gizmo.setSize(0.65);
+  gizmo.setSpace('local'); /* <-- scale acts on local axes */
+
+  let scaleDragState = null;
+
   gizmo.addEventListener('dragging-changed', (e) => {
     state._gizmoDragging = e.value;
     if (state.orbit) state.orbit.enabled = !e.value;
+
+    if (e.value && gizmo.mode === 'scale' && gizmo.object) {
+      scaleDragState = {
+        startScale: gizmo.object.scale.clone(),
+        startPos: gizmo.object.position.clone(),
+        axis: (gizmo.axis || 'XYZ').toUpperCase()
+      };
+    } else {
+      scaleDragState = null;
+    }
   });
-  gizmo.addEventListener('objectChange', () => { syncInputsFromSelection(); });
+
+  gizmo.addEventListener('objectChange', () => {
+    const obj = gizmo.object;
+    if (!obj) return;
+
+    /* --- Scale: keep the opposite (min) side fixed --- */
+    if (gizmo.mode === 'scale' && scaleDragState) {
+      const axis = scaleDragState.axis;
+      const s = obj.scale;
+      const ss = scaleDragState.startScale;
+      const sp = scaleDragState.startPos;
+
+      for (const ax of ['x', 'y', 'z']) {
+        if (axis.includes(ax.toUpperCase())) {
+          const delta = s[ax] - ss[ax];
+          /* Position moves by half the scale delta so the -side stays fixed */
+          obj.position[ax] = sp[ax] + delta * 0.5;
+        }
+      }
+    }
+
+    syncInputsFromSelection();
+  });
+
   scene.add(gizmo);
   state.gizmo = gizmo;
 
@@ -946,7 +1008,7 @@ function applyGroupInputs() {
 }
 
 /* ============================================================
-   REBUILD (com lock e sweep)
+   REBUILD (locked, sweeps orphans)
    ============================================================ */
 let _rebuildLock = false;
 let _rebuildPending = false;
@@ -961,19 +1023,16 @@ async function rebuildAllParts() {
   try {
     if (!state.accGroup) return;
 
-    /* 1. Sweep ALL children of accGroup (handles orphans) */
     const toRemove = [...state.accGroup.children];
     for (const child of toRemove) {
       state.accGroup.remove(child);
       disposeMesh(child);
     }
 
-    /* 2. Clear parts' mesh references */
     for (const p of state.accParts) {
       p.mesh = null;
     }
 
-    /* 3. Rebuild each part */
     const newEntries = [];
     for (const p of state.accParts) {
       const mesh = await buildPartMesh(p.data);
@@ -983,7 +1042,6 @@ async function rebuildAllParts() {
     }
     state.accParts = newEntries;
 
-    /* 4. Validate selection */
     if (state.selectedPartId && !state.accParts.find(p => p.id === state.selectedPartId)) {
       state.selectedPartId = null;
     }
@@ -1070,9 +1128,7 @@ function syncInputsFromSelection() {
     if (!entry || !entry.mesh) return;
     const m = entry.mesh;
 
-    /* Se o gizmo deformou não-uniformemente, força escala uniforme */
-    const avgScale = (Math.abs(m.scale.x) + Math.abs(m.scale.y) + Math.abs(m.scale.z)) / 3;
-    const safeScale = clampNum(avgScale, 1, 0.01, 50);
+    const sc = normalizeScale({ x: m.scale.x, y: m.scale.y, z: m.scale.z });
 
     entry.data.position = {
       x: clampNum(m.position.x, 0, -100, 100),
@@ -1084,10 +1140,10 @@ function syncInputsFromSelection() {
       y: clampNum(THREE.MathUtils.radToDeg(m.rotation.y), 0, -3600, 3600),
       z: clampNum(THREE.MathUtils.radToDeg(m.rotation.z), 0, -3600, 3600)
     };
-    entry.data.scale = safeScale;
+    entry.data.scale = sc;
 
-    /* Força uniforme no mesh */
-    m.scale.setScalar(safeScale);
+    /* Do NOT force uniform — keep non-uniform from gizmo */
+    m.scale.set(sc.x, sc.y, sc.z);
 
     $('part-pos-x').value = entry.data.position.x.toFixed(2);
     $('part-pos-y').value = entry.data.position.y.toFixed(2);
@@ -1095,7 +1151,9 @@ function syncInputsFromSelection() {
     $('part-rot-x').value = Math.round(entry.data.rotation.x);
     $('part-rot-y').value = Math.round(entry.data.rotation.y);
     $('part-rot-z').value = Math.round(entry.data.rotation.z);
-    $('part-scale').value = safeScale.toFixed(2);
+    $('part-scale-x').value = sc.x.toFixed(2);
+    $('part-scale-y').value = sc.y.toFixed(2);
+    $('part-scale-z').value = sc.z.toFixed(2);
   } else if (state.accGroup) {
     const g = state.accGroup;
 
@@ -1247,7 +1305,6 @@ function shade(hex, percent) {
 async function addPart() {
   const data = defaultPartData();
   data.color = '#ff8800';
-  /* Offset each new part so they don't stack exactly */
   const offset = 0.4;
   data.position.x = (state.accParts.length % 4) * offset - 0.6;
   data.position.y = Math.floor(state.accParts.length / 4) * offset;
@@ -1266,7 +1323,6 @@ async function deletePart(index) {
   const entry = state.accParts[index];
   if (!confirm('Delete Part ' + (index + 1) + '?')) return;
 
-  /* IMPORTANT: remove mesh from scene BEFORE splicing from array */
   if (entry.mesh && entry.mesh.parent) {
     entry.mesh.parent.remove(entry.mesh);
     disposeMesh(entry.mesh);
@@ -1285,7 +1341,7 @@ async function duplicatePart(index) {
   const orig = state.accParts[index];
   if (!orig || !orig.data) return;
 
-  const origScale = clampNum(orig.data.scale, 1, 0.05, 20);
+  const origScale = normalizeScale(orig.data.scale);
   const clone = {
     id: uid(),
     shape: orig.data.shape || 'box',
@@ -1300,7 +1356,7 @@ async function duplicatePart(index) {
       y: clampNum(orig.data.rotation?.y, 0, -360, 360),
       z: clampNum(orig.data.rotation?.z, 0, -360, 360)
     },
-    scale: origScale,
+    scale: { x: origScale.x, y: origScale.y, z: origScale.z },
     model_url: orig.data.model_url || null,
     _pendingFile: orig.data._pendingFile || null
   };
@@ -1337,29 +1393,44 @@ function updateBadge() {
 }
 
 /* ============================================================
-   TABS
+   TABS (3D / Clothing / Face) — FIXED panel switching
    ============================================================ */
 document.querySelectorAll('.tab[data-tab]').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab[data-tab]').forEach(x => x.classList.toggle('active', x === t));
-    document.querySelectorAll('#panel-edit, #panel-library').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.tab));
-    if (t.dataset.tab === 'library') renderAccessoriesList();
+    const isEdit = t.dataset.tab === 'edit';
+    const editPanel = $('panel-edit');
+    const libPanel = $('panel-library');
+    if (editPanel) editPanel.classList.toggle('active', isEdit);
+    if (libPanel) libPanel.classList.toggle('active', !isEdit);
+    if (!isEdit) renderAccessoriesList();
   });
 });
+
 document.querySelectorAll('.tab[data-ctab]').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab[data-ctab]').forEach(x => x.classList.toggle('active', x === t));
-    document.querySelectorAll('#panel-ctools, #panel-clibrary').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.ctab));
-    if (t.dataset.ctab === 'library') renderAccessoriesList2D();
+    const isTools = t.dataset.ctab === 'tools';
+    const toolsPanel = $('panel-ctools');
+    const libPanel = $('panel-clibrary');
+    if (toolsPanel) toolsPanel.classList.toggle('active', isTools);
+    if (libPanel) libPanel.classList.toggle('active', !isTools);
+    if (!isTools) renderAccessoriesList2D();
   });
 });
+
 document.querySelectorAll('.tab[data-ftab]').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab[data-ftab]').forEach(x => x.classList.toggle('active', x === t));
-    document.querySelectorAll('#panel-feditor, #panel-flibrary').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.ftab));
-    if (t.dataset.ftab === 'library') renderFacesList();
+    const isEditor = t.dataset.ftab === 'editor';
+    const editorPanel = $('panel-feditor');
+    const libPanel = $('panel-flibrary');
+    if (editorPanel) editorPanel.classList.toggle('active', isEditor);
+    if (libPanel) libPanel.classList.toggle('active', !isEditor);
+    if (!isEditor) renderFacesList();
   });
 });
+
 document.querySelectorAll('.mode-tab').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.mode-tab').forEach(x => x.classList.toggle('active', x === t));
@@ -1456,12 +1527,19 @@ $('grp-scale').addEventListener('input', () => {
   });
 });
 
-$('part-scale').addEventListener('input', () => {
-  if (!state.selectedPartId) return;
-  const entry = state.accParts.find(p => p.id === state.selectedPartId);
-  if (!entry || !entry.mesh) return;
-  entry.data.scale = clampNum($('part-scale').value, 1, 0.05, 20);
-  applyPartTransform(entry.mesh, entry.data);
+/* Per-axis size inputs */
+['part-scale-x', 'part-scale-y', 'part-scale-z'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    if (!state.selectedPartId) return;
+    const entry = state.accParts.find(p => p.id === state.selectedPartId);
+    if (!entry || !entry.mesh) return;
+    entry.data.scale = {
+      x: clampNum($('part-scale-x').value, 1, 0.05, 20),
+      y: clampNum($('part-scale-y').value, 1, 0.05, 20),
+      z: clampNum($('part-scale-z').value, 1, 0.05, 20)
+    };
+    applyPartTransform(entry.mesh, entry.data);
+  });
 });
 
 $('part-color').addEventListener('input', () => {
@@ -1565,7 +1643,7 @@ $('acc-save').addEventListener('click', async () => {
         y: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.y), 0, -3600, 3600),
         z: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.z), 0, -3600, 3600)
       };
-      p.data.scale = clampNum(p.mesh.scale.x, 1, 0.01, 50);
+      p.data.scale = normalizeScale({ x: p.mesh.scale.x, y: p.mesh.scale.y, z: p.mesh.scale.z });
     }
 
     const serializedParts = [];
@@ -1585,13 +1663,28 @@ $('acc-save').addEventListener('click', async () => {
         const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
         modelUrl = urlData.publicUrl;
       }
+      const sc = normalizeScale(p.data.scale);
+      /* Save per-axis in scale_x/y/z (game compat) + scale as number (legacy) */
       serializedParts.push({
         id: p.id,
         shape: p.data.shape || 'box',
         color: p.data.color || '#ff8800',
-        position: { x: Number(p.data.position.x) || 0, y: Number(p.data.position.y) || 0, z: Number(p.data.position.z) || 0 },
-        rotation: { x: Number(p.data.rotation.x) || 0, y: Number(p.data.rotation.y) || 0, z: Number(p.data.rotation.z) || 0 },
-        scale: Number(p.data.scale) || 1,
+        position: {
+          x: Number(p.data.position.x) || 0,
+          y: Number(p.data.position.y) || 0,
+          z: Number(p.data.position.z) || 0
+        },
+        rotation: {
+          x: Number(p.data.rotation.x) || 0,
+          y: Number(p.data.rotation.y) || 0,
+          z: Number(p.data.rotation.z) || 0
+        },
+        /* uniform (legacy) — keep the max so game at least shows roughly right size */
+        scale: Math.max(sc.x, sc.y, sc.z),
+        /* per-axis (new) */
+        scale_x: sc.x,
+        scale_y: sc.y,
+        scale_z: sc.z,
         model_url: modelUrl
       });
     }
@@ -1649,7 +1742,6 @@ $('acc-new').addEventListener('click', () => {
 });
 
 function resetToNew3D() {
-  /* 1. Dispose all existing part meshes */
   for (const p of state.accParts) {
     if (p.mesh && p.mesh.parent) {
       p.mesh.parent.remove(p.mesh);
@@ -1659,7 +1751,6 @@ function resetToNew3D() {
   state.accParts = [];
   state.selectedPartId = null;
 
-  /* 2. Reset state */
   state.editingId = null;
   state.accName = 'New Accessory';
   state.accAttach = 'Head';
@@ -1669,7 +1760,6 @@ function resetToNew3D() {
   state.accPrice = 0;
   state.accPublish = false;
 
-  /* 3. Reset UI */
   $('acc-name').value = '';
   $('acc-price').value = 0;
   $('acc-publish').checked = false;
@@ -1678,18 +1768,15 @@ function resetToNew3D() {
   $('part-file-name').classList.remove('has');
   syncGroupInputs();
 
-  /* 4. Create default part */
   const data = defaultPartData();
   data.color = '#ff8800';
   state.accParts.push({ id: data.id, data, mesh: null });
 
-  /* 5. Re-attach group and rebuild */
   attachGroupToPart();
   rebuildAllParts().then(() => selectPart(null));
 }
 
 async function loadAccessoryIntoEditor(acc) {
-  /* 1. Dispose all existing part meshes */
   for (const p of state.accParts) {
     if (p.mesh && p.mesh.parent) {
       p.mesh.parent.remove(p.mesh);
@@ -1699,7 +1786,6 @@ async function loadAccessoryIntoEditor(acc) {
   state.accParts = [];
   state.selectedPartId = null;
 
-  /* 2. Apply loaded data with validation */
   state.editingId = acc.id;
   state.accName = acc.name || 'Untitled';
   state.accAttach = acc.attach_part || 'Head';
@@ -1746,36 +1832,48 @@ async function loadAccessoryIntoEditor(acc) {
     }];
   }
 
-  state.accParts = parts.map(p => ({
-    id: p.id || uid(),
-    data: {
-      id: p.id || uid(),
-      shape: p.shape || 'box',
-      color: p.color || '#ff8800',
-      position: {
-        x: clampNum(p.position?.x, 0, -100, 100),
-        y: clampNum(p.position?.y, 0, -100, 100),
-        z: clampNum(p.position?.z, 0, -100, 100)
-      },
-      rotation: {
-        x: clampNum(p.rotation?.x, 0, -3600, 3600),
-        y: clampNum(p.rotation?.y, 0, -3600, 3600),
-        z: clampNum(p.rotation?.z, 0, -3600, 3600)
-      },
-      scale: clampNum(p.scale, 1, 0.01, 50),
-      model_url: p.model_url || null,
-      _pendingFile: null
-    },
-    mesh: null
-  }));
+  state.accParts = parts.map(p => {
+    /* Determine scale: prefer per-axis (scale_x/y/z), else fall back */
+    let sc;
+    if (p.scale_x != null || p.scale_y != null || p.scale_z != null) {
+      sc = {
+        x: clampNum(p.scale_x, 1, 0.01, 50),
+        y: clampNum(p.scale_y, 1, 0.01, 50),
+        z: clampNum(p.scale_z, 1, 0.01, 50)
+      };
+    } else {
+      sc = normalizeScale(p.scale);
+    }
 
-  /* 3. Update UI */
+    return {
+      id: p.id || uid(),
+      data: {
+        id: p.id || uid(),
+        shape: p.shape || 'box',
+        color: p.color || '#ff8800',
+        position: {
+          x: clampNum(p.position?.x, 0, -100, 100),
+          y: clampNum(p.position?.y, 0, -100, 100),
+          z: clampNum(p.position?.z, 0, -100, 100)
+        },
+        rotation: {
+          x: clampNum(p.rotation?.x, 0, -3600, 3600),
+          y: clampNum(p.rotation?.y, 0, -3600, 3600),
+          z: clampNum(p.rotation?.z, 0, -3600, 3600)
+        },
+        scale: sc,
+        model_url: p.model_url || null,
+        _pendingFile: null
+      },
+      mesh: null
+    };
+  });
+
   $('acc-name').value = state.accName;
   $('acc-price').value = state.accPrice;
   $('acc-publish').checked = state.accPublish;
   $('grp-attach').value = state.accAttach;
 
-  /* 4. Re-attach and rebuild */
   attachGroupToPart();
   syncGroupInputs();
   await rebuildAllParts();
@@ -1875,7 +1973,17 @@ function mountAccThumb(container, acc) {
       THREE.MathUtils.degToRad(clampNum(p.rotation?.y, 0, -360, 360)),
       THREE.MathUtils.degToRad(clampNum(p.rotation?.z, 0, -360, 360))
     );
-    g.scale.setScalar(clampNum(p.scale, 1, 0.01, 50));
+    let sc;
+    if (p.scale_x != null || p.scale_y != null || p.scale_z != null) {
+      sc = {
+        x: clampNum(p.scale_x, 1, 0.01, 50),
+        y: clampNum(p.scale_y, 1, 0.01, 50),
+        z: clampNum(p.scale_z, 1, 0.01, 50)
+      };
+    } else {
+      sc = normalizeScale(p.scale);
+    }
+    g.scale.set(sc.x, sc.y, sc.z);
     group.add(g);
   }
 
