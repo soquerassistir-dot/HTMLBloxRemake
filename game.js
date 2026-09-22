@@ -1554,7 +1554,9 @@ const GENERATORS = {
   },
 
   custom_build(scene, physics, data) {
-    const skipBP = data && data.noBaseplate === true;
+    const parts0 = (data && data.parts) || [];
+    const hasCustomBaseplate = parts0.some(p => p.isBaseplate === true);
+    const skipBP = (data && data.noBaseplate === true) || hasCustomBaseplate;
     if (!skipBP) {
       const BP = 256;
       const bpTex = getStudTexture(BP, BP);
