@@ -3010,6 +3010,11 @@ window.addEventListener('beforeunload', () => {
   if (state.clResizeObserver) state.clResizeObserver.disconnect();
   if (state.headerAvatarViewer) state.headerAvatarViewer.dispose();
 });
+  
+window.state = state;
+window.sb = sb;
+window.loadClothingIntoEditor = loadClothingIntoEditor;
+window.splitAtlasToCanvases = splitAtlasToCanvases;
 
 boot();
 </script>
