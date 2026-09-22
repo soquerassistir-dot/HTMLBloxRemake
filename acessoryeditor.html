@@ -23,7 +23,6 @@
   a{color:#1a4a9c;text-decoration:none}
   #app{display:none;width:100vw;height:100vh;flex-direction:column}
   #app.active{display:flex}
-
   .header{flex-shrink:0;background:linear-gradient(180deg,#1f4d8f,#16407a);border-bottom:3px solid #0a2450;padding:8px 14px;display:flex;align-items:center;gap:14px;color:#fff;z-index:100}
   .logo{display:flex;align-items:center;gap:10px;cursor:pointer;flex-shrink:0}
   .logo-img{width:34px;height:34px;border-radius:9px;background:#1f4d8f;border:3px solid #1f4d8f;object-fit:cover;display:block}
@@ -567,8 +566,6 @@ const DEFAULT_AVATAR = { head:'#f5cd30', torso:'#0d69ac', leftArm:'#f5cd30', rig
 
 const state = {
   user: null, profile: null, accessories: [],
-
-  /* 3D accessory */
   editingId: null,
   scene: null, camera: null, renderer: null, orbit: null, gizmo: null,
   avatarGroup: null, parts: {}, resizeObserver: null,
@@ -576,8 +573,6 @@ const state = {
   accOffset: { x: 0, y: 0, z: 0 }, accRot: { x: 0, y: 0, z: 0 }, accScale: 1,
   accPrice: 0, accPublish: false,
   accParts: [], selectedPartId: null, selectionHelper: null, gizmoMode: 'translate',
-
-  /* Clothing */
   clEditingId: null,
   clName: 'New Clothing', clType: 'shirt', clPose: 'front',
   clTool: 'brush', clColor: '#ff8800', clSize: 28, clImage: null,
@@ -588,17 +583,15 @@ const state = {
   clPointerDown: false, clLastPaint: null,
   clHoveredPart: null, clHoveredFace: null,
   clResizeObserver: null, clRaf: 0, clAlive: true,
-
-  /* Face */
   faceEditingId: null,
   faceName: 'New Face',
   facePrice: 0,
   facePublish: false,
   faceImageFile: null,
   faceImageUrl: null,
-
   headerAvatarViewer: null,
   alive: true, raf: 0,
+  _gizmoDragging: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -610,6 +603,28 @@ function showToast(msg, kind) {
   t.className = 'show ' + (kind || '');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function clampNum(v, def, min, max) {
+  const n = Number(v);
+  if (!isFinite(n)) return def;
+  return Math.max(min, Math.min(max, n));
+}
+
+function normalizeScale(raw) {
+  const MIN = 0.01, MAX = 50;
+  if (typeof raw === 'number') {
+    const s = clampNum(raw, 1, MIN, MAX);
+    return { x: s, y: s, z: s };
+  }
+  if (raw && typeof raw === 'object') {
+    return {
+      x: clampNum(raw.x, 1, MIN, MAX),
+      y: clampNum(raw.y, 1, MIN, MAX),
+      z: clampNum(raw.z, 1, MIN, MAX)
+    };
+  }
+  return { x: 1, y: 1, z: 1 };
 }
 
 function normalizeColors(a) {
@@ -675,29 +690,60 @@ function buildShapeMesh(shape, color) {
 }
 
 function defaultPartData() {
-  return { id: uid(), shape: 'box', color: '#4a7ab8',
-    position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
-    scale: 1, model_url: null, _pendingFile: null };
+  return {
+    id: uid(),
+    shape: 'box',
+    color: '#4a7ab8',
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 },
+    model_url: null,
+    _pendingFile: null
+  };
 }
 
 async function buildPartMesh(data) {
   const wrapper = new THREE.Group();
   wrapper.userData.partId = data.id;
+
   if (data._pendingFile || data.model_url) {
     try {
-      let url = data._pendingFile ? URL.createObjectURL(data._pendingFile) : data.model_url;
+      let url = data._pendingFile
+        ? URL.createObjectURL(data._pendingFile)
+        : data.model_url;
+
       const loader = new GLTFLoader();
       const gltf = await new Promise((res, rej) => { loader.load(url, res, undefined, rej); });
+
       if (data._pendingFile) URL.revokeObjectURL(url);
-      const model = gltf.scene || gltf.scenes[0];
+
+      const model = gltf.scene || (gltf.scenes && gltf.scenes[0]);
       if (model) {
+        model.updateMatrixWorld(true);
+
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        model.scale.setScalar(1.5 / maxDim);
+
+        if (!isFinite(size.x) || !isFinite(size.y) || !isFinite(size.z) ||
+            (size.x === 0 && size.y === 0 && size.z === 0)) {
+          model.scale.setScalar(1);
+        } else {
+          const maxDim = Math.max(size.x, size.y, size.z);
+          if (maxDim > 0.0001 && isFinite(maxDim)) {
+            model.scale.setScalar(1.5 / maxDim);
+          } else {
+            model.scale.setScalar(1);
+          }
+        }
+
+        model.updateMatrixWorld(true);
         const box2 = new THREE.Box3().setFromObject(model);
         const center = box2.getCenter(new THREE.Vector3());
-        model.position.sub(center);
+
+        if (isFinite(center.x) && isFinite(center.y) && isFinite(center.z)) {
+          model.position.sub(center);
+        }
+
         if (data.color) {
           model.traverse(o => {
             if (o.isMesh && o.material && o.material.color && !o.material.map) {
@@ -708,24 +754,36 @@ async function buildPartMesh(data) {
         }
         model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         wrapper.add(model);
+      } else {
+        wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
       }
     } catch (e) {
+      console.warn('[editor] GLB load failed:', e);
       wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
     }
   } else {
     wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
   }
+
   return wrapper;
 }
 
 function applyPartTransform(mesh, data) {
-  mesh.position.set(data.position.x || 0, data.position.y || 0, data.position.z || 0);
+  const px = clampNum(data.position?.x, 0, -100, 100);
+  const py = clampNum(data.position?.y, 0, -100, 100);
+  const pz = clampNum(data.position?.z, 0, -100, 100);
+  const rx = clampNum(data.rotation?.x, 0, -3600, 3600);
+  const ry = clampNum(data.rotation?.y, 0, -3600, 3600);
+  const rz = clampNum(data.rotation?.z, 0, -3600, 3600);
+  const sc = normalizeScale(data.scale);
+
+  mesh.position.set(px, py, pz);
   mesh.rotation.set(
-    THREE.MathUtils.degToRad(data.rotation.x || 0),
-    THREE.MathUtils.degToRad(data.rotation.y || 0),
-    THREE.MathUtils.degToRad(data.rotation.z || 0)
+    THREE.MathUtils.degToRad(rx),
+    THREE.MathUtils.degToRad(ry),
+    THREE.MathUtils.degToRad(rz)
   );
-  mesh.scale.setScalar(data.scale || 1);
+  mesh.scale.set(sc.x, sc.y, sc.z);
 }
 
 /* ============================================================
@@ -805,7 +863,10 @@ function initAccessoryScene() {
 
   const gizmo = new TransformControls(camera, renderer.domElement);
   gizmo.setMode('translate'); gizmo.setSize(0.65);
-  gizmo.addEventListener('dragging-changed', (e) => { if (state.orbit) state.orbit.enabled = !e.value; });
+  gizmo.addEventListener('dragging-changed', (e) => {
+    state._gizmoDragging = e.value;
+    if (state.orbit) state.orbit.enabled = !e.value;
+  });
   gizmo.addEventListener('objectChange', () => { syncInputsFromSelection(); });
   scene.add(gizmo);
   state.gizmo = gizmo;
@@ -874,30 +935,52 @@ function attachGroupToPart() {
 
 function applyGroupInputs() {
   if (!state.accGroup) return;
-  state.accGroup.position.set(state.accOffset.x || 0, state.accOffset.y || 0, state.accOffset.z || 0);
-  state.accGroup.rotation.set(
-    THREE.MathUtils.degToRad(state.accRot.x || 0),
-    THREE.MathUtils.degToRad(state.accRot.y || 0),
-    THREE.MathUtils.degToRad(state.accRot.z || 0)
+  state.accGroup.position.set(
+    clampNum(state.accOffset.x, 0, -50, 50),
+    clampNum(state.accOffset.y, 0, -50, 50),
+    clampNum(state.accOffset.z, 0, -50, 50)
   );
-  state.accGroup.scale.setScalar(state.accScale || 1);
+  state.accGroup.rotation.set(
+    THREE.MathUtils.degToRad(clampNum(state.accRot.x, 0, -3600, 3600)),
+    THREE.MathUtils.degToRad(clampNum(state.accRot.y, 0, -3600, 3600)),
+    THREE.MathUtils.degToRad(clampNum(state.accRot.z, 0, -3600, 3600))
+  );
+  state.accGroup.scale.setScalar(clampNum(state.accScale, 1, 0.05, 20));
 }
 
+let _rebuildLock = false;
+let _rebuildPending = false;
+
 async function rebuildAllParts() {
-  for (const p of state.accParts) {
-    if (p.mesh) { if (p.mesh.parent) p.mesh.parent.remove(p.mesh); disposeMesh(p.mesh); }
+  if (_rebuildLock) { _rebuildPending = true; return; }
+  _rebuildLock = true;
+  try {
+    if (!state.accGroup) return;
+    const toRemove = [...state.accGroup.children];
+    for (const child of toRemove) {
+      state.accGroup.remove(child);
+      disposeMesh(child);
+    }
+    for (const p of state.accParts) p.mesh = null;
+    const newEntries = [];
+    for (const p of state.accParts) {
+      const mesh = await buildPartMesh(p.data);
+      applyPartTransform(mesh, p.data);
+      state.accGroup.add(mesh);
+      newEntries.push({ id: p.id, data: p.data, mesh });
+    }
+    state.accParts = newEntries;
+    if (state.selectedPartId && !state.accParts.find(p => p.id === state.selectedPartId)) {
+      state.selectedPartId = null;
+    }
+    updateSelection();
+    renderPartsList();
+  } catch (e) {
+    console.warn('[editor] rebuild error:', e);
+  } finally {
+    _rebuildLock = false;
+    if (_rebuildPending) { _rebuildPending = false; await rebuildAllParts(); }
   }
-  const newEntries = [];
-  for (const p of state.accParts) {
-    const mesh = await buildPartMesh(p.data);
-    applyPartTransform(mesh, p.data);
-    state.accGroup.add(mesh);
-    newEntries.push({ id: p.id, data: p.data, mesh });
-  }
-  state.accParts = newEntries;
-  if (state.selectedPartId && !state.accParts.find(p => p.id === state.selectedPartId)) state.selectedPartId = null;
-  updateSelection();
-  renderPartsList();
 }
 
 function disposeMesh(mesh) {
@@ -919,28 +1002,43 @@ function selectPart(partId) {
   syncInputsFromSelection();
   updateEditPanelVisibility();
   updateBadge();
+  syncShapeButtons();
 }
 
 function updateSelection() {
   const gizmo = state.gizmo, helper = state.selectionHelper;
   if (!gizmo || !helper) return;
+  if (state._gizmoDragging) return;
   if (state.selectedPartId) {
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
     if (entry && entry.mesh) {
-      gizmo.attach(entry.mesh); helper.setFromObject(entry.mesh); helper.visible = true;
+      gizmo.attach(entry.mesh);
+      helper.setFromObject(entry.mesh);
+      helper.visible = true;
       for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, p.id === state.selectedPartId ? 1.0 : 0.55);
       return;
     }
   }
-  gizmo.attach(state.accGroup); helper.setFromObject(state.accGroup); helper.visible = true;
-  for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, 1.0);
+  if (state.accGroup) {
+    gizmo.attach(state.accGroup);
+    helper.setFromObject(state.accGroup);
+    helper.visible = true;
+    for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, 1.0);
+  } else {
+    gizmo.detach();
+    helper.visible = false;
+  }
 }
 
 function setMeshOpacity(mesh, opacity) {
   mesh.traverse(o => {
     if (o.isMesh && o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) { m.transparent = opacity < 1; m.opacity = opacity; m.needsUpdate = true; }
+      for (const m of mats) {
+        m.transparent = opacity < 1;
+        m.opacity = opacity;
+        m.needsUpdate = true;
+      }
     }
   });
 }
@@ -950,40 +1048,71 @@ function syncInputsFromSelection() {
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
     if (!entry || !entry.mesh) return;
     const m = entry.mesh;
-    entry.data.position = { x: m.position.x, y: m.position.y, z: m.position.z };
-    entry.data.rotation = { x: THREE.MathUtils.radToDeg(m.rotation.x), y: THREE.MathUtils.radToDeg(m.rotation.y), z: THREE.MathUtils.radToDeg(m.rotation.z) };
-    entry.data.scale = m.scale.x;
-    $('part-pos-x').value = m.position.x.toFixed(2);
-    $('part-pos-y').value = m.position.y.toFixed(2);
-    $('part-pos-z').value = m.position.z.toFixed(2);
+    const sc = normalizeScale({ x: m.scale.x, y: m.scale.y, z: m.scale.z });
+    entry.data.position = {
+      x: clampNum(m.position.x, 0, -100, 100),
+      y: clampNum(m.position.y, 0, -100, 100),
+      z: clampNum(m.position.z, 0, -100, 100)
+    };
+    entry.data.rotation = {
+      x: clampNum(THREE.MathUtils.radToDeg(m.rotation.x), 0, -3600, 3600),
+      y: clampNum(THREE.MathUtils.radToDeg(m.rotation.y), 0, -3600, 3600),
+      z: clampNum(THREE.MathUtils.radToDeg(m.rotation.z), 0, -3600, 3600)
+    };
+    entry.data.scale = sc;
+    m.scale.set(sc.x, sc.y, sc.z);
+    $('part-pos-x').value = entry.data.position.x.toFixed(2);
+    $('part-pos-y').value = entry.data.position.y.toFixed(2);
+    $('part-pos-z').value = entry.data.position.z.toFixed(2);
     $('part-rot-x').value = Math.round(entry.data.rotation.x);
     $('part-rot-y').value = Math.round(entry.data.rotation.y);
     $('part-rot-z').value = Math.round(entry.data.rotation.z);
-    $('part-scale').value = m.scale.x.toFixed(2);
+    $('part-scale').value = sc.x.toFixed(2);
   } else if (state.accGroup) {
     const g = state.accGroup;
-    state.accOffset = { x: g.position.x, y: g.position.y, z: g.position.z };
-    state.accRot = { x: THREE.MathUtils.radToDeg(g.rotation.x), y: THREE.MathUtils.radToDeg(g.rotation.y), z: THREE.MathUtils.radToDeg(g.rotation.z) };
-    state.accScale = g.scale.x;
-    $('grp-pos-x').value = g.position.x.toFixed(2);
-    $('grp-pos-y').value = g.position.y.toFixed(2);
-    $('grp-pos-z').value = g.position.z.toFixed(2);
+    const avgScale = (Math.abs(g.scale.x) + Math.abs(g.scale.y) + Math.abs(g.scale.z)) / 3;
+    const safeScale = clampNum(avgScale, 1, 0.05, 20);
+    state.accOffset = {
+      x: clampNum(g.position.x, 0, -50, 50),
+      y: clampNum(g.position.y, 0, -50, 50),
+      z: clampNum(g.position.z, 0, -50, 50)
+    };
+    state.accRot = {
+      x: clampNum(THREE.MathUtils.radToDeg(g.rotation.x), 0, -3600, 3600),
+      y: clampNum(THREE.MathUtils.radToDeg(g.rotation.y), 0, -3600, 3600),
+      z: clampNum(THREE.MathUtils.radToDeg(g.rotation.z), 0, -3600, 3600)
+    };
+    state.accScale = safeScale;
+    g.scale.setScalar(safeScale);
+    $('grp-pos-x').value = state.accOffset.x.toFixed(2);
+    $('grp-pos-y').value = state.accOffset.y.toFixed(2);
+    $('grp-pos-z').value = state.accOffset.z.toFixed(2);
     $('grp-rot-x').value = Math.round(state.accRot.x);
     $('grp-rot-y').value = Math.round(state.accRot.y);
     $('grp-rot-z').value = Math.round(state.accRot.z);
-    $('grp-scale').value = g.scale.x.toFixed(2);
+    $('grp-scale').value = safeScale.toFixed(2);
   }
 }
 
 function syncGroupInputs() {
   $('grp-attach').value = state.accAttach;
-  $('grp-pos-x').value = state.accOffset.x.toFixed(2);
-  $('grp-pos-y').value = state.accOffset.y.toFixed(2);
-  $('grp-pos-z').value = state.accOffset.z.toFixed(2);
-  $('grp-rot-x').value = Math.round(state.accRot.x);
-  $('grp-rot-y').value = Math.round(state.accRot.y);
-  $('grp-rot-z').value = Math.round(state.accRot.z);
-  $('grp-scale').value = state.accScale.toFixed(2);
+  $('grp-pos-x').value = clampNum(state.accOffset.x, 0, -50, 50).toFixed(2);
+  $('grp-pos-y').value = clampNum(state.accOffset.y, 0, -50, 50).toFixed(2);
+  $('grp-pos-z').value = clampNum(state.accOffset.z, 0, -50, 50).toFixed(2);
+  $('grp-rot-x').value = Math.round(clampNum(state.accRot.x, 0, -3600, 3600));
+  $('grp-rot-y').value = Math.round(clampNum(state.accRot.y, 0, -3600, 3600));
+  $('grp-rot-z').value = Math.round(clampNum(state.accRot.z, 0, -3600, 3600));
+  $('grp-scale').value = clampNum(state.accScale, 1, 0.05, 20).toFixed(2);
+}
+
+function syncShapeButtons() {
+  if (!state.selectedPartId) return;
+  const entry = state.accParts.find(p => p.id === state.selectedPartId);
+  if (!entry) return;
+  const shape = entry.data.shape || 'box';
+  document.querySelectorAll('.shape-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.shape === shape);
+  });
 }
 
 function renderPartsList() {
@@ -1004,7 +1133,8 @@ function renderPartsList() {
     icon.innerHTML = shapeIconSvg(entry.data.shape || 'box', entry.data.color || '#4a7ab8');
     const info = document.createElement('div');
     info.className = 'part-item-info';
-    info.innerHTML = '<div class="part-item-name">Part ' + (i + 1) + '</div><div class="part-item-type">' + ((entry.data.model_url || entry.data._pendingFile) ? 'MODEL' : (entry.data.shape || 'box')) + '</div>';
+    const typeLabel = (entry.data.model_url || entry.data._pendingFile) ? 'MODEL' : (entry.data.shape || 'box');
+    info.innerHTML = '<div class="part-item-name">Part ' + (i + 1) + '</div><div class="part-item-type">' + esc(typeLabel) + '</div>';
     const actions = document.createElement('div');
     actions.className = 'part-item-actions';
     const upBtn = document.createElement('button'); upBtn.textContent = '\u25B2'; upBtn.disabled = i === 0;
@@ -1052,6 +1182,10 @@ function shade(hex, percent) {
 
 async function addPart() {
   const data = defaultPartData();
+  data.color = '#ff8800';
+  const offset = 0.4;
+  data.position.x = (state.accParts.length % 4) * offset - 0.6;
+  data.position.y = Math.floor(state.accParts.length / 4) * offset;
   const entry = { id: data.id, data, mesh: null };
   state.accParts.push(entry);
   await rebuildAllParts();
@@ -1064,6 +1198,11 @@ async function deletePart(index) {
   if (state.accParts.length <= 1) { showToast('Cannot delete the last part', 'error'); return; }
   const entry = state.accParts[index];
   if (!confirm('Delete Part ' + (index + 1) + '?')) return;
+  if (entry.mesh && entry.mesh.parent) {
+    entry.mesh.parent.remove(entry.mesh);
+    disposeMesh(entry.mesh);
+  }
+  entry.mesh = null;
   state.accParts.splice(index, 1);
   if (state.selectedPartId === entry.id) state.selectedPartId = null;
   await rebuildAllParts();
@@ -1073,12 +1212,25 @@ async function deletePart(index) {
 async function duplicatePart(index) {
   if (index < 0 || index >= state.accParts.length) return;
   const orig = state.accParts[index];
+  if (!orig || !orig.data) return;
+  const origScale = normalizeScale(orig.data.scale);
   const clone = {
-    id: uid(), shape: orig.data.shape, color: orig.data.color,
-    position: { x: (orig.data.position.x || 0) + 0.3, y: orig.data.position.y || 0, z: orig.data.position.z || 0 },
-    rotation: { ...(orig.data.rotation || { x:0,y:0,z:0 }) },
-    scale: orig.data.scale || 1,
-    model_url: orig.data.model_url, _pendingFile: orig.data._pendingFile || null
+    id: uid(),
+    shape: orig.data.shape || 'box',
+    color: orig.data.color || '#4a7ab8',
+    position: {
+      x: clampNum(orig.data.position?.x, 0, -50, 50) + 0.5,
+      y: clampNum(orig.data.position?.y, 0, -50, 50),
+      z: clampNum(orig.data.position?.z, 0, -50, 50)
+    },
+    rotation: {
+      x: clampNum(orig.data.rotation?.x, 0, -360, 360),
+      y: clampNum(orig.data.rotation?.y, 0, -360, 360),
+      z: clampNum(orig.data.rotation?.z, 0, -360, 360)
+    },
+    scale: { x: origScale.x, y: origScale.y, z: origScale.z },
+    model_url: orig.data.model_url || null,
+    _pendingFile: orig.data._pendingFile || null
   };
   const entry = { id: clone.id, data: clone, mesh: null };
   state.accParts.splice(index + 1, 0, entry);
@@ -1116,22 +1268,34 @@ function updateBadge() {
 document.querySelectorAll('.tab[data-tab]').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab[data-tab]').forEach(x => x.classList.toggle('active', x === t));
-    document.querySelectorAll('#panel-edit, #panel-library').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.tab));
-    if (t.dataset.tab === 'library') renderAccessoriesList();
+    const isEdit = t.dataset.tab === 'edit';
+    const editPanel = $('panel-edit');
+    const libPanel = $('panel-library');
+    if (editPanel) editPanel.classList.toggle('active', isEdit);
+    if (libPanel) libPanel.classList.toggle('active', !isEdit);
+    if (!isEdit) renderAccessoriesList();
   });
 });
 document.querySelectorAll('.tab[data-ctab]').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab[data-ctab]').forEach(x => x.classList.toggle('active', x === t));
-    document.querySelectorAll('#panel-ctools, #panel-clibrary').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.ctab));
-    if (t.dataset.ctab === 'library') renderAccessoriesList2D();
+    const isTools = t.dataset.ctab === 'tools';
+    const toolsPanel = $('panel-ctools');
+    const libPanel = $('panel-clibrary');
+    if (toolsPanel) toolsPanel.classList.toggle('active', isTools);
+    if (libPanel) libPanel.classList.toggle('active', !isTools);
+    if (!isTools) renderAccessoriesList2D();
   });
 });
 document.querySelectorAll('.tab[data-ftab]').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab[data-ftab]').forEach(x => x.classList.toggle('active', x === t));
-    document.querySelectorAll('#panel-feditor, #panel-flibrary').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.ftab));
-    if (t.dataset.ftab === 'library') renderFacesList();
+    const isEditor = t.dataset.ftab === 'editor';
+    const editorPanel = $('panel-feditor');
+    const libPanel = $('panel-flibrary');
+    if (editorPanel) editorPanel.classList.toggle('active', isEditor);
+    if (libPanel) libPanel.classList.toggle('active', !isEditor);
+    if (!isEditor) renderFacesList();
   });
 });
 document.querySelectorAll('.mode-tab').forEach(t => {
@@ -1162,7 +1326,8 @@ document.querySelectorAll('.shape-btn').forEach(btn => {
     btn.classList.add('active');
     entry.data.shape = btn.dataset.shape;
     if (entry.data._pendingFile || entry.data.model_url) {
-      entry.data._pendingFile = null; entry.data.model_url = null;
+      entry.data._pendingFile = null;
+      entry.data.model_url = null;
       $('part-file-name').textContent = 'No model — using shape';
       $('part-file-name').classList.remove('has');
     }
@@ -1180,22 +1345,22 @@ $('grp-attach').addEventListener('change', () => {
 
 ['grp-pos-x','grp-pos-y','grp-pos-z'].forEach(id => {
   $(id).addEventListener('input', () => {
-    state.accOffset.x = parseFloat($('grp-pos-x').value) || 0;
-    state.accOffset.y = parseFloat($('grp-pos-y').value) || 0;
-    state.accOffset.z = parseFloat($('grp-pos-z').value) || 0;
+    state.accOffset.x = clampNum($('grp-pos-x').value, 0, -50, 50);
+    state.accOffset.y = clampNum($('grp-pos-y').value, 0, -50, 50);
+    state.accOffset.z = clampNum($('grp-pos-z').value, 0, -50, 50);
     applyGroupInputs();
   });
 });
 ['grp-rot-x','grp-rot-y','grp-rot-z'].forEach(id => {
   $(id).addEventListener('input', () => {
-    state.accRot.x = parseFloat($('grp-rot-x').value) || 0;
-    state.accRot.y = parseFloat($('grp-rot-y').value) || 0;
-    state.accRot.z = parseFloat($('grp-rot-z').value) || 0;
+    state.accRot.x = clampNum($('grp-rot-x').value, 0, -3600, 3600);
+    state.accRot.y = clampNum($('grp-rot-y').value, 0, -3600, 3600);
+    state.accRot.z = clampNum($('grp-rot-z').value, 0, -3600, 3600);
     applyGroupInputs();
   });
 });
 $('grp-scale').addEventListener('input', () => {
-  state.accScale = parseFloat($('grp-scale').value) || 1;
+  state.accScale = clampNum($('grp-scale').value, 1, 0.05, 20);
   applyGroupInputs();
 });
 
@@ -1203,10 +1368,10 @@ $('grp-scale').addEventListener('input', () => {
   $(id).addEventListener('input', () => {
     if (!state.selectedPartId) return;
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
-    if (!entry) return;
-    entry.data.position.x = parseFloat($('part-pos-x').value) || 0;
-    entry.data.position.y = parseFloat($('part-pos-y').value) || 0;
-    entry.data.position.z = parseFloat($('part-pos-z').value) || 0;
+    if (!entry || !entry.mesh) return;
+    entry.data.position.x = clampNum($('part-pos-x').value, 0, -100, 100);
+    entry.data.position.y = clampNum($('part-pos-y').value, 0, -100, 100);
+    entry.data.position.z = clampNum($('part-pos-z').value, 0, -100, 100);
     applyPartTransform(entry.mesh, entry.data);
   });
 });
@@ -1214,18 +1379,19 @@ $('grp-scale').addEventListener('input', () => {
   $(id).addEventListener('input', () => {
     if (!state.selectedPartId) return;
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
-    if (!entry) return;
-    entry.data.rotation.x = parseFloat($('part-rot-x').value) || 0;
-    entry.data.rotation.y = parseFloat($('part-rot-y').value) || 0;
-    entry.data.rotation.z = parseFloat($('part-rot-z').value) || 0;
+    if (!entry || !entry.mesh) return;
+    entry.data.rotation.x = clampNum($('part-rot-x').value, 0, -3600, 3600);
+    entry.data.rotation.y = clampNum($('part-rot-y').value, 0, -3600, 3600);
+    entry.data.rotation.z = clampNum($('part-rot-z').value, 0, -3600, 3600);
     applyPartTransform(entry.mesh, entry.data);
   });
 });
 $('part-scale').addEventListener('input', () => {
   if (!state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
-  if (!entry) return;
-  entry.data.scale = parseFloat($('part-scale').value) || 1;
+  if (!entry || !entry.mesh) return;
+  const s = clampNum($('part-scale').value, 1, 0.05, 20);
+  entry.data.scale = { x: s, y: s, z: s };
   applyPartTransform(entry.mesh, entry.data);
 });
 $('part-color').addEventListener('input', () => {
@@ -1245,7 +1411,6 @@ $('part-color').addEventListener('input', () => {
   }
   renderPartsList();
 });
-
 $('part-file-btn').addEventListener('click', () => {
   if (!state.selectedPartId) { showToast('Select a part first', 'error'); return; }
   $('part-file-input').click();
@@ -1255,7 +1420,8 @@ $('part-file-input').addEventListener('change', async (e) => {
   if (!f || !state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
   if (!entry) return;
-  entry.data._pendingFile = f; entry.data.model_url = null;
+  entry.data._pendingFile = f;
+  entry.data.model_url = null;
   await rebuildAllParts();
   selectPart(entry.id);
   $('part-file-name').textContent = f.name + ' (ready)';
@@ -1266,7 +1432,8 @@ $('part-clear-model').addEventListener('click', async () => {
   if (!state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
   if (!entry) return;
-  entry.data._pendingFile = null; entry.data.model_url = null;
+  entry.data._pendingFile = null;
+  entry.data.model_url = null;
   await rebuildAllParts();
   selectPart(entry.id);
   $('part-file-name').textContent = 'No model — using shape';
@@ -1278,7 +1445,8 @@ function setGizmoMode(mode) {
   state.gizmo.setMode(mode);
   state.gizmoMode = mode;
   document.querySelectorAll('.vtool').forEach(b => b.classList.remove('active'));
-  const el = $('vtool-' + mode); if (el) el.classList.add('active');
+  const el = $('vtool-' + mode);
+  if (el) el.classList.add('active');
   $('badge-mode').textContent = { translate: 'T', rotate: 'R', scale: 'S' }[mode];
 }
 $('vtool-translate').addEventListener('click', () => setGizmoMode('translate'));
@@ -1290,9 +1458,7 @@ $('vtool-reset').addEventListener('click', () => {
   state.orbit.target.set(0, 2.5, 0);
   state.orbit.update();
 });
-
 $('add-part-btn').addEventListener('click', () => addPart());
-
 $('acc-name').addEventListener('input', () => {
   state.accName = $('acc-name').value.trim() || 'New Accessory';
   updateBadge();
@@ -1305,13 +1471,22 @@ $('acc-save').addEventListener('click', async () => {
   if (!name) { showToast('Give it a name', 'error'); return; }
   if (!state.accParts.length) { showToast('Add at least one part', 'error'); return; }
   const btn = $('acc-save');
-  btn.disabled = true; btn.textContent = 'Saving...';
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
   try {
     for (const p of state.accParts) {
       if (!p.mesh) continue;
-      p.data.position = { x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z };
-      p.data.rotation = { x: THREE.MathUtils.radToDeg(p.mesh.rotation.x), y: THREE.MathUtils.radToDeg(p.mesh.rotation.y), z: THREE.MathUtils.radToDeg(p.mesh.rotation.z) };
-      p.data.scale = p.mesh.scale.x;
+      p.data.position = {
+        x: clampNum(p.mesh.position.x, 0, -100, 100),
+        y: clampNum(p.mesh.position.y, 0, -100, 100),
+        z: clampNum(p.mesh.position.z, 0, -100, 100)
+      };
+      p.data.rotation = {
+        x: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.x), 0, -3600, 3600),
+        y: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.y), 0, -3600, 3600),
+        z: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.z), 0, -3600, 3600)
+      };
+      p.data.scale = normalizeScale({ x: p.mesh.scale.x, y: p.mesh.scale.y, z: p.mesh.scale.z });
     }
     const serializedParts = [];
     for (const p of state.accParts) {
@@ -1321,28 +1496,49 @@ $('acc-save').addEventListener('click', async () => {
         const ext = (f.name.split('.').pop() || 'glb').toLowerCase();
         const safeExt = ['glb','gltf'].includes(ext) ? ext : 'glb';
         const path = state.user.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + safeExt;
-        const { error: upErr } = await sb.storage.from('accessory-models').upload(path, f, { cacheControl: '3600', upsert: false, contentType: f.type || 'model/gltf-binary' });
+        const { error: upErr } = await sb.storage.from('accessory-models').upload(path, f, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: f.type || 'model/gltf-binary'
+        });
         if (upErr) throw new Error('Upload failed: ' + upErr.message);
         const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
         modelUrl = urlData.publicUrl;
       }
+      const sc = normalizeScale(p.data.scale);
       serializedParts.push({
-        id: p.id, shape: p.data.shape || 'box', color: p.data.color || '#ff8800',
+        id: p.id,
+        shape: p.data.shape || 'box',
+        color: p.data.color || '#ff8800',
         position: { x: Number(p.data.position.x) || 0, y: Number(p.data.position.y) || 0, z: Number(p.data.position.z) || 0 },
         rotation: { x: Number(p.data.rotation.x) || 0, y: Number(p.data.rotation.y) || 0, z: Number(p.data.rotation.z) || 0 },
-        scale: Number(p.data.scale) || 1, model_url: modelUrl
+        scale: Math.max(sc.x, sc.y, sc.z),
+        scale_x: sc.x,
+        scale_y: sc.y,
+        scale_z: sc.z,
+        model_url: modelUrl
       });
     }
     const firstPart = serializedParts[0];
     const row = {
-      user_id: state.user.id, name,
+      user_id: state.user.id,
+      name,
       attach_part: state.accAttach,
-      offset_x: state.accOffset.x, offset_y: state.accOffset.y, offset_z: state.accOffset.z,
-      rot_x: state.accRot.x, rot_y: state.accRot.y, rot_z: state.accRot.z,
+      offset_x: state.accOffset.x,
+      offset_y: state.accOffset.y,
+      offset_z: state.accOffset.z,
+      rot_x: state.accRot.x,
+      rot_y: state.accRot.y,
+      rot_z: state.accRot.z,
       scale: state.accScale,
-      shape: firstPart.shape, color: firstPart.color, model_url: firstPart.model_url,
-      parts: serializedParts, category: 'accessory',
-      price: state.accPrice || 0, is_published: !!state.accPublish, is_public: true
+      shape: firstPart.shape,
+      color: firstPart.color,
+      model_url: firstPart.model_url,
+      parts: serializedParts,
+      category: 'accessory',
+      price: state.accPrice || 0,
+      is_published: !!state.accPublish,
+      is_public: true
     };
     if (state.editingId) {
       const { data, error } = await sb.from('custom_accessories').update(row).eq('id', state.editingId).select().single();
@@ -1363,7 +1559,8 @@ $('acc-save').addEventListener('click', async () => {
     console.error(err);
     showToast('Error: ' + err.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Save';
+    btn.disabled = false;
+    btn.textContent = 'Save';
   }
 });
 
@@ -1373,54 +1570,121 @@ $('acc-new').addEventListener('click', () => {
 });
 
 function resetToNew3D() {
+  for (const p of state.accParts) {
+    if (p.mesh && p.mesh.parent) {
+      p.mesh.parent.remove(p.mesh);
+      disposeMesh(p.mesh);
+    }
+  }
+  state.accParts = [];
+  state.selectedPartId = null;
   state.editingId = null;
   state.accName = 'New Accessory';
   state.accAttach = 'Head';
   state.accOffset = { x: 0, y: 0, z: 0 };
   state.accRot = { x: 0, y: 0, z: 0 };
-  state.accScale = 1; state.accPrice = 0; state.accPublish = false;
-  state.accParts = []; state.selectedPartId = null;
+  state.accScale = 1;
+  state.accPrice = 0;
+  state.accPublish = false;
   $('acc-name').value = '';
   $('acc-price').value = 0;
   $('acc-publish').checked = false;
   $('grp-attach').value = 'Head';
-  syncGroupInputs();
   $('part-file-name').textContent = 'No model — using shape';
   $('part-file-name').classList.remove('has');
-  const data = defaultPartData(); data.color = '#ff8800';
+  syncGroupInputs();
+  const data = defaultPartData();
+  data.color = '#ff8800';
   state.accParts.push({ id: data.id, data, mesh: null });
   attachGroupToPart();
   rebuildAllParts().then(() => selectPart(null));
 }
 
 async function loadAccessoryIntoEditor(acc) {
+  for (const p of state.accParts) {
+    if (p.mesh && p.mesh.parent) {
+      p.mesh.parent.remove(p.mesh);
+      disposeMesh(p.mesh);
+    }
+  }
+  state.accParts = [];
+  state.selectedPartId = null;
   state.editingId = acc.id;
   state.accName = acc.name || 'Untitled';
   state.accAttach = acc.attach_part || 'Head';
-  state.accOffset = { x: acc.offset_x || 0, y: acc.offset_y || 0, z: acc.offset_z || 0 };
-  state.accRot = { x: acc.rot_x || 0, y: acc.rot_y || 0, z: acc.rot_z || 0 };
-  state.accScale = acc.scale || 1;
+  state.accOffset = {
+    x: clampNum(acc.offset_x, 0, -50, 50),
+    y: clampNum(acc.offset_y, 0, -50, 50),
+    z: clampNum(acc.offset_z, 0, -50, 50)
+  };
+  state.accRot = {
+    x: clampNum(acc.rot_x, 0, -3600, 3600),
+    y: clampNum(acc.rot_y, 0, -3600, 3600),
+    z: clampNum(acc.rot_z, 0, -3600, 3600)
+  };
+  state.accScale = clampNum(acc.scale, 1, 0.05, 20);
   state.accPrice = acc.price || 0;
   state.accPublish = !!acc.is_published;
-  state.selectedPartId = null;
+
   let parts = acc.parts;
   if (typeof parts === 'string') { try { parts = JSON.parse(parts); } catch { parts = []; } }
   if (!Array.isArray(parts)) parts = [];
   if (!parts.length && (acc.shape || acc.model_url)) {
-    parts = [{ id: uid(), shape: acc.shape || 'box', color: acc.color || '#ff8800', position: { x:0, y:0, z:0 }, rotation: { x:0, y:0, z:0 }, scale: 1, model_url: acc.model_url || null }];
-    state.accOffset = { x: 0, y: 0, z: 0 }; state.accRot = { x: 0, y: 0, z: 0 }; state.accScale = 1;
+    parts = [{
+      id: uid(),
+      shape: acc.shape || 'box',
+      color: acc.color || '#ff8800',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1,
+      model_url: acc.model_url || null
+    }];
   }
-  if (!parts.length) parts = [{ id: uid(), shape: 'box', color: '#ff8800', position: { x:0, y:0, z:0 }, rotation: { x:0, y:0, z:0 }, scale: 1, model_url: null }];
-  state.accParts = parts.map(p => ({
-    id: p.id || uid(),
-    data: {
-      id: p.id || uid(), shape: p.shape || 'box', color: p.color || '#ff8800',
-      position: { x: Number(p.position?.x) || 0, y: Number(p.position?.y) || 0, z: Number(p.position?.z) || 0 },
-      rotation: { x: Number(p.rotation?.x) || 0, y: Number(p.rotation?.y) || 0, z: Number(p.rotation?.z) || 0 },
-      scale: Number(p.scale) || 1, model_url: p.model_url || null, _pendingFile: null
-    },
-    mesh: null
-  }));
+  if (!parts.length) {
+    parts = [{
+      id: uid(),
+      shape: 'box',
+      color: '#ff8800',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1,
+      model_url: null
+    }];
+  }
+  state.accParts = parts.map(p => {
+    let sc;
+    if (p.scale_x != null || p.scale_y != null || p.scale_z != null) {
+      sc = {
+        x: clampNum(p.scale_x, 1, 0.01, 50),
+        y: clampNum(p.scale_y, 1, 0.01, 50),
+        z: clampNum(p.scale_z, 1, 0.01, 50)
+      };
+    } else {
+      sc = normalizeScale(p.scale);
+    }
+    return {
+      id: p.id || uid(),
+      data: {
+        id: p.id || uid(),
+        shape: p.shape || 'box',
+        color: p.color || '#ff8800',
+        position: {
+          x: clampNum(p.position?.x, 0, -100, 100),
+          y: clampNum(p.position?.y, 0, -100, 100),
+          z: clampNum(p.position?.z, 0, -100, 100)
+        },
+        rotation: {
+          x: clampNum(p.rotation?.x, 0, -3600, 3600),
+          y: clampNum(p.rotation?.y, 0, -3600, 3600),
+          z: clampNum(p.rotation?.z, 0, -3600, 3600)
+        },
+        scale: sc,
+        model_url: p.model_url || null,
+        _pendingFile: null
+      },
+      mesh: null
+    };
+  });
   $('acc-name').value = state.accName;
   $('acc-price').value = state.accPrice;
   $('acc-publish').checked = state.accPublish;
@@ -1436,22 +1700,28 @@ function renderAccessoriesList() {
   const listEl = $('acc-list');
   if (!listEl) return;
   const threeD = state.accessories.filter(a => (a.category || 'accessory') === 'accessory');
-  if (!threeD.length) { listEl.innerHTML = '<div class="acc-list-empty">No 3D accessories yet.</div>'; return; }
+  if (!threeD.length) {
+    listEl.innerHTML = '<div class="acc-list-empty">No 3D accessories yet.</div>';
+    return;
+  }
   listEl.innerHTML = '';
   const sorted = [...threeD].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
     const item = document.createElement('div');
     item.className = 'acc-item' + (state.editingId === acc.id ? ' selected' : '');
-    const thumbEl = document.createElement('div'); thumbEl.className = 'acc-item-thumb';
-    const infoEl = document.createElement('div'); infoEl.className = 'acc-item-info';
+    const thumbEl = document.createElement('div');
+    thumbEl.className = 'acc-item-thumb';
+    const infoEl = document.createElement('div');
+    infoEl.className = 'acc-item-info';
     const partCount = (Array.isArray(acc.parts) ? acc.parts.length : 1);
     infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.attach_part || 'Head') + ' · ' + partCount + ' parts' + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
-    const actionsEl = document.createElement('div'); actionsEl.className = 'acc-item-actions';
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'acc-item-actions';
     const editBtn = document.createElement('button');
-    editBtn.className = 'edit'; editBtn.textContent = 'E';
+    editBtn.className = 'edit'; editBtn.textContent = 'E'; editBtn.title = 'Edit';
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); loadAccessoryIntoEditor(acc); });
     const delBtn = document.createElement('button');
-    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.className = 'del'; delBtn.textContent = 'X'; delBtn.title = 'Delete';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!confirm('Delete "' + acc.name + '"?')) return;
@@ -1461,8 +1731,11 @@ function renderAccessoriesList() {
       if (state.editingId === acc.id) resetToNew3D();
       renderAccessoriesList();
     });
-    actionsEl.appendChild(editBtn); actionsEl.appendChild(delBtn);
-    item.appendChild(thumbEl); item.appendChild(infoEl); item.appendChild(actionsEl);
+    actionsEl.appendChild(editBtn);
+    actionsEl.appendChild(delBtn);
+    item.appendChild(thumbEl);
+    item.appendChild(infoEl);
+    item.appendChild(actionsEl);
     item.addEventListener('click', () => loadAccessoryIntoEditor(acc));
     listEl.appendChild(item);
     mountAccThumb(thumbEl, acc);
@@ -1484,16 +1757,30 @@ function mountAccThumb(container, acc) {
   const group = new THREE.Group(); scene.add(group);
   let parts = acc.parts;
   if (typeof parts === 'string') { try { parts = JSON.parse(parts); } catch { parts = []; } }
-  if (!Array.isArray(parts) || !parts.length) parts = [{ shape: acc.shape || 'box', color: acc.color || '#ff8800', position: { x:0,y:0,z:0 }, rotation: { x:0,y:0,z:0 }, scale: 1 }];
+  if (!Array.isArray(parts) || !parts.length) {
+    parts = [{
+      shape: acc.shape || 'box',
+      color: acc.color || '#ff8800',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1
+    }];
+  }
   for (const p of parts) {
     const g = buildShapeMesh(p.shape || 'box', p.color || '#ff8800');
-    g.position.set(Number(p.position?.x) || 0, Number(p.position?.y) || 0, Number(p.position?.z) || 0);
+    g.position.set(clampNum(p.position?.x, 0, -50, 50), clampNum(p.position?.y, 0, -50, 50), clampNum(p.position?.z, 0, -50, 50));
     g.rotation.set(
-      THREE.MathUtils.degToRad(Number(p.rotation?.x) || 0),
-      THREE.MathUtils.degToRad(Number(p.rotation?.y) || 0),
-      THREE.MathUtils.degToRad(Number(p.rotation?.z) || 0)
+      THREE.MathUtils.degToRad(clampNum(p.rotation?.x, 0, -360, 360)),
+      THREE.MathUtils.degToRad(clampNum(p.rotation?.y, 0, -360, 360)),
+      THREE.MathUtils.degToRad(clampNum(p.rotation?.z, 0, -360, 360))
     );
-    g.scale.setScalar(Number(p.scale) || 1);
+    let sc;
+    if (p.scale_x != null || p.scale_y != null || p.scale_z != null) {
+      sc = { x: clampNum(p.scale_x, 1, 0.01, 50), y: clampNum(p.scale_y, 1, 0.01, 50), z: clampNum(p.scale_z, 1, 0.01, 50) };
+    } else {
+      sc = normalizeScale(p.scale);
+    }
+    g.scale.set(sc.x, sc.y, sc.z);
     group.add(g);
   }
   const resize = () => {
@@ -1516,16 +1803,15 @@ function mountAccThumb(container, acc) {
 }
 
 /* ============================================================
-   CLOTHING MODE
+   CLOTHING MODE — FIXED: canvases transparentes + base mesh
    ============================================================ */
 const CL_PART_NAMES = ['torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
 
-function createPaintCanvas(fillColor) {
+function createPaintCanvas() {
+  // Canvas começa TRANSPARENTE (não preenche).
+  // A cor base é mostrada por uma mesh por baixo, não pelo canvas.
   const c = document.createElement('canvas');
   c.width = 256; c.height = 256;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = fillColor || '#ffffff';
-  ctx.fillRect(0, 0, c.width, c.height);
   return c;
 }
 
@@ -1580,7 +1866,6 @@ function initClothingScene() {
   dl2.position.set(-5, 4, -6); scene.add(dl2);
 
   const colors = normalizeColors(state.profile?.avatar_colors);
-
   state.clPartData = {};
 
   function makePartData(part) {
@@ -1588,7 +1873,7 @@ function initClothingScene() {
     const textures = [];
     const materials = [];
     for (let face = 0; face < 6; face++) {
-      const c = createPaintCanvas(baseColorForPart(part));
+      const c = createPaintCanvas();
       canvases.push(c);
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -1596,7 +1881,15 @@ function initClothingScene() {
       tex.magFilter = THREE.LinearFilter;
       tex.generateMipmaps = false;
       textures.push(tex);
-      materials.push(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, color: 0xffffff }));
+      materials.push(new THREE.MeshStandardMaterial({
+        map: tex,
+        color: 0xffffff,
+        roughness: 0.75,
+        transparent: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
+      }));
     }
     return { canvases, textures, materials };
   }
@@ -1609,15 +1902,26 @@ function initClothingScene() {
   const root = new THREE.Group();
   root.position.y = -2.625;
 
+  /* ---------- TORSO (base + paint overlay) ---------- */
+  const torsoGeo = new THREE.BoxGeometry(2, 2, 1);
+  const torsoBaseMat = new THREE.MeshStandardMaterial({
+    color: hexNum(baseColorForPart('torso')),
+    roughness: 0.75
+  });
+  const torsoBaseMesh = new THREE.Mesh(torsoGeo, torsoBaseMat);
+  torsoBaseMesh.position.set(0, 3, 0);
+  torsoBaseMesh.castShadow = true; torsoBaseMesh.receiveShadow = true;
+  root.add(torsoBaseMesh);
+
   const torsoData = makePartData('torso');
   state.clPartData.torso = torsoData;
-  const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 1), torsoData.materials);
+  const torsoMesh = new THREE.Mesh(torsoGeo, torsoData.materials);
   torsoMesh.position.set(0, 3, 0);
-  torsoMesh.castShadow = true; torsoMesh.receiveShadow = true;
   attachPart('torso', torsoMesh);
   root.add(torsoMesh);
   state.clParts.torso = torsoMesh;
 
+  /* ---------- HEAD (não pintável) ---------- */
   const headMat = new THREE.MeshStandardMaterial({ color: hexNum(colors.head), roughness: 0.7 });
   const headMesh = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.25, 1.25), headMat);
   headMesh.position.set(0, 4.625, 0);
@@ -1636,13 +1940,19 @@ function initClothingScene() {
   root.add(headMesh);
   state.clParts.head = headMesh;
 
+  /* ---------- LEGS ---------- */
   const legLGroup = new THREE.Group();
   legLGroup.position.set(-0.5, 2, 0);
+  const legLGeo = new THREE.BoxGeometry(1, 2, 1);
+  const legLBaseMat = new THREE.MeshStandardMaterial({ color: hexNum(baseColorForPart('leftLeg')), roughness: 0.75 });
+  const legLBase = new THREE.Mesh(legLGeo, legLBaseMat);
+  legLBase.position.set(0, -1, 0);
+  legLBase.castShadow = true; legLBase.receiveShadow = true;
+  legLGroup.add(legLBase);
   const legLData = makePartData('leftLeg');
   state.clPartData.leftLeg = legLData;
-  const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), legLData.materials);
+  const legLMesh = new THREE.Mesh(legLGeo, legLData.materials);
   legLMesh.position.set(0, -1, 0);
-  legLMesh.castShadow = true; legLMesh.receiveShadow = true;
   attachPart('leftLeg', legLMesh);
   legLGroup.add(legLMesh);
   root.add(legLGroup);
@@ -1651,24 +1961,35 @@ function initClothingScene() {
 
   const legRGroup = new THREE.Group();
   legRGroup.position.set(0.5, 2, 0);
+  const legRGeo = new THREE.BoxGeometry(1, 2, 1);
+  const legRBaseMat = new THREE.MeshStandardMaterial({ color: hexNum(baseColorForPart('rightLeg')), roughness: 0.75 });
+  const legRBase = new THREE.Mesh(legRGeo, legRBaseMat);
+  legRBase.position.set(0, -1, 0);
+  legRBase.castShadow = true; legRBase.receiveShadow = true;
+  legRGroup.add(legRBase);
   const legRData = makePartData('rightLeg');
   state.clPartData.rightLeg = legRData;
-  const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), legRData.materials);
+  const legRMesh = new THREE.Mesh(legRGeo, legRData.materials);
   legRMesh.position.set(0, -1, 0);
-  legRMesh.castShadow = true; legRMesh.receiveShadow = true;
   attachPart('rightLeg', legRMesh);
   legRGroup.add(legRMesh);
   root.add(legRGroup);
   state.clParts.rightLeg = legRMesh;
   state.clParts.legRGroup = legRGroup;
 
+  /* ---------- ARMS ---------- */
   const armLGroup = new THREE.Group();
   armLGroup.position.set(-1.5, 4, 0);
+  const armLGeo = new THREE.BoxGeometry(1, 2, 1);
+  const armLBaseMat = new THREE.MeshStandardMaterial({ color: hexNum(baseColorForPart('leftArm')), roughness: 0.75 });
+  const armLBase = new THREE.Mesh(armLGeo, armLBaseMat);
+  armLBase.position.set(0, -1, 0);
+  armLBase.castShadow = true; armLBase.receiveShadow = true;
+  armLGroup.add(armLBase);
   const armLData = makePartData('leftArm');
   state.clPartData.leftArm = armLData;
-  const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), armLData.materials);
+  const armLMesh = new THREE.Mesh(armLGeo, armLData.materials);
   armLMesh.position.set(0, -1, 0);
-  armLMesh.castShadow = true; armLMesh.receiveShadow = true;
   attachPart('leftArm', armLMesh);
   armLGroup.add(armLMesh);
   root.add(armLGroup);
@@ -1677,11 +1998,16 @@ function initClothingScene() {
 
   const armRGroup = new THREE.Group();
   armRGroup.position.set(1.5, 4, 0);
+  const armRGeo = new THREE.BoxGeometry(1, 2, 1);
+  const armRBaseMat = new THREE.MeshStandardMaterial({ color: hexNum(baseColorForPart('rightArm')), roughness: 0.75 });
+  const armRBase = new THREE.Mesh(armRGeo, armRBaseMat);
+  armRBase.position.set(0, -1, 0);
+  armRBase.castShadow = true; armRBase.receiveShadow = true;
+  armRGroup.add(armRBase);
   const armRData = makePartData('rightArm');
   state.clPartData.rightArm = armRData;
-  const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), armRData.materials);
+  const armRMesh = new THREE.Mesh(armRGeo, armRData.materials);
   armRMesh.position.set(0, -1, 0);
-  armRMesh.castShadow = true; armRMesh.receiveShadow = true;
   attachPart('rightArm', armRMesh);
   armRGroup.add(armRMesh);
   root.add(armRGroup);
@@ -1754,7 +2080,6 @@ function clRaycast(e) {
   const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
   const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
   state.clRaycaster.setFromCamera({ x: nx, y: ny }, state.clCamera);
-
   const meshes = [];
   for (const part of CL_PART_NAMES) {
     const m = state.clParts[part];
@@ -1771,14 +2096,12 @@ function clOnPointerDown(e) {
   state.clLastPaint = null;
   clTryPaint(e);
 }
-
 function clOnPointerMove(e) {
   clUpdateHover(e);
   if (!state.clPointerDown || e.buttons !== 1) return;
   e.preventDefault();
   clTryPaint(e);
 }
-
 function clOnPointerUp() {
   state.clPointerDown = false;
   state.clLastPaint = null;
@@ -1838,13 +2161,13 @@ function clPaintBrush(part, faceIndex, uv, isEraser) {
   const x = uv.x * canvas.width;
   const y = (1 - uv.y) * canvas.height;
   const r = state.clSize / 2;
-  const color = isEraser ? baseColorForPart(part) : state.clColor;
 
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = state.clSize;
+  ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+  ctx.fillStyle = isEraser ? 'rgba(0,0,0,1)' : state.clColor;
+  ctx.strokeStyle = ctx.fillStyle;
 
   const last = state.clLastPaint;
   if (last && last.part === part && last.faceIndex === faceIndex) {
@@ -1866,7 +2189,7 @@ function clPaintBrush(part, faceIndex, uv, isEraser) {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
-
+  ctx.globalCompositeOperation = 'source-over';
   state.clLastPaint = { part, faceIndex, x, y };
   markClothingTextureDirty(part, faceIndex);
 }
@@ -1876,6 +2199,7 @@ function clFillFace(part, faceIndex, color) {
   if (!partData) return;
   const canvas = partData.canvases[faceIndex];
   const ctx = canvas.getContext('2d');
+  ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   markClothingTextureDirty(part, faceIndex);
@@ -1886,6 +2210,7 @@ function clFillFaceWithImage(part, faceIndex, img) {
   if (!partData) return;
   const canvas = partData.canvases[faceIndex];
   const ctx = canvas.getContext('2d');
+  ctx.globalCompositeOperation = 'source-over';
   const pattern = ctx.createPattern(img, 'repeat');
   if (pattern) {
     ctx.fillStyle = pattern;
@@ -1904,7 +2229,13 @@ function clPickColor(part, faceIndex, uv) {
   const x = Math.max(0, Math.min(canvas.width - 1, Math.floor(uv.x * canvas.width)));
   const y = Math.max(0, Math.min(canvas.height - 1, Math.floor((1 - uv.y) * canvas.height)));
   const px = ctx.getImageData(x, y, 1, 1).data;
-  const hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  // Se o pixel for transparente, pega a cor base do avatar
+  let hex;
+  if (px[3] < 10) {
+    hex = baseColorForPart(part);
+  } else {
+    hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  }
   state.clColor = hex;
   $('cl-color').value = hex;
   $('cl-color-hex').textContent = hex;
@@ -1916,7 +2247,6 @@ function clPickColor(part, faceIndex, uv) {
 
 const _dirtyClothingTextures = new Set();
 let _clothingRafScheduled = false;
-
 function markClothingTextureDirty(part, faceIndex) {
   _dirtyClothingTextures.add(part + '|' + faceIndex);
   if (_clothingRafScheduled) return;
@@ -1937,10 +2267,10 @@ function applyClothingPose() {
   const groups = state.clParts;
   if (!groups || !groups.armLGroup) return;
   const poses = {
-    front:  { armL: { x: 0,    z: 0 },    armR: { x: 0,    z: 0 },    legL: { x: 0 },    legR: { x: 0 } },
-    apose:  { armL: { x: 0,    z: -0.45 },armR: { x: 0,    z: 0.45 }, legL: { x: 0 },    legR: { x: 0 } },
-    armsup: { armL: { x: 0,    z: -2.7 }, armR: { x: 0,    z: 2.7 },  legL: { x: 0 },    legR: { x: 0 } },
-    walk:   { armL: { x: -0.6, z: 0 },    armR: { x: 0.6,  z: 0 },    legL: { x: 0.4 },  legR: { x: -0.4 } },
+    front:  { armL: { x: 0, z: 0 },      armR: { x: 0, z: 0 },      legL: { x: 0 },   legR: { x: 0 } },
+    apose:  { armL: { x: 0, z: -0.45 },  armR: { x: 0, z: 0.45 },   legL: { x: 0 },   legR: { x: 0 } },
+    armsup: { armL: { x: 0, z: -2.7 },   armR: { x: 0, z: 2.7 },    legL: { x: 0 },   legR: { x: 0 } },
+    walk:   { armL: { x: -0.6, z: 0 },   armR: { x: 0.6, z: 0 },    legL: { x: 0.4 }, legR: { x: -0.4 } }
   };
   const p = poses[state.clPose] || poses.front;
   groups.armLGroup.rotation.set(p.armL.x, 0, p.armL.z);
@@ -1969,15 +2299,11 @@ function startClothingLoop() {
   };
   tick();
 }
-
 function stopClothingLoop() {
   _clTickStarted = false;
   if (state.clRaf) { cancelAnimationFrame(state.clRaf); state.clRaf = 0; }
 }
 
-/* ============================================================
-   CLOTHING UI BINDINGS
-   ============================================================ */
 document.querySelectorAll('[data-cltool]').forEach(b => {
   b.addEventListener('click', () => {
     state.clTool = b.dataset.cltool;
@@ -1986,7 +2312,6 @@ document.querySelectorAll('[data-cltool]').forEach(b => {
     if (state.clTool === 'image' && !state.clImage) $('cl-image-input').click();
   });
 });
-
 document.querySelectorAll('[data-cltype]').forEach(b => {
   b.addEventListener('click', () => {
     state.clType = b.dataset.cltype;
@@ -1997,7 +2322,6 @@ document.querySelectorAll('[data-cltype]').forEach(b => {
     else note.textContent = 'Pants: paint both legs.';
   });
 });
-
 document.querySelectorAll('[data-clpose]').forEach(b => {
   b.addEventListener('click', () => {
     state.clPose = b.dataset.clpose;
@@ -2005,7 +2329,6 @@ document.querySelectorAll('[data-clpose]').forEach(b => {
     applyClothingPose();
   });
 });
-
 $('cl-color').addEventListener('input', () => {
   state.clColor = $('cl-color').value;
   $('cl-color-hex').textContent = state.clColor;
@@ -2038,38 +2361,31 @@ $('cl-reset-all').addEventListener('click', () => {
   if (!confirm('Clear all painted parts?')) return;
   for (const part of Object.keys(state.clPartData)) {
     const data = state.clPartData[part];
-    const base = baseColorForPart(part);
     for (let fi = 0; fi < 6; fi++) {
       const ctx = data.canvases[fi].getContext('2d');
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+      ctx.clearRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
       data.textures[fi].needsUpdate = true;
     }
   }
 });
-
 $('cl-reset-selected').addEventListener('click', () => {
   const part = state.clHoveredPart;
   if (!part) { showToast('Hover a body part first', 'error'); return; }
   if (!clothingPartsForType().includes(part)) { showToast('This part is not active', 'error'); return; }
   const data = state.clPartData[part];
   if (!data) return;
-  const base = baseColorForPart(part);
   for (let fi = 0; fi < 6; fi++) {
     const ctx = data.canvases[fi].getContext('2d');
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+    ctx.clearRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
     data.textures[fi].needsUpdate = true;
   }
 });
-
 $('cl-cam-reset').addEventListener('click', () => {
   if (!state.clCamera || !state.clOrbit) return;
   state.clCamera.position.set(0, 0, 8);
   state.clOrbit.target.set(0, 0, 0);
   state.clOrbit.update();
 });
-
 $('cl-new').addEventListener('click', () => {
   if (!confirm('Start new clothing? Current painting will be lost.')) return;
   resetToNewClothing();
@@ -2100,11 +2416,9 @@ function resetToNewClothing() {
   applyClothingPose();
   for (const part of Object.keys(state.clPartData)) {
     const data = state.clPartData[part];
-    const base = baseColorForPart(part);
     for (let fi = 0; fi < 6; fi++) {
       const ctx = data.canvases[fi].getContext('2d');
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+      ctx.clearRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
       data.textures[fi].needsUpdate = true;
     }
   }
@@ -2119,8 +2433,7 @@ function combineToAtlas(part) {
   canvas.width = 512;
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // NÃO preenche com branco — mantém transparente onde não há pintura.
   const cellW = 512 / 2;
   const cellH = 512 / 3;
   const layout = [
@@ -2129,7 +2442,7 @@ function combineToAtlas(part) {
     { col: 0, row: 0 },
     { col: 1, row: 0 },
     { col: 0, row: 2 },
-    { col: 1, row: 2 },
+    { col: 1, row: 2 }
   ];
   for (let f = 0; f < 6; f++) {
     const { col, row } = layout[f];
@@ -2197,17 +2510,23 @@ function renderAccessoriesList2D() {
   const listEl = $('acc-list-2d');
   if (!listEl) return;
   const clothing = state.accessories.filter(a => ['shirt','tshirt','pants'].includes(a.category));
-  if (!clothing.length) { listEl.innerHTML = '<div class="acc-list-empty">No clothing yet.</div>'; return; }
+  if (!clothing.length) {
+    listEl.innerHTML = '<div class="acc-list-empty">No clothing yet.</div>';
+    return;
+  }
   listEl.innerHTML = '';
   const sorted = [...clothing].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
     const item = document.createElement('div');
     item.className = 'acc-item';
-    const thumbEl = document.createElement('div'); thumbEl.className = 'acc-item-thumb';
+    const thumbEl = document.createElement('div');
+    thumbEl.className = 'acc-item-thumb';
     if (acc.texture_url) { const img = document.createElement('img'); img.src = acc.texture_url; thumbEl.appendChild(img); }
-    const infoEl = document.createElement('div'); infoEl.className = 'acc-item-info';
+    const infoEl = document.createElement('div');
+    infoEl.className = 'acc-item-info';
     infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.category) + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
-    const actionsEl = document.createElement('div'); actionsEl.className = 'acc-item-actions';
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'acc-item-actions';
     const delBtn = document.createElement('button');
     delBtn.className = 'del'; delBtn.textContent = 'X';
     delBtn.addEventListener('click', async (e) => {
@@ -2219,7 +2538,9 @@ function renderAccessoriesList2D() {
       renderAccessoriesList2D();
     });
     actionsEl.appendChild(delBtn);
-    item.appendChild(thumbEl); item.appendChild(infoEl); item.appendChild(actionsEl);
+    item.appendChild(thumbEl);
+    item.appendChild(infoEl);
+    item.appendChild(actionsEl);
     listEl.appendChild(item);
   }
 }
@@ -2235,7 +2556,6 @@ function resetFacePreview() {
   img.style.backgroundImage = '';
   def.style.display = 'block';
 }
-
 function setFacePreviewFromUrl(url) {
   const img = $('face-preview-img');
   const def = $('face-preview-default');
@@ -2246,7 +2566,6 @@ function setFacePreviewFromUrl(url) {
   img.style.display = 'block';
   def.style.display = 'none';
 }
-
 function resetToNewFace() {
   state.faceEditingId = null;
   state.faceName = 'New Face';
@@ -2262,7 +2581,6 @@ function resetToNewFace() {
   resetFacePreview();
   renderFacesList();
 }
-
 function loadFaceIntoEditor(acc) {
   state.faceEditingId = acc.id;
   state.faceName = acc.name || 'Untitled';
@@ -2284,12 +2602,14 @@ function loadFaceIntoEditor(acc) {
   }
   showToast('Loaded: ' + state.faceName);
 }
-
 function renderFacesList() {
   const listEl = $('acc-list-face');
   if (!listEl) return;
   const faces = state.accessories.filter(a => a.category === 'face');
-  if (!faces.length) { listEl.innerHTML = '<div class="acc-list-empty">No faces yet. Create one in the editor.</div>'; return; }
+  if (!faces.length) {
+    listEl.innerHTML = '<div class="acc-list-empty">No faces yet. Create one in the editor.</div>';
+    return;
+  }
   listEl.innerHTML = '';
   const sorted = [...faces].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
@@ -2311,12 +2631,10 @@ function renderFacesList() {
     const actionsEl = document.createElement('div');
     actionsEl.className = 'acc-item-actions';
     const editBtn = document.createElement('button');
-    editBtn.className = 'edit'; editBtn.textContent = 'E';
-    editBtn.title = 'Edit';
+    editBtn.className = 'edit'; editBtn.textContent = 'E'; editBtn.title = 'Edit';
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); loadFaceIntoEditor(acc); });
     const delBtn = document.createElement('button');
-    delBtn.className = 'del'; delBtn.textContent = 'X';
-    delBtn.title = 'Delete';
+    delBtn.className = 'del'; delBtn.textContent = 'X'; delBtn.title = 'Delete';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!confirm('Delete "' + acc.name + '"?')) return;
@@ -2335,13 +2653,10 @@ function renderFacesList() {
     listEl.appendChild(item);
   }
 }
-
 $('face-name').addEventListener('input', () => { state.faceName = $('face-name').value.trim() || 'New Face'; });
 $('face-price').addEventListener('input', () => { state.facePrice = parseInt($('face-price').value) || 0; });
 $('face-publish').addEventListener('change', () => { state.facePublish = $('face-publish').checked; });
-
 $('face-file-btn').addEventListener('click', () => $('face-file-input').click());
-
 $('face-file-input').addEventListener('change', (e) => {
   const f = e.target.files[0];
   if (!f) return;
@@ -2356,7 +2671,6 @@ $('face-file-input').addEventListener('change', (e) => {
   $('face-file-name').classList.add('has');
   e.target.value = '';
 });
-
 $('face-clear-image').addEventListener('click', () => {
   state.faceImageFile = null;
   state.faceImageUrl = null;
@@ -2364,18 +2678,15 @@ $('face-clear-image').addEventListener('click', () => {
   $('face-file-name').classList.remove('has');
   resetFacePreview();
 });
-
 $('face-save').addEventListener('click', async () => {
   const name = $('face-name').value.trim();
   if (!name) { showToast('Give it a name', 'error'); return; }
   if (!state.faceImageFile && !state.faceImageUrl) { showToast('Upload a face image first', 'error'); return; }
-
   const btn = $('face-save');
   btn.disabled = true;
   btn.textContent = 'Saving...';
   try {
     let textureUrl = state.faceImageUrl;
-
     if (state.faceImageFile) {
       const f = state.faceImageFile;
       const ext = (f.name.split('.').pop() || 'png').toLowerCase();
@@ -2388,7 +2699,6 @@ $('face-save').addEventListener('click', async () => {
       const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
       textureUrl = urlData.publicUrl;
     }
-
     const row = {
       user_id: state.user.id,
       name,
@@ -2406,7 +2716,6 @@ $('face-save').addEventListener('click', async () => {
       is_published: !!state.facePublish,
       is_public: true
     };
-
     if (state.faceEditingId) {
       const { data, error } = await sb.from('custom_accessories').update(row).eq('id', state.faceEditingId).select().single();
       if (error) throw error;
@@ -2420,7 +2729,6 @@ $('face-save').addEventListener('click', async () => {
       state.faceEditingId = data.id;
       showToast('Face created!', 'success');
     }
-
     state.faceImageFile = null;
     state.faceImageUrl = textureUrl;
     renderFacesList();
@@ -2432,7 +2740,6 @@ $('face-save').addEventListener('click', async () => {
     btn.textContent = 'Save Face';
   }
 });
-
 $('face-new').addEventListener('click', () => {
   if (!confirm('Start a new face? Unsaved work will be lost.')) return;
   resetToNewFace();
@@ -2471,9 +2778,24 @@ function mountHeaderAvatar() {
   };
   resize();
   let raf = 0, alive = true;
-  const tick = () => { if (!alive) return; group.rotation.y += 0.012; renderer.render(scene, camera); raf = requestAnimationFrame(tick); };
+  const tick = () => {
+    if (!alive) return;
+    group.rotation.y += 0.012;
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(tick);
+  };
   tick();
-  state.headerAvatarViewer = { dispose() { alive = false; if (raf) cancelAnimationFrame(raf); torso.geometry.dispose(); matTorso.dispose(); head.geometry.dispose(); matHead.dispose(); renderer.dispose(); } };
+  state.headerAvatarViewer = {
+    dispose() {
+      alive = false;
+      if (raf) cancelAnimationFrame(raf);
+      torso.geometry.dispose();
+      matTorso.dispose();
+      head.geometry.dispose();
+      matHead.dispose();
+      renderer.dispose();
+    }
+  };
 }
 
 /* ============================================================
@@ -2486,7 +2808,7 @@ document.addEventListener('keydown', (e) => {
   if (k === 'w') setGizmoMode('translate');
   if (k === 'e') setGizmoMode('rotate');
   if (k === 'r') setGizmoMode('scale');
-  if (k === 'delete' && state.selectedPartId) {
+  if ((k === 'delete' || k === 'backspace') && state.selectedPartId) {
     const idx = state.accParts.findIndex(p => p.id === state.selectedPartId);
     if (idx >= 0) deletePart(idx);
   }
