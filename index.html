@@ -1454,7 +1454,6 @@ async function confirmPurchase() {
   btn.textContent = 'Processing...';
 
   try {
-    // Chamada atômica no servidor: debita comprador, credita vendedor, registra posse
     const { data, error } = await sb.rpc('buy_item', { item_id_param: item.id });
 
     if (error) throw error;
@@ -1475,12 +1474,15 @@ async function confirmPurchase() {
       return;
     }
 
-    // Atualizar estado local com o resultado da RPC
+    /* Sincroniza saldo */
     state.blox = Number(data.new_balance);
-    state.ownedItems = new Set(data.owned_items || []);
     setBlox(state.blox);
 
-    // Auto-equip se marcado
+    /* Sincroniza inventário direto da RPC (mais confiável que local) */
+    const ownedArr = Array.isArray(data.owned_items) ? data.owned_items : [];
+    state.ownedItems = new Set(ownedArr);
+
+    /* Auto-equip */
     if (autoEquip) {
       const slot = slotForItem(item);
       if (isAttachmentSlot(slot)) {
@@ -1491,7 +1493,12 @@ async function confirmPurchase() {
       } else {
         state.equipped[slot] = item.id;
       }
-      await persistItems();
+      /* Só persiste equipped_items — NÃO persiste owned_items de novo */
+      try {
+        await sb.from('profiles').update({
+          equipped_items: state.equipped
+        }).eq('id', state.user.id);
+      } catch (e) { console.warn('persistEquipped failed', e); }
     }
 
     closePurchaseModal();
