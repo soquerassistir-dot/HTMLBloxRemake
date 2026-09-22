@@ -2211,13 +2211,39 @@ function clFillFaceWithImage(part, faceIndex, img) {
   const canvas = partData.canvases[faceIndex];
   const ctx = canvas.getContext('2d');
   ctx.globalCompositeOperation = 'source-over';
-  const pattern = ctx.createPattern(img, 'repeat');
-  if (pattern) {
-    ctx.fillStyle = pattern;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  /* Prepara a imagem num canvas offscreen do MESMO tamanho do canvas alvo.
+     Assim a imagem é "esticada" para caber perfeitamente na face.
+     Sem isso, createPattern usa 1:1 do PNG e só mostra um canto. */
+  const off = document.createElement('canvas');
+  off.width = canvas.width;
+  off.height = canvas.height;
+  const offCtx = off.getContext('2d');
+
+  const iw = img.naturalWidth || img.width || 1;
+  const ih = img.naturalHeight || img.height || 1;
+
+  
+  const smallImage = iw < 128 || ih < 128;
+  const tileSize = 128;
+
+  if (smallImage) {
+    off.width = tileSize;
+    off.height = tileSize;
+    offCtx.drawImage(img, 0, 0, tileSize, tileSize);
+    const pattern = ctx.createPattern(off, 'repeat');
+    if (pattern) {
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+    }
   } else {
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Estica para preencher toda a face
+    offCtx.drawImage(img, 0, 0, off.width, off.height);
+    ctx.drawImage(off, 0, 0);
   }
+
   markClothingTextureDirty(part, faceIndex);
 }
 
