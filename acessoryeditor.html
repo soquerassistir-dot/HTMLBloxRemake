@@ -599,17 +599,29 @@ const state = {
 
   headerAvatarViewer: null,
   alive: true, raf: 0,
+
+  /* Internal flags */
+  _gizmoDragging: false,
 };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
 
+/* ============================================================
+   UTILS
+   ============================================================ */
 function showToast(msg, kind) {
   const t = $('toast');
   t.textContent = msg;
   t.className = 'show ' + (kind || '');
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function clampNum(v, def, min, max) {
+  const n = Number(v);
+  if (!isFinite(n)) return def;
+  return Math.max(min, Math.min(max, n));
 }
 
 function normalizeColors(a) {
@@ -675,29 +687,60 @@ function buildShapeMesh(shape, color) {
 }
 
 function defaultPartData() {
-  return { id: uid(), shape: 'box', color: '#4a7ab8',
-    position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
-    scale: 1, model_url: null, _pendingFile: null };
+  return {
+    id: uid(),
+    shape: 'box',
+    color: '#4a7ab8',
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: 1,
+    model_url: null,
+    _pendingFile: null
+  };
 }
 
 async function buildPartMesh(data) {
   const wrapper = new THREE.Group();
   wrapper.userData.partId = data.id;
+
   if (data._pendingFile || data.model_url) {
     try {
-      let url = data._pendingFile ? URL.createObjectURL(data._pendingFile) : data.model_url;
+      let url = data._pendingFile
+        ? URL.createObjectURL(data._pendingFile)
+        : data.model_url;
+
       const loader = new GLTFLoader();
       const gltf = await new Promise((res, rej) => { loader.load(url, res, undefined, rej); });
+
       if (data._pendingFile) URL.revokeObjectURL(url);
-      const model = gltf.scene || gltf.scenes[0];
+
+      const model = gltf.scene || (gltf.scenes && gltf.scenes[0]);
       if (model) {
+        model.updateMatrixWorld(true);
+
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 1;
-        model.scale.setScalar(1.5 / maxDim);
+
+        if (!isFinite(size.x) || !isFinite(size.y) || !isFinite(size.z) ||
+            (size.x === 0 && size.y === 0 && size.z === 0)) {
+          model.scale.setScalar(1);
+        } else {
+          const maxDim = Math.max(size.x, size.y, size.z);
+          if (maxDim > 0.0001 && isFinite(maxDim)) {
+            model.scale.setScalar(1.5 / maxDim);
+          } else {
+            model.scale.setScalar(1);
+          }
+        }
+
+        model.updateMatrixWorld(true);
         const box2 = new THREE.Box3().setFromObject(model);
         const center = box2.getCenter(new THREE.Vector3());
-        model.position.sub(center);
+
+        if (isFinite(center.x) && isFinite(center.y) && isFinite(center.z)) {
+          model.position.sub(center);
+        }
+
         if (data.color) {
           model.traverse(o => {
             if (o.isMesh && o.material && o.material.color && !o.material.map) {
@@ -708,24 +751,36 @@ async function buildPartMesh(data) {
         }
         model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         wrapper.add(model);
+      } else {
+        wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
       }
     } catch (e) {
+      console.warn('[editor] GLB load failed:', e);
       wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
     }
   } else {
     wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
   }
+
   return wrapper;
 }
 
 function applyPartTransform(mesh, data) {
-  mesh.position.set(data.position.x || 0, data.position.y || 0, data.position.z || 0);
+  const px = clampNum(data.position?.x, 0, -100, 100);
+  const py = clampNum(data.position?.y, 0, -100, 100);
+  const pz = clampNum(data.position?.z, 0, -100, 100);
+  const rx = clampNum(data.rotation?.x, 0, -3600, 3600);
+  const ry = clampNum(data.rotation?.y, 0, -3600, 3600);
+  const rz = clampNum(data.rotation?.z, 0, -3600, 3600);
+  const sc = clampNum(data.scale, 1, 0.01, 50);
+
+  mesh.position.set(px, py, pz);
   mesh.rotation.set(
-    THREE.MathUtils.degToRad(data.rotation.x || 0),
-    THREE.MathUtils.degToRad(data.rotation.y || 0),
-    THREE.MathUtils.degToRad(data.rotation.z || 0)
+    THREE.MathUtils.degToRad(rx),
+    THREE.MathUtils.degToRad(ry),
+    THREE.MathUtils.degToRad(rz)
   );
-  mesh.scale.setScalar(data.scale || 1);
+  mesh.scale.setScalar(sc);
 }
 
 /* ============================================================
@@ -805,7 +860,10 @@ function initAccessoryScene() {
 
   const gizmo = new TransformControls(camera, renderer.domElement);
   gizmo.setMode('translate'); gizmo.setSize(0.65);
-  gizmo.addEventListener('dragging-changed', (e) => { if (state.orbit) state.orbit.enabled = !e.value; });
+  gizmo.addEventListener('dragging-changed', (e) => {
+    state._gizmoDragging = e.value;
+    if (state.orbit) state.orbit.enabled = !e.value;
+  });
   gizmo.addEventListener('objectChange', () => { syncInputsFromSelection(); });
   scene.add(gizmo);
   state.gizmo = gizmo;
@@ -874,30 +932,73 @@ function attachGroupToPart() {
 
 function applyGroupInputs() {
   if (!state.accGroup) return;
-  state.accGroup.position.set(state.accOffset.x || 0, state.accOffset.y || 0, state.accOffset.z || 0);
-  state.accGroup.rotation.set(
-    THREE.MathUtils.degToRad(state.accRot.x || 0),
-    THREE.MathUtils.degToRad(state.accRot.y || 0),
-    THREE.MathUtils.degToRad(state.accRot.z || 0)
+  state.accGroup.position.set(
+    clampNum(state.accOffset.x, 0, -50, 50),
+    clampNum(state.accOffset.y, 0, -50, 50),
+    clampNum(state.accOffset.z, 0, -50, 50)
   );
-  state.accGroup.scale.setScalar(state.accScale || 1);
+  state.accGroup.rotation.set(
+    THREE.MathUtils.degToRad(clampNum(state.accRot.x, 0, -3600, 3600)),
+    THREE.MathUtils.degToRad(clampNum(state.accRot.y, 0, -3600, 3600)),
+    THREE.MathUtils.degToRad(clampNum(state.accRot.z, 0, -3600, 3600))
+  );
+  state.accGroup.scale.setScalar(clampNum(state.accScale, 1, 0.05, 20));
 }
 
+/* ============================================================
+   REBUILD (com lock e sweep)
+   ============================================================ */
+let _rebuildLock = false;
+let _rebuildPending = false;
+
 async function rebuildAllParts() {
-  for (const p of state.accParts) {
-    if (p.mesh) { if (p.mesh.parent) p.mesh.parent.remove(p.mesh); disposeMesh(p.mesh); }
+  if (_rebuildLock) {
+    _rebuildPending = true;
+    return;
   }
-  const newEntries = [];
-  for (const p of state.accParts) {
-    const mesh = await buildPartMesh(p.data);
-    applyPartTransform(mesh, p.data);
-    state.accGroup.add(mesh);
-    newEntries.push({ id: p.id, data: p.data, mesh });
+  _rebuildLock = true;
+
+  try {
+    if (!state.accGroup) return;
+
+    /* 1. Sweep ALL children of accGroup (handles orphans) */
+    const toRemove = [...state.accGroup.children];
+    for (const child of toRemove) {
+      state.accGroup.remove(child);
+      disposeMesh(child);
+    }
+
+    /* 2. Clear parts' mesh references */
+    for (const p of state.accParts) {
+      p.mesh = null;
+    }
+
+    /* 3. Rebuild each part */
+    const newEntries = [];
+    for (const p of state.accParts) {
+      const mesh = await buildPartMesh(p.data);
+      applyPartTransform(mesh, p.data);
+      state.accGroup.add(mesh);
+      newEntries.push({ id: p.id, data: p.data, mesh });
+    }
+    state.accParts = newEntries;
+
+    /* 4. Validate selection */
+    if (state.selectedPartId && !state.accParts.find(p => p.id === state.selectedPartId)) {
+      state.selectedPartId = null;
+    }
+
+    updateSelection();
+    renderPartsList();
+  } catch (e) {
+    console.warn('[editor] rebuild error:', e);
+  } finally {
+    _rebuildLock = false;
+    if (_rebuildPending) {
+      _rebuildPending = false;
+      await rebuildAllParts();
+    }
   }
-  state.accParts = newEntries;
-  if (state.selectedPartId && !state.accParts.find(p => p.id === state.selectedPartId)) state.selectedPartId = null;
-  updateSelection();
-  renderPartsList();
 }
 
 function disposeMesh(mesh) {
@@ -919,28 +1020,46 @@ function selectPart(partId) {
   syncInputsFromSelection();
   updateEditPanelVisibility();
   updateBadge();
+  syncShapeButtons();
 }
 
 function updateSelection() {
   const gizmo = state.gizmo, helper = state.selectionHelper;
   if (!gizmo || !helper) return;
+
+  if (state._gizmoDragging) return;
+
   if (state.selectedPartId) {
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
     if (entry && entry.mesh) {
-      gizmo.attach(entry.mesh); helper.setFromObject(entry.mesh); helper.visible = true;
+      gizmo.attach(entry.mesh);
+      helper.setFromObject(entry.mesh);
+      helper.visible = true;
       for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, p.id === state.selectedPartId ? 1.0 : 0.55);
       return;
     }
   }
-  gizmo.attach(state.accGroup); helper.setFromObject(state.accGroup); helper.visible = true;
-  for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, 1.0);
+
+  if (state.accGroup) {
+    gizmo.attach(state.accGroup);
+    helper.setFromObject(state.accGroup);
+    helper.visible = true;
+    for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, 1.0);
+  } else {
+    gizmo.detach();
+    helper.visible = false;
+  }
 }
 
 function setMeshOpacity(mesh, opacity) {
   mesh.traverse(o => {
     if (o.isMesh && o.material) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
-      for (const m of mats) { m.transparent = opacity < 1; m.opacity = opacity; m.needsUpdate = true; }
+      for (const m of mats) {
+        m.transparent = opacity < 1;
+        m.opacity = opacity;
+        m.needsUpdate = true;
+      }
     }
   });
 }
@@ -950,76 +1069,151 @@ function syncInputsFromSelection() {
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
     if (!entry || !entry.mesh) return;
     const m = entry.mesh;
-    entry.data.position = { x: m.position.x, y: m.position.y, z: m.position.z };
-    entry.data.rotation = { x: THREE.MathUtils.radToDeg(m.rotation.x), y: THREE.MathUtils.radToDeg(m.rotation.y), z: THREE.MathUtils.radToDeg(m.rotation.z) };
-    entry.data.scale = m.scale.x;
-    $('part-pos-x').value = m.position.x.toFixed(2);
-    $('part-pos-y').value = m.position.y.toFixed(2);
-    $('part-pos-z').value = m.position.z.toFixed(2);
+
+    /* Se o gizmo deformou não-uniformemente, força escala uniforme */
+    const avgScale = (Math.abs(m.scale.x) + Math.abs(m.scale.y) + Math.abs(m.scale.z)) / 3;
+    const safeScale = clampNum(avgScale, 1, 0.01, 50);
+
+    entry.data.position = {
+      x: clampNum(m.position.x, 0, -100, 100),
+      y: clampNum(m.position.y, 0, -100, 100),
+      z: clampNum(m.position.z, 0, -100, 100)
+    };
+    entry.data.rotation = {
+      x: clampNum(THREE.MathUtils.radToDeg(m.rotation.x), 0, -3600, 3600),
+      y: clampNum(THREE.MathUtils.radToDeg(m.rotation.y), 0, -3600, 3600),
+      z: clampNum(THREE.MathUtils.radToDeg(m.rotation.z), 0, -3600, 3600)
+    };
+    entry.data.scale = safeScale;
+
+    /* Força uniforme no mesh */
+    m.scale.setScalar(safeScale);
+
+    $('part-pos-x').value = entry.data.position.x.toFixed(2);
+    $('part-pos-y').value = entry.data.position.y.toFixed(2);
+    $('part-pos-z').value = entry.data.position.z.toFixed(2);
     $('part-rot-x').value = Math.round(entry.data.rotation.x);
     $('part-rot-y').value = Math.round(entry.data.rotation.y);
     $('part-rot-z').value = Math.round(entry.data.rotation.z);
-    $('part-scale').value = m.scale.x.toFixed(2);
+    $('part-scale').value = safeScale.toFixed(2);
   } else if (state.accGroup) {
     const g = state.accGroup;
-    state.accOffset = { x: g.position.x, y: g.position.y, z: g.position.z };
-    state.accRot = { x: THREE.MathUtils.radToDeg(g.rotation.x), y: THREE.MathUtils.radToDeg(g.rotation.y), z: THREE.MathUtils.radToDeg(g.rotation.z) };
-    state.accScale = g.scale.x;
-    $('grp-pos-x').value = g.position.x.toFixed(2);
-    $('grp-pos-y').value = g.position.y.toFixed(2);
-    $('grp-pos-z').value = g.position.z.toFixed(2);
+
+    const avgScale = (Math.abs(g.scale.x) + Math.abs(g.scale.y) + Math.abs(g.scale.z)) / 3;
+    const safeScale = clampNum(avgScale, 1, 0.05, 20);
+
+    state.accOffset = {
+      x: clampNum(g.position.x, 0, -50, 50),
+      y: clampNum(g.position.y, 0, -50, 50),
+      z: clampNum(g.position.z, 0, -50, 50)
+    };
+    state.accRot = {
+      x: clampNum(THREE.MathUtils.radToDeg(g.rotation.x), 0, -3600, 3600),
+      y: clampNum(THREE.MathUtils.radToDeg(g.rotation.y), 0, -3600, 3600),
+      z: clampNum(THREE.MathUtils.radToDeg(g.rotation.z), 0, -3600, 3600)
+    };
+    state.accScale = safeScale;
+
+    g.scale.setScalar(safeScale);
+
+    $('grp-pos-x').value = state.accOffset.x.toFixed(2);
+    $('grp-pos-y').value = state.accOffset.y.toFixed(2);
+    $('grp-pos-z').value = state.accOffset.z.toFixed(2);
     $('grp-rot-x').value = Math.round(state.accRot.x);
     $('grp-rot-y').value = Math.round(state.accRot.y);
     $('grp-rot-z').value = Math.round(state.accRot.z);
-    $('grp-scale').value = g.scale.x.toFixed(2);
+    $('grp-scale').value = safeScale.toFixed(2);
   }
 }
 
 function syncGroupInputs() {
   $('grp-attach').value = state.accAttach;
-  $('grp-pos-x').value = state.accOffset.x.toFixed(2);
-  $('grp-pos-y').value = state.accOffset.y.toFixed(2);
-  $('grp-pos-z').value = state.accOffset.z.toFixed(2);
-  $('grp-rot-x').value = Math.round(state.accRot.x);
-  $('grp-rot-y').value = Math.round(state.accRot.y);
-  $('grp-rot-z').value = Math.round(state.accRot.z);
-  $('grp-scale').value = state.accScale.toFixed(2);
+  $('grp-pos-x').value = clampNum(state.accOffset.x, 0, -50, 50).toFixed(2);
+  $('grp-pos-y').value = clampNum(state.accOffset.y, 0, -50, 50).toFixed(2);
+  $('grp-pos-z').value = clampNum(state.accOffset.z, 0, -50, 50).toFixed(2);
+  $('grp-rot-x').value = Math.round(clampNum(state.accRot.x, 0, -3600, 3600));
+  $('grp-rot-y').value = Math.round(clampNum(state.accRot.y, 0, -3600, 3600));
+  $('grp-rot-z').value = Math.round(clampNum(state.accRot.z, 0, -3600, 3600));
+  $('grp-scale').value = clampNum(state.accScale, 1, 0.05, 20).toFixed(2);
+}
+
+function syncShapeButtons() {
+  if (!state.selectedPartId) return;
+  const entry = state.accParts.find(p => p.id === state.selectedPartId);
+  if (!entry) return;
+  const shape = entry.data.shape || 'box';
+  document.querySelectorAll('.shape-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.shape === shape);
+  });
 }
 
 function renderPartsList() {
   const list = $('parts-list');
   if (!list) return;
   list.innerHTML = '';
+
   const grpEntry = document.createElement('div');
   grpEntry.className = 'part-item is-group' + (state.selectedPartId === null ? ' active' : '');
-  grpEntry.innerHTML = '<div class="part-item-icon"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="#4a7ab8" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="#4a7ab8"/></svg></div><div class="part-item-info"><div class="part-item-name">Group</div><div class="part-item-type">' + esc(state.accAttach) + '</div></div>';
+  grpEntry.innerHTML =
+    '<div class="part-item-icon"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="#4a7ab8" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="#4a7ab8"/></svg></div>' +
+    '<div class="part-item-info"><div class="part-item-name">Group</div><div class="part-item-type">' + esc(state.accAttach) + '</div></div>';
   grpEntry.addEventListener('click', () => selectPart(null));
   list.appendChild(grpEntry);
+
   for (let i = 0; i < state.accParts.length; i++) {
     const entry = state.accParts[i];
     const item = document.createElement('div');
     item.className = 'part-item' + (state.selectedPartId === entry.id ? ' active' : '');
+
     const icon = document.createElement('div');
     icon.className = 'part-item-icon';
     icon.innerHTML = shapeIconSvg(entry.data.shape || 'box', entry.data.color || '#4a7ab8');
+
     const info = document.createElement('div');
     info.className = 'part-item-info';
-    info.innerHTML = '<div class="part-item-name">Part ' + (i + 1) + '</div><div class="part-item-type">' + ((entry.data.model_url || entry.data._pendingFile) ? 'MODEL' : (entry.data.shape || 'box')) + '</div>';
+    const typeLabel = (entry.data.model_url || entry.data._pendingFile) ? 'MODEL' : (entry.data.shape || 'box');
+    info.innerHTML =
+      '<div class="part-item-name">Part ' + (i + 1) + '</div>' +
+      '<div class="part-item-type">' + esc(typeLabel) + '</div>';
+
     const actions = document.createElement('div');
     actions.className = 'part-item-actions';
-    const upBtn = document.createElement('button'); upBtn.textContent = '\u25B2'; upBtn.disabled = i === 0;
+
+    const upBtn = document.createElement('button');
+    upBtn.textContent = '\u25B2';
+    upBtn.title = 'Move up';
+    upBtn.disabled = i === 0;
     upBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPart(i, i - 1); });
-    const downBtn = document.createElement('button'); downBtn.textContent = '\u25BC'; downBtn.disabled = i === state.accParts.length - 1;
+
+    const downBtn = document.createElement('button');
+    downBtn.textContent = '\u25BC';
+    downBtn.title = 'Move down';
+    downBtn.disabled = i === state.accParts.length - 1;
     downBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPart(i, i + 1); });
-    const dupBtn = document.createElement('button'); dupBtn.textContent = 'C';
+
+    const dupBtn = document.createElement('button');
+    dupBtn.textContent = 'C';
+    dupBtn.title = 'Duplicate';
     dupBtn.addEventListener('click', (e) => { e.stopPropagation(); duplicatePart(i); });
-    const delBtn = document.createElement('button'); delBtn.className = 'del'; delBtn.textContent = 'X';
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del';
+    delBtn.textContent = 'X';
+    delBtn.title = 'Delete';
     delBtn.addEventListener('click', (e) => { e.stopPropagation(); deletePart(i); });
-    actions.appendChild(upBtn); actions.appendChild(downBtn); actions.appendChild(dupBtn); actions.appendChild(delBtn);
-    item.appendChild(icon); item.appendChild(info); item.appendChild(actions);
+
+    actions.appendChild(upBtn);
+    actions.appendChild(downBtn);
+    actions.appendChild(dupBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(icon);
+    item.appendChild(info);
+    item.appendChild(actions);
     item.addEventListener('click', () => selectPart(entry.id));
     list.appendChild(item);
   }
+
   $('parts-count').textContent = state.accParts.length;
 }
 
@@ -1052,6 +1246,12 @@ function shade(hex, percent) {
 
 async function addPart() {
   const data = defaultPartData();
+  data.color = '#ff8800';
+  /* Offset each new part so they don't stack exactly */
+  const offset = 0.4;
+  data.position.x = (state.accParts.length % 4) * offset - 0.6;
+  data.position.y = Math.floor(state.accParts.length / 4) * offset;
+
   const entry = { id: data.id, data, mesh: null };
   state.accParts.push(entry);
   await rebuildAllParts();
@@ -1062,10 +1262,20 @@ async function addPart() {
 async function deletePart(index) {
   if (index < 0 || index >= state.accParts.length) return;
   if (state.accParts.length <= 1) { showToast('Cannot delete the last part', 'error'); return; }
+
   const entry = state.accParts[index];
   if (!confirm('Delete Part ' + (index + 1) + '?')) return;
+
+  /* IMPORTANT: remove mesh from scene BEFORE splicing from array */
+  if (entry.mesh && entry.mesh.parent) {
+    entry.mesh.parent.remove(entry.mesh);
+    disposeMesh(entry.mesh);
+  }
+  entry.mesh = null;
+
   state.accParts.splice(index, 1);
   if (state.selectedPartId === entry.id) state.selectedPartId = null;
+
   await rebuildAllParts();
   selectPart(null);
 }
@@ -1073,13 +1283,28 @@ async function deletePart(index) {
 async function duplicatePart(index) {
   if (index < 0 || index >= state.accParts.length) return;
   const orig = state.accParts[index];
+  if (!orig || !orig.data) return;
+
+  const origScale = clampNum(orig.data.scale, 1, 0.05, 20);
   const clone = {
-    id: uid(), shape: orig.data.shape, color: orig.data.color,
-    position: { x: (orig.data.position.x || 0) + 0.3, y: orig.data.position.y || 0, z: orig.data.position.z || 0 },
-    rotation: { ...(orig.data.rotation || { x:0,y:0,z:0 }) },
-    scale: orig.data.scale || 1,
-    model_url: orig.data.model_url, _pendingFile: orig.data._pendingFile || null
+    id: uid(),
+    shape: orig.data.shape || 'box',
+    color: orig.data.color || '#4a7ab8',
+    position: {
+      x: clampNum(orig.data.position?.x, 0, -50, 50) + 0.5,
+      y: clampNum(orig.data.position?.y, 0, -50, 50),
+      z: clampNum(orig.data.position?.z, 0, -50, 50)
+    },
+    rotation: {
+      x: clampNum(orig.data.rotation?.x, 0, -360, 360),
+      y: clampNum(orig.data.rotation?.y, 0, -360, 360),
+      z: clampNum(orig.data.rotation?.z, 0, -360, 360)
+    },
+    scale: origScale,
+    model_url: orig.data.model_url || null,
+    _pendingFile: orig.data._pendingFile || null
   };
+
   const entry = { id: clone.id, data: clone, mesh: null };
   state.accParts.splice(index + 1, 0, entry);
   await rebuildAllParts();
@@ -1089,6 +1314,7 @@ async function duplicatePart(index) {
 async function reorderPart(from, to) {
   if (from === to || from < 0 || to < 0) return;
   if (from >= state.accParts.length || to >= state.accParts.length) return;
+
   const [entry] = state.accParts.splice(from, 1);
   state.accParts.splice(to, 0, entry);
   await rebuildAllParts();
@@ -1158,14 +1384,19 @@ document.querySelectorAll('.shape-btn').forEach(btn => {
     if (!state.selectedPartId) { showToast('Select a part first', 'error'); return; }
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
     if (!entry) return;
+
     document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+
     entry.data.shape = btn.dataset.shape;
+
     if (entry.data._pendingFile || entry.data.model_url) {
-      entry.data._pendingFile = null; entry.data.model_url = null;
+      entry.data._pendingFile = null;
+      entry.data.model_url = null;
       $('part-file-name').textContent = 'No model — using shape';
       $('part-file-name').classList.remove('has');
     }
+
     await rebuildAllParts();
     selectPart(entry.id);
   });
@@ -1180,22 +1411,24 @@ $('grp-attach').addEventListener('change', () => {
 
 ['grp-pos-x','grp-pos-y','grp-pos-z'].forEach(id => {
   $(id).addEventListener('input', () => {
-    state.accOffset.x = parseFloat($('grp-pos-x').value) || 0;
-    state.accOffset.y = parseFloat($('grp-pos-y').value) || 0;
-    state.accOffset.z = parseFloat($('grp-pos-z').value) || 0;
+    state.accOffset.x = clampNum($('grp-pos-x').value, 0, -50, 50);
+    state.accOffset.y = clampNum($('grp-pos-y').value, 0, -50, 50);
+    state.accOffset.z = clampNum($('grp-pos-z').value, 0, -50, 50);
     applyGroupInputs();
   });
 });
+
 ['grp-rot-x','grp-rot-y','grp-rot-z'].forEach(id => {
   $(id).addEventListener('input', () => {
-    state.accRot.x = parseFloat($('grp-rot-x').value) || 0;
-    state.accRot.y = parseFloat($('grp-rot-y').value) || 0;
-    state.accRot.z = parseFloat($('grp-rot-z').value) || 0;
+    state.accRot.x = clampNum($('grp-rot-x').value, 0, -3600, 3600);
+    state.accRot.y = clampNum($('grp-rot-y').value, 0, -3600, 3600);
+    state.accRot.z = clampNum($('grp-rot-z').value, 0, -3600, 3600);
     applyGroupInputs();
   });
 });
+
 $('grp-scale').addEventListener('input', () => {
-  state.accScale = parseFloat($('grp-scale').value) || 1;
+  state.accScale = clampNum($('grp-scale').value, 1, 0.05, 20);
   applyGroupInputs();
 });
 
@@ -1203,31 +1436,34 @@ $('grp-scale').addEventListener('input', () => {
   $(id).addEventListener('input', () => {
     if (!state.selectedPartId) return;
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
-    if (!entry) return;
-    entry.data.position.x = parseFloat($('part-pos-x').value) || 0;
-    entry.data.position.y = parseFloat($('part-pos-y').value) || 0;
-    entry.data.position.z = parseFloat($('part-pos-z').value) || 0;
+    if (!entry || !entry.mesh) return;
+    entry.data.position.x = clampNum($('part-pos-x').value, 0, -100, 100);
+    entry.data.position.y = clampNum($('part-pos-y').value, 0, -100, 100);
+    entry.data.position.z = clampNum($('part-pos-z').value, 0, -100, 100);
     applyPartTransform(entry.mesh, entry.data);
   });
 });
+
 ['part-rot-x','part-rot-y','part-rot-z'].forEach(id => {
   $(id).addEventListener('input', () => {
     if (!state.selectedPartId) return;
     const entry = state.accParts.find(p => p.id === state.selectedPartId);
-    if (!entry) return;
-    entry.data.rotation.x = parseFloat($('part-rot-x').value) || 0;
-    entry.data.rotation.y = parseFloat($('part-rot-y').value) || 0;
-    entry.data.rotation.z = parseFloat($('part-rot-z').value) || 0;
+    if (!entry || !entry.mesh) return;
+    entry.data.rotation.x = clampNum($('part-rot-x').value, 0, -3600, 3600);
+    entry.data.rotation.y = clampNum($('part-rot-y').value, 0, -3600, 3600);
+    entry.data.rotation.z = clampNum($('part-rot-z').value, 0, -3600, 3600);
     applyPartTransform(entry.mesh, entry.data);
   });
 });
+
 $('part-scale').addEventListener('input', () => {
   if (!state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
-  if (!entry) return;
-  entry.data.scale = parseFloat($('part-scale').value) || 1;
+  if (!entry || !entry.mesh) return;
+  entry.data.scale = clampNum($('part-scale').value, 1, 0.05, 20);
   applyPartTransform(entry.mesh, entry.data);
 });
+
 $('part-color').addEventListener('input', () => {
   if (!state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
@@ -1250,23 +1486,27 @@ $('part-file-btn').addEventListener('click', () => {
   if (!state.selectedPartId) { showToast('Select a part first', 'error'); return; }
   $('part-file-input').click();
 });
+
 $('part-file-input').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f || !state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
   if (!entry) return;
-  entry.data._pendingFile = f; entry.data.model_url = null;
+  entry.data._pendingFile = f;
+  entry.data.model_url = null;
   await rebuildAllParts();
   selectPart(entry.id);
   $('part-file-name').textContent = f.name + ' (ready)';
   $('part-file-name').classList.add('has');
   e.target.value = '';
 });
+
 $('part-clear-model').addEventListener('click', async () => {
   if (!state.selectedPartId) return;
   const entry = state.accParts.find(p => p.id === state.selectedPartId);
   if (!entry) return;
-  entry.data._pendingFile = null; entry.data.model_url = null;
+  entry.data._pendingFile = null;
+  entry.data.model_url = null;
   await rebuildAllParts();
   selectPart(entry.id);
   $('part-file-name').textContent = 'No model — using shape';
@@ -1278,9 +1518,11 @@ function setGizmoMode(mode) {
   state.gizmo.setMode(mode);
   state.gizmoMode = mode;
   document.querySelectorAll('.vtool').forEach(b => b.classList.remove('active'));
-  const el = $('vtool-' + mode); if (el) el.classList.add('active');
+  const el = $('vtool-' + mode);
+  if (el) el.classList.add('active');
   $('badge-mode').textContent = { translate: 'T', rotate: 'R', scale: 'S' }[mode];
 }
+
 $('vtool-translate').addEventListener('click', () => setGizmoMode('translate'));
 $('vtool-rotate').addEventListener('click', () => setGizmoMode('rotate'));
 $('vtool-scale').addEventListener('click', () => setGizmoMode('scale'));
@@ -1297,6 +1539,7 @@ $('acc-name').addEventListener('input', () => {
   state.accName = $('acc-name').value.trim() || 'New Accessory';
   updateBadge();
 });
+
 $('acc-price').addEventListener('input', () => { state.accPrice = parseInt($('acc-price').value) || 0; });
 $('acc-publish').addEventListener('change', () => { state.accPublish = $('acc-publish').checked; });
 
@@ -1304,15 +1547,27 @@ $('acc-save').addEventListener('click', async () => {
   const name = $('acc-name').value.trim();
   if (!name) { showToast('Give it a name', 'error'); return; }
   if (!state.accParts.length) { showToast('Add at least one part', 'error'); return; }
+
   const btn = $('acc-save');
-  btn.disabled = true; btn.textContent = 'Saving...';
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
   try {
     for (const p of state.accParts) {
       if (!p.mesh) continue;
-      p.data.position = { x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z };
-      p.data.rotation = { x: THREE.MathUtils.radToDeg(p.mesh.rotation.x), y: THREE.MathUtils.radToDeg(p.mesh.rotation.y), z: THREE.MathUtils.radToDeg(p.mesh.rotation.z) };
-      p.data.scale = p.mesh.scale.x;
+      p.data.position = {
+        x: clampNum(p.mesh.position.x, 0, -100, 100),
+        y: clampNum(p.mesh.position.y, 0, -100, 100),
+        z: clampNum(p.mesh.position.z, 0, -100, 100)
+      };
+      p.data.rotation = {
+        x: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.x), 0, -3600, 3600),
+        y: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.y), 0, -3600, 3600),
+        z: clampNum(THREE.MathUtils.radToDeg(p.mesh.rotation.z), 0, -3600, 3600)
+      };
+      p.data.scale = clampNum(p.mesh.scale.x, 1, 0.01, 50);
     }
+
     const serializedParts = [];
     for (const p of state.accParts) {
       let modelUrl = p.data.model_url || null;
@@ -1321,29 +1576,48 @@ $('acc-save').addEventListener('click', async () => {
         const ext = (f.name.split('.').pop() || 'glb').toLowerCase();
         const safeExt = ['glb','gltf'].includes(ext) ? ext : 'glb';
         const path = state.user.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + safeExt;
-        const { error: upErr } = await sb.storage.from('accessory-models').upload(path, f, { cacheControl: '3600', upsert: false, contentType: f.type || 'model/gltf-binary' });
+        const { error: upErr } = await sb.storage.from('accessory-models').upload(path, f, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: f.type || 'model/gltf-binary'
+        });
         if (upErr) throw new Error('Upload failed: ' + upErr.message);
         const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
         modelUrl = urlData.publicUrl;
       }
       serializedParts.push({
-        id: p.id, shape: p.data.shape || 'box', color: p.data.color || '#ff8800',
+        id: p.id,
+        shape: p.data.shape || 'box',
+        color: p.data.color || '#ff8800',
         position: { x: Number(p.data.position.x) || 0, y: Number(p.data.position.y) || 0, z: Number(p.data.position.z) || 0 },
         rotation: { x: Number(p.data.rotation.x) || 0, y: Number(p.data.rotation.y) || 0, z: Number(p.data.rotation.z) || 0 },
-        scale: Number(p.data.scale) || 1, model_url: modelUrl
+        scale: Number(p.data.scale) || 1,
+        model_url: modelUrl
       });
     }
+
     const firstPart = serializedParts[0];
     const row = {
-      user_id: state.user.id, name,
+      user_id: state.user.id,
+      name,
       attach_part: state.accAttach,
-      offset_x: state.accOffset.x, offset_y: state.accOffset.y, offset_z: state.accOffset.z,
-      rot_x: state.accRot.x, rot_y: state.accRot.y, rot_z: state.accRot.z,
+      offset_x: state.accOffset.x,
+      offset_y: state.accOffset.y,
+      offset_z: state.accOffset.z,
+      rot_x: state.accRot.x,
+      rot_y: state.accRot.y,
+      rot_z: state.accRot.z,
       scale: state.accScale,
-      shape: firstPart.shape, color: firstPart.color, model_url: firstPart.model_url,
-      parts: serializedParts, category: 'accessory',
-      price: state.accPrice || 0, is_published: !!state.accPublish, is_public: true
+      shape: firstPart.shape,
+      color: firstPart.color,
+      model_url: firstPart.model_url,
+      parts: serializedParts,
+      category: 'accessory',
+      price: state.accPrice || 0,
+      is_published: !!state.accPublish,
+      is_public: true
     };
+
     if (state.editingId) {
       const { data, error } = await sb.from('custom_accessories').update(row).eq('id', state.editingId).select().single();
       if (error) throw error;
@@ -1357,13 +1631,15 @@ $('acc-save').addEventListener('click', async () => {
       state.editingId = data.id;
       showToast('Created!', 'success');
     }
+
     for (const p of state.accParts) p.data._pendingFile = null;
     renderAccessoriesList();
   } catch (err) {
     console.error(err);
     showToast('Error: ' + err.message, 'error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Save';
+    btn.disabled = false;
+    btn.textContent = 'Save';
   }
 });
 
@@ -1373,58 +1649,133 @@ $('acc-new').addEventListener('click', () => {
 });
 
 function resetToNew3D() {
+  /* 1. Dispose all existing part meshes */
+  for (const p of state.accParts) {
+    if (p.mesh && p.mesh.parent) {
+      p.mesh.parent.remove(p.mesh);
+      disposeMesh(p.mesh);
+    }
+  }
+  state.accParts = [];
+  state.selectedPartId = null;
+
+  /* 2. Reset state */
   state.editingId = null;
   state.accName = 'New Accessory';
   state.accAttach = 'Head';
   state.accOffset = { x: 0, y: 0, z: 0 };
   state.accRot = { x: 0, y: 0, z: 0 };
-  state.accScale = 1; state.accPrice = 0; state.accPublish = false;
-  state.accParts = []; state.selectedPartId = null;
+  state.accScale = 1;
+  state.accPrice = 0;
+  state.accPublish = false;
+
+  /* 3. Reset UI */
   $('acc-name').value = '';
   $('acc-price').value = 0;
   $('acc-publish').checked = false;
   $('grp-attach').value = 'Head';
-  syncGroupInputs();
   $('part-file-name').textContent = 'No model — using shape';
   $('part-file-name').classList.remove('has');
-  const data = defaultPartData(); data.color = '#ff8800';
+  syncGroupInputs();
+
+  /* 4. Create default part */
+  const data = defaultPartData();
+  data.color = '#ff8800';
   state.accParts.push({ id: data.id, data, mesh: null });
+
+  /* 5. Re-attach group and rebuild */
   attachGroupToPart();
   rebuildAllParts().then(() => selectPart(null));
 }
 
 async function loadAccessoryIntoEditor(acc) {
+  /* 1. Dispose all existing part meshes */
+  for (const p of state.accParts) {
+    if (p.mesh && p.mesh.parent) {
+      p.mesh.parent.remove(p.mesh);
+      disposeMesh(p.mesh);
+    }
+  }
+  state.accParts = [];
+  state.selectedPartId = null;
+
+  /* 2. Apply loaded data with validation */
   state.editingId = acc.id;
   state.accName = acc.name || 'Untitled';
   state.accAttach = acc.attach_part || 'Head';
-  state.accOffset = { x: acc.offset_x || 0, y: acc.offset_y || 0, z: acc.offset_z || 0 };
-  state.accRot = { x: acc.rot_x || 0, y: acc.rot_y || 0, z: acc.rot_z || 0 };
-  state.accScale = acc.scale || 1;
+  state.accOffset = {
+    x: clampNum(acc.offset_x, 0, -50, 50),
+    y: clampNum(acc.offset_y, 0, -50, 50),
+    z: clampNum(acc.offset_z, 0, -50, 50)
+  };
+  state.accRot = {
+    x: clampNum(acc.rot_x, 0, -3600, 3600),
+    y: clampNum(acc.rot_y, 0, -3600, 3600),
+    z: clampNum(acc.rot_z, 0, -3600, 3600)
+  };
+  state.accScale = clampNum(acc.scale, 1, 0.05, 20);
   state.accPrice = acc.price || 0;
   state.accPublish = !!acc.is_published;
-  state.selectedPartId = null;
+
   let parts = acc.parts;
-  if (typeof parts === 'string') { try { parts = JSON.parse(parts); } catch { parts = []; } }
-  if (!Array.isArray(parts)) parts = [];
-  if (!parts.length && (acc.shape || acc.model_url)) {
-    parts = [{ id: uid(), shape: acc.shape || 'box', color: acc.color || '#ff8800', position: { x:0, y:0, z:0 }, rotation: { x:0, y:0, z:0 }, scale: 1, model_url: acc.model_url || null }];
-    state.accOffset = { x: 0, y: 0, z: 0 }; state.accRot = { x: 0, y: 0, z: 0 }; state.accScale = 1;
+  if (typeof parts === 'string') {
+    try { parts = JSON.parse(parts); } catch { parts = []; }
   }
-  if (!parts.length) parts = [{ id: uid(), shape: 'box', color: '#ff8800', position: { x:0, y:0, z:0 }, rotation: { x:0, y:0, z:0 }, scale: 1, model_url: null }];
+  if (!Array.isArray(parts)) parts = [];
+
+  if (!parts.length && (acc.shape || acc.model_url)) {
+    parts = [{
+      id: uid(),
+      shape: acc.shape || 'box',
+      color: acc.color || '#ff8800',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1,
+      model_url: acc.model_url || null
+    }];
+  }
+  if (!parts.length) {
+    parts = [{
+      id: uid(),
+      shape: 'box',
+      color: '#ff8800',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1,
+      model_url: null
+    }];
+  }
+
   state.accParts = parts.map(p => ({
     id: p.id || uid(),
     data: {
-      id: p.id || uid(), shape: p.shape || 'box', color: p.color || '#ff8800',
-      position: { x: Number(p.position?.x) || 0, y: Number(p.position?.y) || 0, z: Number(p.position?.z) || 0 },
-      rotation: { x: Number(p.rotation?.x) || 0, y: Number(p.rotation?.y) || 0, z: Number(p.rotation?.z) || 0 },
-      scale: Number(p.scale) || 1, model_url: p.model_url || null, _pendingFile: null
+      id: p.id || uid(),
+      shape: p.shape || 'box',
+      color: p.color || '#ff8800',
+      position: {
+        x: clampNum(p.position?.x, 0, -100, 100),
+        y: clampNum(p.position?.y, 0, -100, 100),
+        z: clampNum(p.position?.z, 0, -100, 100)
+      },
+      rotation: {
+        x: clampNum(p.rotation?.x, 0, -3600, 3600),
+        y: clampNum(p.rotation?.y, 0, -3600, 3600),
+        z: clampNum(p.rotation?.z, 0, -3600, 3600)
+      },
+      scale: clampNum(p.scale, 1, 0.01, 50),
+      model_url: p.model_url || null,
+      _pendingFile: null
     },
     mesh: null
   }));
+
+  /* 3. Update UI */
   $('acc-name').value = state.accName;
   $('acc-price').value = state.accPrice;
   $('acc-publish').checked = state.accPublish;
   $('grp-attach').value = state.accAttach;
+
+  /* 4. Re-attach and rebuild */
   attachGroupToPart();
   syncGroupInputs();
   await rebuildAllParts();
@@ -1436,22 +1787,37 @@ function renderAccessoriesList() {
   const listEl = $('acc-list');
   if (!listEl) return;
   const threeD = state.accessories.filter(a => (a.category || 'accessory') === 'accessory');
-  if (!threeD.length) { listEl.innerHTML = '<div class="acc-list-empty">No 3D accessories yet.</div>'; return; }
+  if (!threeD.length) {
+    listEl.innerHTML = '<div class="acc-list-empty">No 3D accessories yet.</div>';
+    return;
+  }
   listEl.innerHTML = '';
   const sorted = [...threeD].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
     const item = document.createElement('div');
     item.className = 'acc-item' + (state.editingId === acc.id ? ' selected' : '');
-    const thumbEl = document.createElement('div'); thumbEl.className = 'acc-item-thumb';
-    const infoEl = document.createElement('div'); infoEl.className = 'acc-item-info';
+    const thumbEl = document.createElement('div');
+    thumbEl.className = 'acc-item-thumb';
+    const infoEl = document.createElement('div');
+    infoEl.className = 'acc-item-info';
     const partCount = (Array.isArray(acc.parts) ? acc.parts.length : 1);
-    infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.attach_part || 'Head') + ' · ' + partCount + ' parts' + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
-    const actionsEl = document.createElement('div'); actionsEl.className = 'acc-item-actions';
+    infoEl.innerHTML =
+      '<div class="acc-item-name">' + esc(acc.name) + '</div>' +
+      '<div class="acc-item-meta">' + esc(acc.attach_part || 'Head') + ' · ' + partCount + ' parts' + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'acc-item-actions';
+
     const editBtn = document.createElement('button');
-    editBtn.className = 'edit'; editBtn.textContent = 'E';
+    editBtn.className = 'edit';
+    editBtn.textContent = 'E';
+    editBtn.title = 'Edit';
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); loadAccessoryIntoEditor(acc); });
+
     const delBtn = document.createElement('button');
-    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.className = 'del';
+    delBtn.textContent = 'X';
+    delBtn.title = 'Delete';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!confirm('Delete "' + acc.name + '"?')) return;
@@ -1461,8 +1827,12 @@ function renderAccessoriesList() {
       if (state.editingId === acc.id) resetToNew3D();
       renderAccessoriesList();
     });
-    actionsEl.appendChild(editBtn); actionsEl.appendChild(delBtn);
-    item.appendChild(thumbEl); item.appendChild(infoEl); item.appendChild(actionsEl);
+
+    actionsEl.appendChild(editBtn);
+    actionsEl.appendChild(delBtn);
+    item.appendChild(thumbEl);
+    item.appendChild(infoEl);
+    item.appendChild(actionsEl);
     item.addEventListener('click', () => loadAccessoryIntoEditor(acc));
     listEl.appendChild(item);
     mountAccThumb(thumbEl, acc);
@@ -1482,20 +1852,33 @@ function mountAccThumb(container, acc) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1.1));
   const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(5, 6, 4); scene.add(dl);
   const group = new THREE.Group(); scene.add(group);
+
   let parts = acc.parts;
-  if (typeof parts === 'string') { try { parts = JSON.parse(parts); } catch { parts = []; } }
-  if (!Array.isArray(parts) || !parts.length) parts = [{ shape: acc.shape || 'box', color: acc.color || '#ff8800', position: { x:0,y:0,z:0 }, rotation: { x:0,y:0,z:0 }, scale: 1 }];
+  if (typeof parts === 'string') {
+    try { parts = JSON.parse(parts); } catch { parts = []; }
+  }
+  if (!Array.isArray(parts) || !parts.length) {
+    parts = [{
+      shape: acc.shape || 'box',
+      color: acc.color || '#ff8800',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: 1
+    }];
+  }
+
   for (const p of parts) {
     const g = buildShapeMesh(p.shape || 'box', p.color || '#ff8800');
-    g.position.set(Number(p.position?.x) || 0, Number(p.position?.y) || 0, Number(p.position?.z) || 0);
+    g.position.set(clampNum(p.position?.x, 0, -50, 50), clampNum(p.position?.y, 0, -50, 50), clampNum(p.position?.z, 0, -50, 50));
     g.rotation.set(
-      THREE.MathUtils.degToRad(Number(p.rotation?.x) || 0),
-      THREE.MathUtils.degToRad(Number(p.rotation?.y) || 0),
-      THREE.MathUtils.degToRad(Number(p.rotation?.z) || 0)
+      THREE.MathUtils.degToRad(clampNum(p.rotation?.x, 0, -360, 360)),
+      THREE.MathUtils.degToRad(clampNum(p.rotation?.y, 0, -360, 360)),
+      THREE.MathUtils.degToRad(clampNum(p.rotation?.z, 0, -360, 360))
     );
-    g.scale.setScalar(Number(p.scale) || 1);
+    g.scale.setScalar(clampNum(p.scale, 1, 0.01, 50));
     group.add(g);
   }
+
   const resize = () => {
     const r = container.getBoundingClientRect();
     if (!r.width) return;
@@ -1504,6 +1887,7 @@ function mountAccThumb(container, acc) {
     camera.updateProjectionMatrix();
   };
   setTimeout(resize, 30);
+
   let alive = true, t = 0;
   const tick = () => {
     if (!alive) return;
@@ -1937,10 +2321,10 @@ function applyClothingPose() {
   const groups = state.clParts;
   if (!groups || !groups.armLGroup) return;
   const poses = {
-    front:  { armL: { x: 0,    z: 0 },    armR: { x: 0,    z: 0 },    legL: { x: 0 },    legR: { x: 0 } },
-    apose:  { armL: { x: 0,    z: -0.45 },armR: { x: 0,    z: 0.45 }, legL: { x: 0 },    legR: { x: 0 } },
-    armsup: { armL: { x: 0,    z: -2.7 }, armR: { x: 0,    z: 2.7 },  legL: { x: 0 },    legR: { x: 0 } },
-    walk:   { armL: { x: -0.6, z: 0 },    armR: { x: 0.6,  z: 0 },    legL: { x: 0.4 },  legR: { x: -0.4 } },
+    front:  { armL: { x: 0, z: 0 },      armR: { x: 0, z: 0 },      legL: { x: 0 },   legR: { x: 0 } },
+    apose:  { armL: { x: 0, z: -0.45 },  armR: { x: 0, z: 0.45 },   legL: { x: 0 },   legR: { x: 0 } },
+    armsup: { armL: { x: 0, z: -2.7 },   armR: { x: 0, z: 2.7 },    legL: { x: 0 },   legR: { x: 0 } },
+    walk:   { armL: { x: -0.6, z: 0 },   armR: { x: 0.6, z: 0 },    legL: { x: 0.4 }, legR: { x: -0.4 } }
   };
   const p = poses[state.clPose] || poses.front;
   groups.armLGroup.rotation.set(p.armL.x, 0, p.armL.z);
@@ -1975,9 +2359,6 @@ function stopClothingLoop() {
   if (state.clRaf) { cancelAnimationFrame(state.clRaf); state.clRaf = 0; }
 }
 
-/* ============================================================
-   CLOTHING UI BINDINGS
-   ============================================================ */
 document.querySelectorAll('[data-cltool]').forEach(b => {
   b.addEventListener('click', () => {
     state.clTool = b.dataset.cltool;
@@ -2011,10 +2392,12 @@ $('cl-color').addEventListener('input', () => {
   $('cl-color-hex').textContent = state.clColor;
   document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
 });
+
 $('cl-size').addEventListener('input', () => {
   state.clSize = parseInt($('cl-size').value) || 28;
   $('cl-size-val').textContent = state.clSize;
 });
+
 $('cl-name').addEventListener('input', () => { state.clName = $('cl-name').value.trim() || 'New Clothing'; });
 $('cl-price').addEventListener('input', () => { state.clPrice = parseInt($('cl-price').value) || 0; });
 $('cl-publish').addEventListener('change', () => { state.clPublish = $('cl-publish').checked; });
@@ -2129,7 +2512,7 @@ function combineToAtlas(part) {
     { col: 0, row: 0 },
     { col: 1, row: 0 },
     { col: 0, row: 2 },
-    { col: 1, row: 2 },
+    { col: 1, row: 2 }
   ];
   for (let f = 0; f < 6; f++) {
     const { col, row } = layout[f];
@@ -2197,19 +2580,31 @@ function renderAccessoriesList2D() {
   const listEl = $('acc-list-2d');
   if (!listEl) return;
   const clothing = state.accessories.filter(a => ['shirt','tshirt','pants'].includes(a.category));
-  if (!clothing.length) { listEl.innerHTML = '<div class="acc-list-empty">No clothing yet.</div>'; return; }
+  if (!clothing.length) {
+    listEl.innerHTML = '<div class="acc-list-empty">No clothing yet.</div>';
+    return;
+  }
   listEl.innerHTML = '';
   const sorted = [...clothing].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
     const item = document.createElement('div');
     item.className = 'acc-item';
-    const thumbEl = document.createElement('div'); thumbEl.className = 'acc-item-thumb';
-    if (acc.texture_url) { const img = document.createElement('img'); img.src = acc.texture_url; thumbEl.appendChild(img); }
-    const infoEl = document.createElement('div'); infoEl.className = 'acc-item-info';
+    const thumbEl = document.createElement('div');
+    thumbEl.className = 'acc-item-thumb';
+    if (acc.texture_url) {
+      const img = document.createElement('img');
+      img.src = acc.texture_url;
+      thumbEl.appendChild(img);
+    }
+    const infoEl = document.createElement('div');
+    infoEl.className = 'acc-item-info';
     infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.category) + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
-    const actionsEl = document.createElement('div'); actionsEl.className = 'acc-item-actions';
+
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'acc-item-actions';
     const delBtn = document.createElement('button');
-    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.className = 'del';
+    delBtn.textContent = 'X';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (!confirm('Delete?')) return;
@@ -2219,7 +2614,9 @@ function renderAccessoriesList2D() {
       renderAccessoriesList2D();
     });
     actionsEl.appendChild(delBtn);
-    item.appendChild(thumbEl); item.appendChild(infoEl); item.appendChild(actionsEl);
+    item.appendChild(thumbEl);
+    item.appendChild(infoEl);
+    item.appendChild(actionsEl);
     listEl.appendChild(item);
   }
 }
@@ -2289,7 +2686,10 @@ function renderFacesList() {
   const listEl = $('acc-list-face');
   if (!listEl) return;
   const faces = state.accessories.filter(a => a.category === 'face');
-  if (!faces.length) { listEl.innerHTML = '<div class="acc-list-empty">No faces yet. Create one in the editor.</div>'; return; }
+  if (!faces.length) {
+    listEl.innerHTML = '<div class="acc-list-empty">No faces yet. Create one in the editor.</div>';
+    return;
+  }
   listEl.innerHTML = '';
   const sorted = [...faces].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
@@ -2308,14 +2708,17 @@ function renderFacesList() {
     const infoEl = document.createElement('div');
     infoEl.className = 'acc-item-info';
     infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + (acc.is_published ? 'PUBLIC' : 'DRAFT') + ' · ' + (acc.price || 0) + ' Blox</div>';
+
     const actionsEl = document.createElement('div');
     actionsEl.className = 'acc-item-actions';
     const editBtn = document.createElement('button');
-    editBtn.className = 'edit'; editBtn.textContent = 'E';
+    editBtn.className = 'edit';
+    editBtn.textContent = 'E';
     editBtn.title = 'Edit';
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); loadFaceIntoEditor(acc); });
     const delBtn = document.createElement('button');
-    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.className = 'del';
+    delBtn.textContent = 'X';
     delBtn.title = 'Delete';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -2373,6 +2776,7 @@ $('face-save').addEventListener('click', async () => {
   const btn = $('face-save');
   btn.disabled = true;
   btn.textContent = 'Saving...';
+
   try {
     let textureUrl = state.faceImageUrl;
 
@@ -2471,9 +2875,24 @@ function mountHeaderAvatar() {
   };
   resize();
   let raf = 0, alive = true;
-  const tick = () => { if (!alive) return; group.rotation.y += 0.012; renderer.render(scene, camera); raf = requestAnimationFrame(tick); };
+  const tick = () => {
+    if (!alive) return;
+    group.rotation.y += 0.012;
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(tick);
+  };
   tick();
-  state.headerAvatarViewer = { dispose() { alive = false; if (raf) cancelAnimationFrame(raf); torso.geometry.dispose(); matTorso.dispose(); head.geometry.dispose(); matHead.dispose(); renderer.dispose(); } };
+  state.headerAvatarViewer = {
+    dispose() {
+      alive = false;
+      if (raf) cancelAnimationFrame(raf);
+      torso.geometry.dispose();
+      matTorso.dispose();
+      head.geometry.dispose();
+      matHead.dispose();
+      renderer.dispose();
+    }
+  };
 }
 
 /* ============================================================
@@ -2482,11 +2901,12 @@ function mountHeaderAvatar() {
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
   if (!$('mode-3d').classList.contains('active')) return;
+
   const k = e.key.toLowerCase();
   if (k === 'w') setGizmoMode('translate');
   if (k === 'e') setGizmoMode('rotate');
   if (k === 'r') setGizmoMode('scale');
-  if (k === 'delete' && state.selectedPartId) {
+  if ((k === 'delete' || k === 'backspace') && state.selectedPartId) {
     const idx = state.accParts.findIndex(p => p.id === state.selectedPartId);
     if (idx >= 0) deletePart(idx);
   }
@@ -2506,22 +2926,28 @@ async function boot() {
   const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   state.profile = profile;
   $('header-username').textContent = profile?.username || 'Player';
+
   const { data: accs } = await sb.from('custom_accessories').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
   state.accessories = accs || [];
+
   $('app').classList.add('active');
   initAccessoryScene();
   mountHeaderAvatar();
+
   resetToNew3D();
   resetToNewClothing();
+  resetToNewFace();
+
   renderAccessoriesList();
   renderAccessoriesList2D();
   renderFacesList();
-  resetToNewFace();
+
   setTimeout(() => $('loading-screen').classList.add('hidden'), 300);
 }
 
 $('back-btn').addEventListener('click', () => { location.href = 'index.html'; });
 $('logo-btn').addEventListener('click', () => { location.href = 'index.html'; });
+
 window.addEventListener('beforeunload', () => {
   state.alive = false;
   state.clAlive = false;
