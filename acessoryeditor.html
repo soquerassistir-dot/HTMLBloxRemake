@@ -2544,7 +2544,7 @@ function renderAccessoriesList2D() {
   const sorted = [...clothing].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   for (const acc of sorted) {
     const item = document.createElement('div');
-    item.className = 'acc-item';
+    item.className = 'acc-item' + (state.clEditingId === acc.id ? ' selected' : '');
     const thumbEl = document.createElement('div');
     thumbEl.className = 'acc-item-thumb';
     if (acc.texture_url) { const img = document.createElement('img'); img.src = acc.texture_url; thumbEl.appendChild(img); }
@@ -2553,21 +2553,152 @@ function renderAccessoriesList2D() {
     infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.category) + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
     const actionsEl = document.createElement('div');
     actionsEl.className = 'acc-item-actions';
+
+    /* Botão Editar */
+    const editBtn = document.createElement('button');
+    editBtn.className = 'edit'; editBtn.textContent = 'E'; editBtn.title = 'Edit';
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      loadClothingIntoEditor(acc);
+    });
+
+    /* Botão Deletar */
     const delBtn = document.createElement('button');
-    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.className = 'del'; delBtn.textContent = 'X'; delBtn.title = 'Delete';
     delBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('Delete?')) return;
+      if (!confirm('Delete "' + acc.name + '"?')) return;
       const { error } = await sb.from('custom_accessories').delete().eq('id', acc.id);
       if (error) { showToast('Error', 'error'); return; }
       state.accessories = state.accessories.filter(a => a.id !== acc.id);
+      if (state.clEditingId === acc.id) resetToNewClothing();
       renderAccessoriesList2D();
     });
+
+    actionsEl.appendChild(editBtn);
     actionsEl.appendChild(delBtn);
     item.appendChild(thumbEl);
     item.appendChild(infoEl);
     item.appendChild(actionsEl);
+
+    /* Clicar no item também abre pra editar */
+    item.addEventListener('click', () => loadClothingIntoEditor(acc));
+
     listEl.appendChild(item);
+  }
+}
+
+  /* ============================================================
+   LOAD CLOTHING INTO EDITOR
+   ============================================================ */
+async function loadClothingIntoEditor(acc) {
+  /* Garante que a cena de pintura está inicializada */
+  if (!state.clScene) {
+    initClothingScene();
+    if (!_clTickStarted) startClothingLoop();
+  }
+
+  /* Limpa todos os canvases atuais */
+  for (const part of Object.keys(state.clPartData)) {
+    const data = state.clPartData[part];
+    for (let fi = 0; fi < 6; fi++) {
+      const ctx = data.canvases[fi].getContext('2d');
+      ctx.clearRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+      data.textures[fi].needsUpdate = true;
+    }
+  }
+
+  /* Carrega os atlas salvos */
+  const partsArray = Array.isArray(acc.parts) ? acc.parts : [];
+  let loadedAny = false;
+
+  for (const p of partsArray) {
+    const partName = (p.part || '').toLowerCase();
+    const atlasUrl = p.atlas_url || p.texture_url;
+    if (!partName || !atlasUrl || !state.clPartData[partName]) continue;
+
+    try {
+      const img = await new Promise((res, rej) => {
+        const im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = () => res(im);
+        im.onerror = () => rej(new Error('Failed to load atlas'));
+        im.src = atlasUrl;
+      });
+      await splitAtlasToCanvases(img, partName);
+      loadedAny = true;
+    } catch (e) {
+      console.warn('[editor] failed to load atlas for', partName, e);
+    }
+  }
+
+  if (!loadedAny) {
+    showToast('No atlas found in this item', 'error');
+    return;
+  }
+
+  /* Atualiza o estado do editor */
+  state.clEditingId = acc.id;
+  state.clName = acc.name || 'Untitled';
+  state.clType = acc.category || 'shirt';
+  state.clPrice = acc.price || 0;
+  state.clPublish = !!acc.is_published;
+
+  /* Atualiza UI */
+  $('cl-name').value = state.clName;
+  $('cl-price').value = state.clPrice;
+  $('cl-publish').checked = state.clPublish;
+
+  document.querySelectorAll('[data-cltype]').forEach(x =>
+    x.classList.toggle('active', x.dataset.cltype === state.clType)
+  );
+
+  const note = $('cl-type-note');
+  if (state.clType === 'shirt') note.textContent = 'Shirt: paint the torso and both arms.';
+  else if (state.clType === 'tshirt') note.textContent = 'T-Shirt: paint only the torso.';
+  else note.textContent = 'Pants: paint both legs.';
+
+  renderAccessoriesList2D();
+  showToast('Loaded: ' + state.clName, 'success');
+}
+
+/* Divide um atlas 512x512 de volta nos 6 canvases de uma parte.
+   Layout idêntico ao usado em combineToAtlas(). */
+async function splitAtlasToCanvases(img, partName) {
+  const data = state.clPartData[partName];
+  if (!data) return;
+
+  const atlasSize = 512;
+  const cellW = atlasSize / 2;  // 256
+  const cellH = atlasSize / 3;  // ~170.67
+
+  /* Mesmo layout do combineToAtlas:
+     índice 0 → face +X
+     índice 1 → face -X
+     índice 2 → face +Y
+     índice 3 → face -Y
+     índice 4 → face +Z (front)
+     índice 5 → face -Z (back) */
+  const layout = [
+    { col: 1, row: 1 },
+    { col: 0, row: 1 },
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 0, row: 2 },
+    { col: 1, row: 2 },
+  ];
+
+  for (let f = 0; f < 6; f++) {
+    const { col, row } = layout[f];
+    const canvas = data.canvases[f];
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(
+      img,
+      col * cellW, row * cellH, cellW, cellH,   // source rect no atlas
+      0, 0, canvas.width, canvas.height         // dest rect no canvas local
+    );
+    data.textures[f].needsUpdate = true;
   }
 }
 
