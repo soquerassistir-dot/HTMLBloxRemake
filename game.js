@@ -15,7 +15,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /* ============================================================
-   1. CONFIG
+   CONFIG
    ============================================================ */
 const CONFIG = {
   fixedStep: 1 / 60,
@@ -71,7 +71,7 @@ const DEFAULT_FACE = {
 };
 
 /* ============================================================
-   STORE CACHE — All published accessories
+   STORE CACHE
    ============================================================ */
 let __storeCache = null;
 let __storePromise = null;
@@ -372,16 +372,17 @@ async function buildAccessoryGroup(item) {
       partGroup = buildShapeMesh(p.shape || 'box', p.color || '#888888');
     }
 
+    const sx = (p.scale_x != null) ? Number(p.scale_x) : (typeof p.scale === 'number' ? p.scale : 1);
+    const sy = (p.scale_y != null) ? Number(p.scale_y) : (typeof p.scale === 'number' ? p.scale : 1);
+    const sz = (p.scale_z != null) ? Number(p.scale_z) : (typeof p.scale === 'number' ? p.scale : 1);
+
     partGroup.position.set(p.position?.x || 0, p.position?.y || 0, p.position?.z || 0);
     partGroup.rotation.set(
       THREE.MathUtils.degToRad(p.rotation?.x || 0),
       THREE.MathUtils.degToRad(p.rotation?.y || 0),
       THREE.MathUtils.degToRad(p.rotation?.z || 0)
     );
-    const sx = (p.scale_x != null) ? p.scale_x : (typeof p.scale === 'number' ? p.scale : 1);
-   const sy = (p.scale_y != null) ? p.scale_y : (typeof p.scale === 'number' ? p.scale : 1);
-   const sz = (p.scale_z != null) ? p.scale_z : (typeof p.scale === 'number' ? p.scale : 1);
-   partGroup.scale.set(sx, sy, sz);
+    partGroup.scale.set(sx, sy, sz);
     group.add(partGroup);
   }
 
@@ -389,7 +390,7 @@ async function buildAccessoryGroup(item) {
 }
 
 /* ============================================================
-   2. UTILS
+   UTILS
    ============================================================ */
 function cssToHex(c, def) {
   if (typeof c === 'number') return c;
@@ -462,7 +463,7 @@ function escapeHtml(s) {
 }
 
 /* ============================================================
-   3. PHYSICS
+   PHYSICS
    ============================================================ */
 const EPS = 1e-3;
 
@@ -566,7 +567,7 @@ class PhysicsWorld {
 }
 
 /* ============================================================
-   4. CHARACTER
+   CHARACTER — com suporte a roupas transparentes
    ============================================================ */
 const SHARED_GEO = (() => {
   const leg = new THREE.BoxGeometry(1, 2, 1);
@@ -579,73 +580,10 @@ const SHARED_GEO = (() => {
   return { leg, arm, torso, head };
 })();
 
-/* ============================================================
-   MATERIAL FACTORIES
-   ============================================================
-   IMPORTANTE: cada chamada DEVE retornar um material NOVO.
-   Nunca cachear por cor, senão aplicar uma textura em uma parte
-   afeta todas as outras partes com a mesma cor base.
-   ============================================================ */
-function getPlainMaterial(color) {
-  return new THREE.MeshLambertMaterial({ color });
-}
-
-/* Face materials factory — array sempre novo */
-function makeFaceMaterials(headColorHex) {
-  const c = document.createElement('canvas');
-  c.width = 128; c.height = 128;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = hexToCss(headColorHex);
-  ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath(); ctx.ellipse(44, 52, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(84, 52, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#1a1a1a';
-  ctx.lineWidth = 7; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.arc(64, 60, 28, 0.14 * Math.PI, 0.86 * Math.PI); ctx.stroke();
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false;
-
-  const faceMat  = new THREE.MeshLambertMaterial({ map: tex });
-  const plainMat = new THREE.MeshLambertMaterial({ color: headColorHex });
-
-  return [plainMat, plainMat, plainMat, plainMat, faceMat, plainMat];
-}
-
-/* ============================================================
-   FACE COMPOSITE
-   ============================================================ */
-function compositeFaceOnHeadColor(faceUrl, headColorCss, size = 256) {
-  return new Promise((resolve) => {
-    if (!faceUrl) { resolve(null); return; }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = headColorCss || '#f5cd30';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas);
-      } catch (e) {
-        console.warn('[game] face composite failed (CORS?)', e);
-        resolve(null);
-      }
-    };
-    img.onerror = () => {
-      console.warn('[game] face load failed:', faceUrl);
-      resolve(null);
-    };
-    img.src = faceUrl;
-  });
-}
+/* Cada parte precisa de DOIS meshes:
+   1. Base (sólido com a cor do avatar)
+   2. Overlay (roupa pintada, transparente)
+   Assim a cor do avatar aparece onde não há pintura. */
 
 class Character {
   constructor({ name, colors, equippedItems, isLocal = false, subtitle = 'ONLINE', subtitleColor = '#6fe36f' }) {
@@ -668,7 +606,6 @@ class Character {
     this.walkPhase = 0;
     this.group = new THREE.Group();
 
-    /* ---------- HEALTH ---------- */
     this.maxHealth = CONFIG.health.max;
     this.health = this.maxHealth;
     this.dead = false;
@@ -682,53 +619,155 @@ class Character {
   _buildBody() {
     const c = this.colors, g = this.group;
 
-    /* Cada parte tem seus PRÓPRIOS materiais (sem cache) */
-    const matHeadArr = makeFaceMaterials(c.head);
-    const matArmL = getPlainMaterial(c.leftArm);
-    const matArmR = getPlainMaterial(c.rightArm);
-    const matTorso = getPlainMaterial(c.torso);
-    const matLegL = getPlainMaterial(c.leftLeg);
-    const matLegR = getPlainMaterial(c.rightLeg);
+    /* --- Torso: base + overlay --- */
+    this.torsoGroup = new THREE.Group();
+    this.torsoGroup.position.set(0, 3, 0);
 
-    this.legL = new THREE.Group(); this.legL.position.set(-0.5, 2, 0);
-    const legLMesh = new THREE.Mesh(SHARED_GEO.leg, matLegL);
-    legLMesh.position.y = -1;
-    legLMesh.castShadow = true; legLMesh.receiveShadow = true;
-    this.legL.add(legLMesh); g.add(this.legL);
-    this._legLMesh = legLMesh;
+    const torsoBaseMat = new THREE.MeshLambertMaterial({ color: c.torso });
+    this.torsoBaseMesh = new THREE.Mesh(SHARED_GEO.torso, torsoBaseMat);
+    this.torsoBaseMesh.castShadow = true;
+    this.torsoBaseMesh.receiveShadow = true;
+    this.torsoGroup.add(this.torsoBaseMesh);
 
-    this.legR = new THREE.Group(); this.legR.position.set(0.5, 2, 0);
-    const legRMesh = new THREE.Mesh(SHARED_GEO.leg, matLegR);
-    legRMesh.position.y = -1;
-    legRMesh.castShadow = true; legRMesh.receiveShadow = true;
-    this.legR.add(legRMesh); g.add(this.legR);
-    this._legRMesh = legRMesh;
+    const torsoOverlayMat = new THREE.MeshLambertMaterial({
+      transparent: true,
+      color: 0xffffff
+    });
+    this.torsoMesh = new THREE.Mesh(SHARED_GEO.torso, torsoOverlayMat);
+    this.torsoMesh.castShadow = true;
+    this.torsoMesh.receiveShadow = true;
+    this.torsoMesh.visible = false;   // <-- só aparece quando tiver roupa
+    this.torsoGroup.add(this.torsoMesh);
 
-    const torso = new THREE.Mesh(SHARED_GEO.torso, matTorso);
-    torso.position.set(0, 3, 0);
-    torso.castShadow = true; torso.receiveShadow = true;
-    g.add(torso);
-    this.torsoMesh = torso;
+    g.add(this.torsoGroup);
 
+    /* --- Arm L --- */
     this.armL = new THREE.Group(); this.armL.position.set(-1.5, 4, 0);
-    const armLMesh = new THREE.Mesh(SHARED_GEO.arm, matArmL);
-    armLMesh.position.y = -1;
-    armLMesh.castShadow = true; armLMesh.receiveShadow = true;
-    this.armL.add(armLMesh); g.add(this.armL);
-    this._armLMesh = armLMesh;
 
+    const armLBaseMat = new THREE.MeshLambertMaterial({ color: c.leftArm });
+    this._armLBaseMesh = new THREE.Mesh(SHARED_GEO.arm, armLBaseMat);
+    this._armLBaseMesh.position.y = -1;
+    this._armLBaseMesh.castShadow = true;
+    this._armLBaseMesh.receiveShadow = true;
+    this.armL.add(this._armLBaseMesh);
+
+    const armLOverlayMat = new THREE.MeshLambertMaterial({
+      transparent: true,
+      color: 0xffffff
+    });
+    this._armLMesh = new THREE.Mesh(SHARED_GEO.arm, armLOverlayMat);
+    this._armLMesh.position.y = -1;
+    this._armLMesh.castShadow = true;
+    this._armLMesh.receiveShadow = true;
+    this._armLMesh.visible = false;
+    this.armL.add(this._armLMesh);
+
+    g.add(this.armL);
+
+    /* --- Arm R --- */
     this.armR = new THREE.Group(); this.armR.position.set(1.5, 4, 0);
-    const armRMesh = new THREE.Mesh(SHARED_GEO.arm, matArmR);
-    armRMesh.position.y = -1;
-    armRMesh.castShadow = true; armRMesh.receiveShadow = true;
-    this.armR.add(armRMesh); g.add(this.armR);
-    this._armRMesh = armRMesh;
 
-    const head = new THREE.Mesh(SHARED_GEO.head, matHeadArr);
-    head.position.set(0, 4.625, 0);
-    head.castShadow = true; head.receiveShadow = true;
-    g.add(head);
-    this.headMesh = head;
+    const armRBaseMat = new THREE.MeshLambertMaterial({ color: c.rightArm });
+    this._armRBaseMesh = new THREE.Mesh(SHARED_GEO.arm, armRBaseMat);
+    this._armRBaseMesh.position.y = -1;
+    this._armRBaseMesh.castShadow = true;
+    this._armRBaseMesh.receiveShadow = true;
+    this.armR.add(this._armRBaseMesh);
+
+    const armROverlayMat = new THREE.MeshLambertMaterial({
+      transparent: true,
+      color: 0xffffff
+    });
+    this._armRMesh = new THREE.Mesh(SHARED_GEO.arm, armROverlayMat);
+    this._armRMesh.position.y = -1;
+    this._armRMesh.castShadow = true;
+    this._armRMesh.receiveShadow = true;
+    this._armRMesh.visible = false;
+    this.armR.add(this._armRMesh);
+
+    g.add(this.armR);
+
+    /* --- Leg L --- */
+    this.legL = new THREE.Group(); this.legL.position.set(-0.5, 2, 0);
+
+    const legLBaseMat = new THREE.MeshLambertMaterial({ color: c.leftLeg });
+    this._legLBaseMesh = new THREE.Mesh(SHARED_GEO.leg, legLBaseMat);
+    this._legLBaseMesh.position.y = -1;
+    this._legLBaseMesh.castShadow = true;
+    this._legLBaseMesh.receiveShadow = true;
+    this.legL.add(this._legLBaseMesh);
+
+    const legLOverlayMat = new THREE.MeshLambertMaterial({
+      transparent: true,
+      color: 0xffffff
+    });
+    this._legLMesh = new THREE.Mesh(SHARED_GEO.leg, legLOverlayMat);
+    this._legLMesh.position.y = -1;
+    this._legLMesh.castShadow = true;
+    this._legLMesh.receiveShadow = true;
+    this._legLMesh.visible = false;
+    this.legL.add(this._legLMesh);
+
+    g.add(this.legL);
+
+    /* --- Leg R --- */
+    this.legR = new THREE.Group(); this.legR.position.set(0.5, 2, 0);
+
+    const legRBaseMat = new THREE.MeshLambertMaterial({ color: c.rightLeg });
+    this._legRBaseMesh = new THREE.Mesh(SHARED_GEO.leg, legRBaseMat);
+    this._legRBaseMesh.position.y = -1;
+    this._legRBaseMesh.castShadow = true;
+    this._legRBaseMesh.receiveShadow = true;
+    this.legR.add(this._legRBaseMesh);
+
+    const legROverlayMat = new THREE.MeshLambertMaterial({
+      transparent: true,
+      color: 0xffffff
+    });
+    this._legRMesh = new THREE.Mesh(SHARED_GEO.leg, legROverlayMat);
+    this._legRMesh.position.y = -1;
+    this._legRMesh.castShadow = true;
+    this._legRMesh.receiveShadow = true;
+    this._legRMesh.visible = false;
+    this.legR.add(this._legRMesh);
+
+    g.add(this.legR);
+
+    /* --- Head --- */
+    const headBaseMat = new THREE.MeshLambertMaterial({ color: c.head });
+    const headFaceMat = new THREE.MeshLambertMaterial({ map: this._makeFaceTexture() });
+    this.headMesh = new THREE.Mesh(SHARED_GEO.head, [
+      headBaseMat, headBaseMat, headBaseMat, headBaseMat, headFaceMat, headBaseMat
+    ]);
+    this.headMesh.position.set(0, 4.625, 0);
+    this.headMesh.castShadow = true;
+    this.headMesh.receiveShadow = true;
+    g.add(this.headMesh);
+  }
+
+  _makeFaceTexture() {
+    const c = this.colors.head;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = hexToCss(c);
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.ellipse(44, 52, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(84, 52, 8, 11, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(64, 60, 28, 0.14 * Math.PI, 0.86 * Math.PI);
+    ctx.stroke();
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    return tex;
   }
 
   _buildNameTag(subtitle, subtitleColor) {
@@ -741,14 +780,11 @@ class Character {
     this.nameSprite = sprite;
   }
 
-  /* ============================================================
-     EQUIPMENT LOADING
-     ============================================================ */
   _getAttachPart(name) {
     switch (name) {
       case 'Head':     return this.headMesh;
-      case 'Torso':    return this.torsoMesh;
-      case 'Back':     return this.torsoMesh;
+      case 'Torso':    return this.torsoGroup;
+      case 'Back':     return this.torsoGroup;
       case 'LeftArm':  return this.armL;
       case 'RightArm': return this.armR;
       case 'LeftLeg':  return this.legL;
@@ -758,44 +794,60 @@ class Character {
   }
 
   _applyClothingTexture(partKey, texture) {
-    let mesh = null;
+    /* Aplica a textura no OVERLAY mesh da parte.
+       A base colorida permanece por baixo — assim a cor do avatar aparece
+       onde a textura for transparente. */
+    let overlayMesh = null;
     switch (partKey) {
-      case 'torso':    mesh = this.torsoMesh; break;
-      case 'leftArm':  mesh = this._armLMesh; break;
-      case 'rightArm': mesh = this._armRMesh; break;
-      case 'leftLeg':  mesh = this._legLMesh; break;
-      case 'rightLeg': mesh = this._legRMesh; break;
+      case 'torso':    overlayMesh = this.torsoMesh; break;
+      case 'leftArm':  overlayMesh = this._armLMesh; break;
+      case 'rightArm': overlayMesh = this._armRMesh; break;
+      case 'leftLeg':  overlayMesh = this._legLMesh; break;
+      case 'rightLeg': overlayMesh = this._legRMesh; break;
     }
-    if (!mesh || !texture) return;
+    if (!overlayMesh || !texture) return;
 
-    /* Substitui o material por um novo com a textura aplicada */
-    const oldMat = mesh.material;
-    const newMat = new THREE.MeshLambertMaterial({
-      map: texture,
-      color: 0xffffff
-    });
-
-    /* Se for array (head), preserva os outros slots */
-    if (Array.isArray(oldMat)) {
-      const newMats = oldMat.map(m => m);
-      newMats[0] = newMat;
-      newMats[1] = newMat;
-      newMats[2] = newMat;
-      newMats[3] = newMat;
-      newMats[4] = newMat;
-      newMats[5] = newMat;
-      mesh.material = newMats;
-    } else {
-      if (oldMat && oldMat.map) oldMat.map.dispose();
-      mesh.material = newMat;
-    }
+    overlayMesh.material.map = texture;
+    overlayMesh.material.color.set('#ffffff');
+    overlayMesh.material.transparent = true;
+    overlayMesh.material.alphaTest = 0.01;
+    overlayMesh.material.depthWrite = false;
+    overlayMesh.material.polygonOffset = true;
+    overlayMesh.material.polygonOffsetFactor = -1;
+    overlayMesh.material.polygonOffsetUnits = -1;
+    overlayMesh.material.needsUpdate = true;
+    overlayMesh.visible = true;
   }
 
   async _applyFace(textureUrl) {
     if (!this.headMesh || !textureUrl) return;
     const headColorCss = '#' + this.colors.head.toString(16).padStart(6, '0');
 
-    const faceCanvas = await compositeFaceOnHeadColor(textureUrl, headColorCss, 256);
+    const faceCanvas = await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = headColorCss;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas);
+        } catch (e) {
+          console.warn('[game] face composite failed (CORS?)', e);
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        console.warn('[game] face load failed:', textureUrl);
+        resolve(null);
+      };
+      img.src = textureUrl;
+    });
+
     if (!faceCanvas) return;
 
     const tex = new THREE.CanvasTexture(faceCanvas);
@@ -806,7 +858,6 @@ class Character {
 
     const mats = this.headMesh.material;
     if (Array.isArray(mats) && mats.length === 6) {
-      /* Cria um array NOVO apenas para esta cabeça */
       const newMats = mats.slice();
       newMats[4] = new THREE.MeshLambertMaterial({ map: tex });
       this.headMesh.material = newMats;
@@ -821,7 +872,7 @@ class Character {
     try {
       const equipped = migrateEquipped(this.equippedItems);
 
-      /* ---- Face ---- */
+      /* --- Face --- */
       const faceId = equipped.face;
       if (faceId && faceId !== 'default_face') {
         const faceItem = getStoreItemById(faceId);
@@ -830,7 +881,7 @@ class Character {
         }
       }
 
-      /* ---- Clothing ---- */
+      /* --- Roupas --- */
       const shirtId = equipped.shirt;
       const tshirtId = equipped.tshirt;
       const pantsId = equipped.pants;
@@ -858,7 +909,7 @@ class Character {
         if (legRTex) this._applyClothingTexture('rightLeg', legRTex);
       }
 
-      /* ---- 3D accessories (multiple per slot) ---- */
+      /* --- Acessórios 3D --- */
       for (const slot of ATTACH_SLOTS) {
         const raw = equipped[slot];
         const ids = Array.isArray(raw) ? raw : (raw ? [raw] : []);
@@ -891,9 +942,6 @@ class Character {
     this._equipmentLoading = false;
   }
 
-  /* ============================================================
-     POSITION / VISIBILITY
-     ============================================================ */
   setPosition(x, y, z) {
     this.body.pos.set(x, y, z);
     this.body.vel.set(0, 0, 0);
@@ -902,9 +950,6 @@ class Character {
   setYaw(y) { this.visualYaw = y; this.targetYaw = y; this.group.rotation.y = y; }
   setVisible(v) { this.group.visible = v; }
 
-  /* ============================================================
-     HEALTH
-     ============================================================ */
   takeDamage(amount) {
     if (this.dead) return false;
     const amt = Number(amount) || 0;
@@ -929,9 +974,6 @@ class Character {
     this.lastDamageTime = -Infinity;
   }
 
-  /* ============================================================
-     ANIMATION
-     ============================================================ */
   updateVisual(dt, horizontalSpeed) {
     const diff = shortAngleDist(this.visualYaw, this.targetYaw);
     this.visualYaw += diff * Math.min(1, dt * 12);
@@ -942,8 +984,6 @@ class Character {
     const speedRatio = Math.min(1, horizontalSpeed / CONFIG.runSpeed);
 
     if (!grounded) {
-      this.torsoMesh.position.y = 3;
-      this.headMesh.position.y = 4.625;
       this.armL.rotation.x = damp(this.armL.rotation.x, -2.3, 12, dt);
       this.armR.rotation.x = damp(this.armR.rotation.x, -2.3, 12, dt);
       this.armL.rotation.z = damp(this.armL.rotation.z, 0, 12, dt);
@@ -952,8 +992,6 @@ class Character {
       this.legR.rotation.x = damp(this.legR.rotation.x, -0.26, 12, dt);
       this.walkPhase = 0;
     } else if (moving) {
-      this.torsoMesh.position.y = 3;
-      this.headMesh.position.y = 4.625;
       this.walkPhase += dt * (7 + speedRatio * 9);
       const amp = 0.55 + speedRatio * 0.45;
       const s = Math.sin(this.walkPhase);
@@ -969,9 +1007,6 @@ class Character {
       const swayX  = Math.sin(this.idleTime * 0.8) * 0.07;
       const swayZ  = Math.sin(this.idleTime * 1.3 + 1.2) * 0.04;
 
-      this.torsoMesh.position.y = 3 + breath;
-      this.headMesh.position.y  = 4.625 + breath * 1.15;
-
       this.legL.rotation.x = damp(this.legL.rotation.x, 0, 8, dt);
       this.legR.rotation.x = damp(this.legR.rotation.x, 0, 8, dt);
       this.armL.rotation.x = damp(this.armL.rotation.x,  swayX, 4, dt);
@@ -983,8 +1018,9 @@ class Character {
   }
 }
 
+
 /* ============================================================
-   4.5 RAGDOLL
+   RAGDOLL
    ============================================================ */
 class Ragdoll {
   constructor(character, scene, physics) {
@@ -996,7 +1032,7 @@ class Ragdoll {
     character.group.updateMatrixWorld(true);
 
     const entries = [];
-    if (character.torsoMesh) entries.push({ mesh: character.torsoMesh, sy: 2 });
+    if (character.torsoBaseMesh) entries.push({ mesh: character.torsoBaseMesh, sy: 2 });
     if (character.headMesh)  entries.push({ mesh: character.headMesh,  sy: 1.25 });
     if (character.legL?.children[0]) entries.push({ mesh: character.legL.children[0], sy: 2 });
     if (character.legR?.children[0]) entries.push({ mesh: character.legR.children[0], sy: 2 });
@@ -1101,7 +1137,7 @@ class Ragdoll {
 }
 
 /* ============================================================
-   5. NAME SPRITE
+   NAME SPRITE
    ============================================================ */
 function createNameSprite(name, opts) {
   const W = 512, H = 160;
@@ -1141,7 +1177,7 @@ function createNameSprite(name, opts) {
 }
 
 /* ============================================================
-   6. STUD TEXTURE
+   STUD TEXTURE
    ============================================================ */
 const __texLoader = new THREE.TextureLoader();
 let __studBase = null;
@@ -1342,7 +1378,7 @@ function computeRotatedAABB(sx, sy, sz, rx, ry, rz) {
 }
 
 /* ============================================================
-   7. GENERATORS
+   GENERATORS
    ============================================================ */
 const GENERATORS = {
   empty(scene, physics) {
@@ -1672,7 +1708,7 @@ const GENERATORS = {
 };
 
 /* ============================================================
-   8. REMOTE PLAYER
+   REMOTE PLAYER
    ============================================================ */
 class RemotePlayer {
   constructor(info) {
@@ -1738,7 +1774,7 @@ class RemotePlayer {
 }
 
 /* ============================================================
-   9. NETWORK
+   NETWORK
    ============================================================ */
 class Network {
   constructor(game) {
@@ -1913,8 +1949,9 @@ class Network {
   }
 }
 
+
 /* ============================================================
-   10. CHAT
+   CHAT
    ============================================================ */
 class ChatSystem {
   constructor() {
@@ -2002,7 +2039,7 @@ class ChatSystem {
 }
 
 /* ============================================================
-   11. INPUT
+   INPUT
    ============================================================ */
 class InputManager {
   constructor() {
@@ -2022,7 +2059,7 @@ class InputManager {
 }
 
 /* ============================================================
-   12. HUD
+   HUD
    ============================================================ */
 class HUD {
   constructor() {
@@ -2047,7 +2084,7 @@ class HUD {
 }
 
 /* ============================================================
-   13. ESC MENU
+   ESC MENU
    ============================================================ */
 class EscMenu {
   constructor(game) {
@@ -2272,7 +2309,7 @@ class EscMenu {
 }
 
 /* ============================================================
-   14. TOUCH CONTROLS
+   TOUCH CONTROLS
    ============================================================ */
 class TouchControls {
   constructor(game) {
@@ -2437,7 +2474,7 @@ class TouchControls {
 }
 
 /* ============================================================
-   15. GAME
+   GAME
    ============================================================ */
 class Game {
   constructor({ gameRow, profile }) {
@@ -3117,7 +3154,7 @@ class Game {
 }
 
 /* ============================================================
-   16. BOOT
+   BOOT
    ============================================================ */
 (async function boot() {
   const params = new URLSearchParams(location.search);
