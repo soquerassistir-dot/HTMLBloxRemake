@@ -2077,7 +2077,7 @@ async function renderHome() {
     await mountAvatar3D(avEl, state.profile.avatar_colors, { autoRotate: true, interactive: true, equipped: state.equipped });
   }
   const nameEl = $('home-welcome-name');
-  if (nameEl) nameEl.innerHTML = '@' + esc(state.profile.username) + (state.profile.is_adm ? ' ' + admBadge('lg') : '');
+  if (nameEl) nameEl.innerHTML = esc(state.profile.username) + (state.profile.is_adm ? ' ' + admBadge('lg') : '');
   $('home-friends-stat').textContent = String(state.friendsCache.length);
   $('home-games-stat').textContent = String(state.gamesCache.filter(g => g.author_id === state.user?.id).length);
   updateHomeOnlineStat();
