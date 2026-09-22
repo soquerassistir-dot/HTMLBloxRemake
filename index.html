@@ -1135,6 +1135,39 @@ async function mountAvatar3D(container, colors, opts={}) {
     });
   }
 
+    async function compositeClothingTexture(url, baseColorCss) {
+    if (!url) return null;
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 512;
+          canvas.height = 512;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = baseColorCss || '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const tex = new THREE.CanvasTexture(canvas);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.generateMipmaps = false;
+          resolve(tex);
+        } catch (e) {
+          console.warn('Clothing composite failed (CORS?)', e);
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        console.warn('Clothing image load failed:', url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+  }
+
   async function compositeFaceTexture(faceUrl, headColorCss) {
     return new Promise((resolve) => {
       const img = new Image();
@@ -1194,16 +1227,16 @@ async function mountAvatar3D(container, colors, opts={}) {
   let torsoTex = null, armLTex = null, armRTex = null, legLTex = null, legRTex = null;
 
   if (tshirtItem) {
-    torsoTex = await loadTexture(getClothingAtlasForPart(tshirtItem, 'torso'));
+    torsoTex = await compositeClothingTexture(getClothingAtlasForPart(tshirtItem, 'torso'), c.torso);
   } else if (shirtItem) {
-    torsoTex = await loadTexture(getClothingAtlasForPart(shirtItem, 'torso'));
-    armLTex = await loadTexture(getClothingAtlasForPart(shirtItem, 'leftArm'));
-    armRTex = await loadTexture(getClothingAtlasForPart(shirtItem, 'rightArm'));
+    torsoTex = await compositeClothingTexture(getClothingAtlasForPart(shirtItem, 'torso'), c.torso);
+    armLTex = await compositeClothingTexture(getClothingAtlasForPart(shirtItem, 'leftArm'), c.leftArm);
+    armRTex = await compositeClothingTexture(getClothingAtlasForPart(shirtItem, 'rightArm'), c.rightArm);
   }
 
   if (pantsItem) {
-    legLTex = await loadTexture(getClothingAtlasForPart(pantsItem, 'leftLeg'));
-    legRTex = await loadTexture(getClothingAtlasForPart(pantsItem, 'rightLeg'));
+    legLTex = await compositeClothingTexture(getClothingAtlasForPart(pantsItem, 'leftLeg'), c.leftLeg);
+    legRTex = await compositeClothingTexture(getClothingAtlasForPart(pantsItem, 'rightLeg'), c.rightLeg);
   }
 
   const faceId = equipped.face;
