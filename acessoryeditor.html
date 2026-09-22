@@ -2588,7 +2588,7 @@ function renderAccessoriesList2D() {
   }
 }
 
-  /* ============================================================
+/* ============================================================
    LOAD CLOTHING INTO EDITOR
    ============================================================ */
 async function loadClothingIntoEditor(acc) {
@@ -2596,6 +2596,11 @@ async function loadClothingIntoEditor(acc) {
   if (!state.clScene) {
     initClothingScene();
     if (!_clTickStarted) startClothingLoop();
+  }
+
+  /* Aguarda um tique para garantir que clPartData exista */
+  if (!state.clPartData || !Object.keys(state.clPartData).length) {
+    initClothingScene();
   }
 
   /* Limpa todos os canvases atuais */
@@ -2612,23 +2617,31 @@ async function loadClothingIntoEditor(acc) {
   const partsArray = Array.isArray(acc.parts) ? acc.parts : [];
   let loadedAny = false;
 
+  /* Constrói um mapa case-insensitive das chaves disponíveis */
+  const keyMap = {};
+  for (const k of Object.keys(state.clPartData)) {
+    keyMap[k.toLowerCase()] = k;
+  }
+
   for (const p of partsArray) {
-    const partName = (p.part || '').toLowerCase();
+    const rawName = String(p.part || '').toLowerCase();
+    const realKey = keyMap[rawName];   // <-- CORREÇÃO: usa a chave com case correto
     const atlasUrl = p.atlas_url || p.texture_url;
-    if (!partName || !atlasUrl || !state.clPartData[partName]) continue;
+    if (!realKey || !atlasUrl || !state.clPartData[realKey]) continue;
 
     try {
       const img = await new Promise((res, rej) => {
         const im = new Image();
         im.crossOrigin = 'anonymous';
         im.onload = () => res(im);
-        im.onerror = () => rej(new Error('Failed to load atlas'));
+        im.onerror = () => rej(new Error('Failed to load atlas for ' + realKey));
         im.src = atlasUrl;
       });
-      await splitAtlasToCanvases(img, partName);
+      await splitAtlasToCanvases(img, realKey);
       loadedAny = true;
+      console.log('[editor] loaded atlas for', realKey);
     } catch (e) {
-      console.warn('[editor] failed to load atlas for', partName, e);
+      console.warn('[editor] failed to load atlas for', realKey, e);
     }
   }
 
@@ -2657,6 +2670,14 @@ async function loadClothingIntoEditor(acc) {
   if (state.clType === 'shirt') note.textContent = 'Shirt: paint the torso and both arms.';
   else if (state.clType === 'tshirt') note.textContent = 'T-Shirt: paint only the torso.';
   else note.textContent = 'Pants: paint both legs.';
+
+  /* CORREÇÃO UX: troca automaticamente para a aba Tools */
+  document.querySelectorAll('.tab[data-ctab]').forEach(x =>
+    x.classList.toggle('active', x.dataset.ctab === 'tools')
+  );
+  document.querySelectorAll('#panel-ctools, #panel-clibrary').forEach(p =>
+    p.classList.toggle('active', p.id === 'panel-ctools')
+  );
 
   renderAccessoriesList2D();
   showToast('Loaded: ' + state.clName, 'success');
