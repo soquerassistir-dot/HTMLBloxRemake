@@ -636,7 +636,7 @@ class Character {
     this.torsoMesh = new THREE.Mesh(SHARED_GEO.torso, torsoOverlayMat);
     this.torsoMesh.castShadow = true;
     this.torsoMesh.receiveShadow = true;
-    this.torsoMesh.visible = false;   // <-- só aparece quando tiver roupa
+    this.torsoMesh.visible = false;
     this.torsoGroup.add(this.torsoMesh);
 
     g.add(this.torsoGroup);
@@ -1127,10 +1127,16 @@ class Ragdoll {
     }
   }
 
+  /* CORREÇÃO CRÍTICA:
+     NÃO chamar dispose() na geometria aqui — a geometria é COMPARTILHADA
+     (SHARED_GEO) entre todos os Characters. Ao dar dispose nela, os meshes
+     originais do personagem perdem o buffer da GPU e ficam invisíveis
+     após o respawn. Só removemos o clone da cena. */
   dispose() {
     for (const p of this.parts) {
       this.scene.remove(p.mesh);
-      p.mesh.geometry?.dispose?.();
+      // NÃO dispose da geometria (é compartilhada com o Character)
+      // NÃO dispose do material também (também é compartilhado)
     }
     this.parts = [];
   }
@@ -1741,6 +1747,7 @@ class RemotePlayer {
 
     this.health = this.character.maxHealth;
     this.dead = false;
+    this._wasDead = false;
 
     this.character.loadEquipment().catch(e => console.warn('[remote] equip load failed', e));
   }
@@ -1761,6 +1768,26 @@ class RemotePlayer {
 
   update(dt) {
     const c = this.character, body = c.body;
+
+    /* CORREÇÃO: esconder o personagem quando estiver morto (ragdoll),
+       e mostrar de novo ao renascer — assim o respawn fica visível
+       para todos os jogadores na sala. */
+    if (this.dead) {
+      if (!this._wasDead) {
+        c.setVisible(false);
+        this._wasDead = true;
+      }
+      return; // não anima/atualiza posição enquanto está morto
+    } else {
+      if (this._wasDead) {
+        // renasceu — reposiciona e mostra de novo
+        this._wasDead = false;
+        c.body.pos.copy(this.targetPos);
+        c.group.position.copy(this.targetPos);
+        c.setVisible(true);
+      }
+    }
+
     const k = 1 - Math.exp(-14 * dt);
     body.pos.lerp(this.targetPos, k);
     c.targetYaw = this.targetYaw;
@@ -2981,6 +3008,8 @@ class Game {
       const look = new THREE.Vector3(-dir.x, -dir.y, -dir.z);
       this.camera.lookAt(head.x + look.x, head.y + look.y, head.z + look.z);
     } else {
+      /* CORREÇÃO: garante que depois do respawn o personagem fica visível
+         mesmo se o jogador estiver alternando entre 1ª e 3ª pessoa */
       if (!this.player.dead) this.player.setVisible(true);
       this.camera.position.set(
         this.camTarget.x + dir.x * finalDist,
