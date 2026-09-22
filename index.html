@@ -1447,48 +1447,73 @@ async function confirmPurchase() {
   if (!pending) return;
   const item = getStoreItem(pending.itemId);
   if (!item) return closePurchaseModal();
-  const price = Number(item.price || 0);
-  if (isOwned(item.id)) { closePurchaseModal(); renderOwnedItems(); return; }
-  if (state.blox < price) { closePurchaseModal(); showToast('Not enough Blox!', 'error'); return; }
+
   const autoEquip = $('purchase-auto-equip').checked;
   const btn = $('purchase-confirm');
-  btn.disabled = true; btn.textContent = 'Processing...';
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
   try {
-    state.blox -= price;
-    state.ownedItems.add(item.id);
+    // Chamada atômica no servidor: debita comprador, credita vendedor, registra posse
+    const { data, error } = await sb.rpc('buy_item', { item_id_param: item.id });
+
+    if (error) throw error;
+
+    if (!data || !data.success) {
+      const errMap = {
+        not_authenticated: 'You are not logged in',
+        item_not_found: 'Item not found',
+        item_not_published: 'Item is no longer for sale',
+        cannot_buy_own_item: "You can't buy your own item",
+        already_owned: 'You already own this item',
+        not_enough_blox: 'Not enough Blox!',
+        profile_not_found: 'Profile not found',
+      };
+      const msg = errMap[data && data.error] || 'Purchase failed';
+      showToast(msg, 'error');
+      closePurchaseModal();
+      return;
+    }
+
+    // Atualizar estado local com o resultado da RPC
+    state.blox = Number(data.new_balance);
+    state.ownedItems = new Set(data.owned_items || []);
     setBlox(state.blox);
+
+    // Auto-equip se marcado
     if (autoEquip) {
       const slot = slotForItem(item);
       if (isAttachmentSlot(slot)) {
         if (!Array.isArray(state.equipped[slot])) state.equipped[slot] = [];
-        state.equipped[slot].push(item.id);
+        if (!state.equipped[slot].includes(item.id)) state.equipped[slot].push(item.id);
       } else if (slot === FACE_SLOT) {
         state.equipped.face = item.id;
       } else {
         state.equipped[slot] = item.id;
       }
+      await persistItems();
     }
-    await Promise.all([persistBlox(), persistItems()]);
-    if (price > 0 && item.user_id) {
-      try {
-        const { data: seller } = await sb.from('profiles').select('blox').eq('id', item.user_id).maybeSingle();
-        if (seller) await sb.from('profiles').update({ blox: (seller.blox || 0) + price }).eq('id', item.user_id);
-      } catch (e) { console.warn('Seller credit failed', e); }
-    }
+
     closePurchaseModal();
-    showToast(autoEquip ? 'Purchased and equipped: ' + item.name : 'Purchased: ' + item.name, 'success');
+    showToast(
+      autoEquip ? 'Purchased and equipped: ' + item.name : 'Purchased: ' + item.name,
+      'success'
+    );
+
     renderCatalog();
     renderOwnedItems();
     renderEquippedList();
     refreshAllAvatars();
+
     if (state.currentPage === 'itemdetail' && state.currentItemDetail && state.currentItemDetail.id === item.id) {
       renderItemDetail();
     }
   } catch (e) {
     console.error(e);
-    showToast('Purchase failed: ' + e.message, 'error');
+    showToast('Purchase failed: ' + (e.message || 'unknown error'), 'error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Confirm Purchase';
+    btn.disabled = false;
+    btn.textContent = 'Confirm Purchase';
   }
 }
 
