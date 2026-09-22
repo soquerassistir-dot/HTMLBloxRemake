@@ -378,7 +378,10 @@ async function buildAccessoryGroup(item) {
       THREE.MathUtils.degToRad(p.rotation?.y || 0),
       THREE.MathUtils.degToRad(p.rotation?.z || 0)
     );
-    partGroup.scale.setScalar(p.scale || 1);
+    const sx = (p.scale_x != null) ? p.scale_x : (typeof p.scale === 'number' ? p.scale : 1);
+   const sy = (p.scale_y != null) ? p.scale_y : (typeof p.scale === 'number' ? p.scale : 1);
+   const sz = (p.scale_z != null) ? p.scale_z : (typeof p.scale === 'number' ? p.scale : 1);
+   partGroup.scale.set(sx, sy, sz);
     group.add(partGroup);
   }
 
