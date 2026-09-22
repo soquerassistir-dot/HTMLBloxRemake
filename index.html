@@ -827,6 +827,9 @@ const state = {
   currentUserProfileId: null,
   tryOnActive: false,
   _itemThumbDisposers: [],
+  friendChannel: null,
+  _sentMsgIds: new Set(),
+  _friendRefreshTimer: null,
 };
 
 const DEFAULT_AVATAR={head:'#f5cd30',torso:'#0d69ac',leftArm:'#f5cd30',rightArm:'#f5cd30',leftLeg:'#4b974b',rightLeg:'#4b974b'};
@@ -1957,7 +1960,6 @@ async function onLoggedIn(user){
   await loadGameCards();
   await refreshFriendsData();
   await renderHome();
-  /* Cleanup old presence channel before creating a new one */
   if (state.presenceChannel) {
     try { await sb.removeChannel(state.presenceChannel); } catch (e) {}
     state.presenceChannel = null;
@@ -1965,6 +1967,7 @@ async function onLoggedIn(user){
   joinPresence();
   await loadAllDMs();
   initDMChannel();
+  initFriendRealtime();
   renderDMFriendList();
   updateDMBadge();
   if (!handleUrlOnLoad()) {
@@ -1995,6 +1998,9 @@ $('logout-btn').addEventListener('click',async()=>{
   await sb.auth.signOut();
   if(state.presenceChannel){try{await sb.removeChannel(state.presenceChannel)}catch{}state.presenceChannel=null}
   if(state.dmChannel){try{await sb.removeChannel(state.dmChannel)}catch{}state.dmChannel=null}
+  if(state.friendChannel){try{await sb.removeChannel(state.friendChannel)}catch{}state.friendChannel=null}
+  state._sentMsgIds = new Set();
+  state._friendRefreshTimer = null;
   state.user=null;state.profile=null;
   state.avatarViewers.forEach(v=>{try{v.dispose()}catch(e){}});state.avatarViewers.clear();
   if (state._itemThumbDisposers) { for (const fn of state._itemThumbDisposers) { try { fn(); } catch(e){} } state._itemThumbDisposers = []; }
@@ -2039,9 +2045,17 @@ function navigate(page){
   if(page==='itemdetail') renderItemDetail();
   if(page==='userprofile' && state.currentUserProfileId) renderUserProfilePage(state.currentUserProfileId, false);
 }
-$$('.sidebar-menu button, .header-nav button').forEach(btn=>btn.addEventListener('click',()=>{const t=btn.dataset.nav;if(t)navigate(t)}));
+$$('.sidebar-menu button, .header-nav button').forEach(btn=>btn.addEventListener('click',()=>{
+  const t = btn.dataset.nav;
+  if (!t) return;
+  const wasDeep = state.currentPage === 'userprofile' || state.currentPage === 'itemdetail' || state.currentPage === 'gamedetail';
+  if (state.currentPage === 'userprofile') state.currentUserProfileId = null;
+  if (state.currentPage === 'itemdetail') state.currentItemDetail = null;
+  navigate(t);
+  if (wasDeep) setUrl('/', true);
+}));
 
-$('logo-btn').addEventListener('click',()=>{ navigate('home'); setUrl('/', true); });
+$('logo-btn').addEventListener('click',()=>{ state.currentUserProfileId = null; state.currentItemDetail = null; navigate('home'); setUrl('/', true); });
 $('header-user').addEventListener('click',()=>navigate('profile'));
 $('header-blox').addEventListener('click', async () => {
   const result = await tryClaimDaily();
@@ -2165,10 +2179,10 @@ function openGameDetail(game){
   navigate('gamedetail');
 }
 
-$('detail-back').addEventListener('click',()=>navigate('games'));
+$('detail-back').addEventListener('click',()=>{ navigate('games'); setUrl('/', true); });
 $('detail-play').addEventListener('click',()=>{
   const g=state.currentGameDetail; if(!g)return;
-  window.location.href='game.html?game='+encodeURIComponent(g.slug);
+  window.location.href='/game.html?game='+encodeURIComponent(g.slug);
 });
 
 async function renderProfilePage(){
@@ -2384,6 +2398,9 @@ function closePlayerModal() {
 $('player-modal-close').addEventListener('click', closePlayerModal);
 $('player-modal').addEventListener('click', (e) => { if (e.target.id === 'player-modal') closePlayerModal(); });
 
+/* ============================================================
+   REALTIME DE MENSAGENS
+   ============================================================ */
 function initDMChannel(){
   if (state.dmChannel) return;
   state.dmChannel = sb.channel('dm-global').on('postgres_changes',
@@ -2395,9 +2412,30 @@ function initDMChannel(){
       if (m.sender_id !== me && m.receiver_id !== me) return;
       const otherId = m.sender_id === me ? m.receiver_id : m.sender_id;
       if (!state.dmConversations[otherId]) state.dmConversations[otherId] = [];
-      state.dmConversations[otherId].push(m);
+      const arr = state.dmConversations[otherId];
+
+      if (arr.some(x => x.id === m.id)) return;
+
+      if (m.sender_id === me) {
+        const tempIdx = arr.findIndex(x =>
+          x._optimistic && x.text === m.text && x.receiver_id === m.receiver_id
+        );
+        if (tempIdx >= 0) {
+          arr[tempIdx] = m;
+          state._sentMsgIds.add(m.id);
+          state.dmLastMessage[otherId] = m;
+          if (state.dmActiveFriend === otherId) renderDMConversation(otherId);
+          renderDMFriendList();
+          return;
+        }
+        if (state._sentMsgIds.has(m.id)) return;
+      }
+
+      arr.push(m);
       state.dmLastMessage[otherId] = m;
-      if (m.receiver_id === me && state.dmActiveFriend !== otherId) state.dmUnread[otherId] = (state.dmUnread[otherId] || 0) + 1;
+      if (m.receiver_id === me && state.dmActiveFriend !== otherId) {
+        state.dmUnread[otherId] = (state.dmUnread[otherId] || 0) + 1;
+      }
       if (m.receiver_id === me && state.dmActiveFriend === otherId) markDMRead(otherId);
       renderDMFriendList();
       if (state.dmActiveFriend === otherId) renderDMConversation(otherId, true);
@@ -2405,6 +2443,49 @@ function initDMChannel(){
     }
   ).subscribe();
 }
+
+/* ============================================================
+   REALTIME DE FRIEND REQUESTS
+   ============================================================ */
+function initFriendRealtime() {
+  if (state.friendChannel || !state.user) return;
+  const me = state.user.id;
+
+  state.friendChannel = sb.channel('friend-realtime-' + me)
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'friend_requests' },
+      (payload) => {
+        const row = payload.new || payload.old;
+        if (!row) return;
+        if (row.sender_id !== me && row.receiver_id !== me) return;
+
+        clearTimeout(state._friendRefreshTimer);
+        state._friendRefreshTimer = setTimeout(async () => {
+          try {
+            await refreshFriendsData();
+            updateRequestBadge();
+
+            if (state.currentPage === 'friends') renderFriendsPage();
+            if (state.currentPage === 'home') renderHome();
+            if (state.currentPage === 'messages') renderDMFriendList();
+
+            if (state.currentPage === 'userprofile' && state.currentUserProfileId) {
+              renderUserProfilePage(state.currentUserProfileId, false);
+            }
+
+            if (payload.eventType === 'UPDATE' && payload.new?.status === 'accepted') {
+              const otherId = payload.new.sender_id === me ? payload.new.receiver_id : payload.new.sender_id;
+              const other = state.friendsCache.find(f => f.profile?.id === otherId);
+              if (other?.profile) showToast(other.profile.username + ' accepted your friend request!', 'success');
+            }
+          } catch (e) {
+            console.warn('friend realtime refresh', e);
+          }
+        }, 250);
+      }
+    ).subscribe();
+}
+
 async function loadAllDMs(){
   if (!state.user) return;
   const me = state.user.id;
@@ -2512,20 +2593,53 @@ async function renderDMConversation(friendId){
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSend(); } });
   setTimeout(() => input.focus(), 60);
 }
+
 async function sendDM(friendId, text){
   if (!state.user || !state.profile) return;
-  const opt = { id: 'tmp_' + Date.now(), sender_id: state.user.id, receiver_id: friendId, text, read_at: null, created_at: new Date().toISOString() };
+
+  const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  const opt = {
+    id: tempId,
+    sender_id: state.user.id,
+    receiver_id: friendId,
+    text,
+    read_at: null,
+    created_at: new Date().toISOString(),
+    _optimistic: true
+  };
+
   if (!state.dmConversations[friendId]) state.dmConversations[friendId] = [];
-  state.dmConversations[friendId].push(opt);
+  const arr = state.dmConversations[friendId];
+  arr.push(opt);
   state.dmLastMessage[friendId] = opt;
   if (state.dmActiveFriend === friendId) renderDMConversation(friendId);
   renderDMFriendList();
-  const { data, error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, receiver_id: friendId, text }).select().single();
-  if (error) { console.warn(error); return; }
-  const arr = state.dmConversations[friendId];
-  const idx = arr.findIndex(m => m.id === opt.id);
-  if (idx >= 0) arr[idx] = data;
+
+  const { data, error } = await sb.from('direct_messages')
+    .insert({ sender_id: state.user.id, receiver_id: friendId, text })
+    .select().single();
+
+  if (error) {
+    console.warn(error);
+    const i = arr.findIndex(m => m.id === tempId);
+    if (i >= 0) arr.splice(i, 1);
+    if (state.dmActiveFriend === friendId) renderDMConversation(friendId);
+    renderDMFriendList();
+    showToast('Failed to send message', 'error');
+    return;
+  }
+
+  state._sentMsgIds.add(data.id);
+
+  const i = arr.findIndex(m => m.id === tempId || (m._optimistic && m.text === text));
+  if (i >= 0) {
+    arr[i] = data;
+  } else if (!arr.some(m => m.id === data.id)) {
+    arr.push(data);
+  }
   state.dmLastMessage[friendId] = data;
+  if (state.dmActiveFriend === friendId) renderDMConversation(friendId);
+  renderDMFriendList();
 }
 
 function joinPresence() {
@@ -2575,6 +2689,8 @@ function handleUrlOnLoad() {
 
 window.addEventListener('popstate', () => {
   if (!handleUrlOnLoad()) {
+    state.currentUserProfileId = null;
+    state.currentItemDetail = null;
     navigate('home');
     setUrl('/', true);
   }
@@ -2892,7 +3008,7 @@ $('itemdetail-back').addEventListener('click', () => {
   state.tryOnActive = false;
   state.currentItemDetail = null;
   navigate('catalog');
-  setUrl('/catalog', true);
+  setUrl('/', true);
 });
 
 $('itemdetail-tryon').addEventListener('click', () => {
@@ -2916,8 +3032,8 @@ $('itemdetail-buy').addEventListener('click', () => {
 
 $('userprofile-back').addEventListener('click', () => {
   state.currentUserProfileId = null;
-  if (history.length > 1) history.back();
-  else { navigate('home'); setUrl('/', true); }
+  navigate('home');
+  setUrl('/', true);
 });
 
 /* ============================================================
