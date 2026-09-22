@@ -254,9 +254,6 @@
   .dm-input-row input:focus{border-color:#4a7ab8;background:#fff}
   .dm-input-row button{padding:10px 22px;border-radius:20px;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border:2px solid #0a2450;font-weight:bold;font-size:12px;cursor:pointer}
 
-  /* ============================================================
-     PURCHASE MODAL
-     ============================================================ */
   #purchase-modal{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
   #purchase-modal.show{display:flex}
   .purchase-box{background:#fff;border:3px solid #1f4d8f;border-radius:10px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:purchasePop .18s ease-out}
@@ -282,9 +279,6 @@
   .purchase-btn.confirm:disabled{opacity:.6;cursor:wait}
   .purchase-btn.cancel{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#f0f0f0}
 
-  /* ============================================================
-     ITEM DETAIL PAGE
-     ============================================================ */
   .item-detail-layout{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start}
   .item-detail-hero{aspect-ratio:1;background:linear-gradient(135deg,#e8f2ff,#d6ecff);border:2px solid #c8c8c8;border-radius:8px;overflow:hidden;position:relative}
   .item-detail-hero canvas{width:100%;height:100%;display:block;cursor:grab}
@@ -310,9 +304,6 @@
   .btn-buy-detail:disabled{opacity:.5;cursor:not-allowed;filter:none}
   .btn-own-detail{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#f0f0f0;cursor:default}
 
-  /* ============================================================
-     USER PROFILE PAGE
-     ============================================================ */
   .userpage-layout{display:grid;grid-template-columns:320px 1fr;gap:24px;align-items:start}
   .userpage-avatar{aspect-ratio:3/4;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #c8c8c8;border-radius:8px;overflow:hidden;position:relative;min-height:380px}
   .userpage-avatar canvas{width:100%;height:100%;display:block;cursor:grab}
@@ -658,7 +649,6 @@
         </section>
       </div>
 
-      <!-- ============ ITEM DETAIL PAGE ============ -->
       <div class="page" id="page-itemdetail">
         <section class="panel">
           <div class="panel-title">
@@ -698,7 +688,6 @@
         </section>
       </div>
 
-      <!-- ============ USER PROFILE PAGE ============ -->
       <div class="page" id="page-userprofile">
         <section class="panel">
           <div class="panel-title">
@@ -764,7 +753,6 @@
   </div>
 </div>
 
-<!-- ============ PURCHASE MODAL ============ -->
 <div id="purchase-modal" class="overlay">
   <div class="purchase-box">
     <div class="purchase-header">
@@ -838,6 +826,7 @@ const state = {
   currentItemDetail: null,
   currentUserProfileId: null,
   tryOnActive: false,
+  _itemThumbDisposers: [],
 };
 
 const DEFAULT_AVATAR={head:'#f5cd30',torso:'#0d69ac',leftArm:'#f5cd30',rightArm:'#f5cd30',leftLeg:'#4b974b',rightLeg:'#4b974b'};
@@ -1260,7 +1249,6 @@ async function mountAvatar3D(container, colors, opts={}) {
   const head = new THREE.Mesh(geoHead, [matHead, matHead, matHead, matHead, matFace, matHead]);
   head.position.set(0, 4.625, 0); group.add(head);
 
-  const parts = { head, torso, armL, armR, legL, legR };
   function getPart(name) {
     switch (name) {
       case 'Head': return head;
@@ -1340,9 +1328,11 @@ async function mountAvatar3D(container, colors, opts={}) {
       canvas.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      try { renderer.forceContextLoss(); } catch (e) {}
       renderer.dispose();
       geoLeg.dispose(); geoArm.dispose(); geoTorso.dispose(); geoHead.dispose();
       if (faceTex) faceTex.dispose();
+      try { canvas.remove(); } catch (e) {}
     }
   };
   state.avatarViewers.set(container, inst);
@@ -1474,15 +1464,12 @@ async function confirmPurchase() {
       return;
     }
 
-    /* Sincroniza saldo */
     state.blox = Number(data.new_balance);
     setBlox(state.blox);
 
-    /* Sincroniza inventário direto da RPC (mais confiável que local) */
     const ownedArr = Array.isArray(data.owned_items) ? data.owned_items : [];
     state.ownedItems = new Set(ownedArr);
 
-    /* Auto-equip */
     if (autoEquip) {
       const slot = slotForItem(item);
       if (isAttachmentSlot(slot)) {
@@ -1493,7 +1480,6 @@ async function confirmPurchase() {
       } else {
         state.equipped[slot] = item.id;
       }
-      /* Só persiste equipped_items — NÃO persiste owned_items de novo */
       try {
         await sb.from('profiles').update({
           equipped_items: state.equipped
@@ -1629,6 +1615,11 @@ function renderEquippedList(){
 function renderCatalog(){
   const grid = $('catalog-grid');
   if (!grid) return;
+
+  if (state._itemThumbDisposers) {
+    for (const fn of state._itemThumbDisposers) { try { fn(); } catch (e) {} }
+    state._itemThumbDisposers = [];
+  }
   grid.innerHTML = '';
 
   const myId = state.user?.id;
@@ -1785,17 +1776,23 @@ async function mountItemThumb(container, item) {
     renderer.render(scene, camera);
   };
   tick();
-  if (!state._itemThumbDisposers) state._itemThumbDisposers = [];
-  state._itemThumbDisposers.push(() => {
+  const cleanup = () => {
     alive = false;
     ro.disconnect();
+    try { renderer.forceContextLoss(); } catch (e) {}
     renderer.dispose();
-  });
+  };
+  state._itemThumbDisposers.push(cleanup);
+  container._thumbCleanup = cleanup;
 }
 
 function renderOwnedItems(){
   const grid = $('avatar-items-grid');
   if (!grid) return;
+  if (state._itemThumbDisposers) {
+    for (const fn of state._itemThumbDisposers) { try { fn(); } catch (e) {} }
+    state._itemThumbDisposers = [];
+  }
   grid.innerHTML = '';
 
   const owned = Array.from(state.ownedItems).map(id => getStoreItem(id)).filter(Boolean);
@@ -1927,12 +1924,16 @@ async function onLoggedIn(user){
   await loadGameCards();
   await refreshFriendsData();
   await renderHome();
+  /* Cleanup old presence channel before creating a new one */
+  if (state.presenceChannel) {
+    try { await sb.removeChannel(state.presenceChannel); } catch (e) {}
+    state.presenceChannel = null;
+  }
   joinPresence();
   await loadAllDMs();
   initDMChannel();
   renderDMFriendList();
   updateDMBadge();
-  /* URL routing: if the user landed on /profile/33 or /item/uuid, honour it */
   if (!handleUrlOnLoad()) {
     navigate('home');
     setUrl('/', true);
@@ -2338,9 +2339,6 @@ async function renderHome() {
   }
 }
 
-/* ============================================================
-   PLAYER PROFILE — redirects to full user page
-   ============================================================ */
 async function showPlayerProfile(userId) {
   openUserProfilePage(userId);
 }
@@ -2499,6 +2497,10 @@ async function sendDM(friendId, text){
 
 function joinPresence() {
   if (!state.user) return;
+  if (state.presenceChannel) {
+    try { sb.removeChannel(state.presenceChannel); } catch (e) {}
+    state.presenceChannel = null;
+  }
   state.presenceChannel = sb.channel('online-players', { config: { presence: { key: state.user.id } } });
   state.presenceChannel.on('presence', { event: 'sync' }, () => {
     const p = state.presenceChannel.presenceState();
@@ -2798,7 +2800,6 @@ async function renderUserProfilePage(userIdOrDisplayId, pushUrl = true) {
     }
   }
 
-  /* Equipped items */
   const eqEl = $('userprofile-equipped');
   const equipped = migrateEquipped(prof.equipped_items);
   const rows = [];
@@ -2830,7 +2831,6 @@ async function renderUserProfilePage(userIdOrDisplayId, pushUrl = true) {
     ).join('');
   }
 
-  /* Games */
   const gamesEl = $('userprofile-games');
   const userGames = (state.gamesCache || []).filter(g => g.author_id === prof.id);
   $('userprofile-games-count').textContent = userGames.length + (userGames.length === 1 ? ' game' : ' games');
