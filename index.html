@@ -282,6 +282,63 @@
   .purchase-btn.confirm:disabled{opacity:.6;cursor:wait}
   .purchase-btn.cancel{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#f0f0f0}
 
+  /* ============================================================
+     ITEM DETAIL PAGE
+     ============================================================ */
+  .item-detail-layout{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start}
+  .item-detail-hero{aspect-ratio:1;background:linear-gradient(135deg,#e8f2ff,#d6ecff);border:2px solid #c8c8c8;border-radius:8px;overflow:hidden;position:relative}
+  .item-detail-hero canvas{width:100%;height:100%;display:block;cursor:grab}
+  .item-detail-hero img{width:100%;height:100%;object-fit:contain;display:block}
+  .item-detail-info h2{font-family:'Arial Black',sans-serif;font-size:26px;color:#003366;margin-bottom:6px;line-height:1.1}
+  .item-detail-author{color:#666;font-size:13px;margin-bottom:14px}
+  .item-detail-author b{color:#1a4a9c}
+  .item-detail-meta{display:flex;gap:8px;font-size:11px;color:#666;margin-bottom:16px;flex-wrap:wrap}
+  .item-detail-meta span{background:#f0f0f0;border:1px solid #d0d0d0;padding:3px 10px;border-radius:12px}
+  .item-detail-price{font-family:'Arial Black',sans-serif;font-size:28px;color:#8a6800;display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .item-detail-price .blox-glyph{width:22px;height:22px}
+  .item-detail-stats{background:#f7faff;border:1px solid #cfe0f5;border-radius:6px;padding:12px 16px;margin-bottom:16px}
+  .item-detail-stats .row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:#445;border-bottom:1px solid #e6eef7}
+  .item-detail-stats .row:last-child{border-bottom:none}
+  .item-detail-stats .row b{color:#003366}
+  .item-detail-actions{display:flex;gap:10px;flex-wrap:wrap}
+  .item-detail-actions button{flex:1;min-width:130px;padding:13px 20px;border-radius:6px;font-family:inherit;font-weight:bold;font-size:14px;cursor:pointer;border:2px outset;letter-spacing:.3px;transition:.1s}
+  .btn-tryon{background:linear-gradient(180deg,#ffdd00,#f0b800);color:#663300;border-color:#ffe680}
+  .btn-tryon:hover{filter:brightness(1.05)}
+  .btn-tryon.active{background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border-color:#6b9cd8;text-shadow:1px 1px 0 #0a2450}
+  .btn-buy-detail{background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border-color:#7cdd7c;text-shadow:1px 1px 0 #005500}
+  .btn-buy-detail:hover{filter:brightness(1.05)}
+  .btn-buy-detail:disabled{opacity:.5;cursor:not-allowed;filter:none}
+  .btn-own-detail{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#f0f0f0;cursor:default}
+
+  /* ============================================================
+     USER PROFILE PAGE
+     ============================================================ */
+  .userpage-layout{display:grid;grid-template-columns:320px 1fr;gap:24px;align-items:start}
+  .userpage-avatar{aspect-ratio:3/4;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #c8c8c8;border-radius:8px;overflow:hidden;position:relative;min-height:380px}
+  .userpage-avatar canvas{width:100%;height:100%;display:block;cursor:grab}
+  .userpage-avatar .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#8899aa;font-style:italic;font-size:13px}
+  .userpage-info h2{font-family:'Arial Black',sans-serif;font-size:26px;color:#003366;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .userpage-meta{font-size:12px;color:#666;margin-bottom:5px}
+  .userpage-meta b{color:#333}
+  .userpage-blox{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(180deg,#ffe680,#ffb800);color:#4a3a00;font-weight:900;font-size:16px;padding:8px 18px;border-radius:22px;border:2px solid #8a7524;margin:10px 0 14px;font-family:Consolas,monospace;text-shadow:0 1px 0 rgba(255,255,255,.4)}
+  .userpage-blox .blox-glyph{width:14px;height:14px}
+  .userpage-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .userpage-actions button{padding:11px 22px;border-radius:5px;font-family:inherit;font-weight:bold;font-size:13px;cursor:pointer;border:2px outset;transition:.1s}
+  .userpage-actions button:hover{filter:brightness(1.05)}
+  .userpage-actions button:disabled{cursor:not-allowed}
+  .userpage-section{margin-top:20px;background:#fff;border:1px solid #c8c8c8;border-radius:6px;overflow:hidden}
+  .userpage-section-title{padding:10px 16px;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.5px;display:flex;justify-content:space-between;align-items:center}
+  .userpage-section-title .cnt{color:#cfe0f5;font-weight:normal;text-transform:none;letter-spacing:0;font-size:11px}
+  .userpage-equipped{padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+  .userpage-equipped .row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f7faff;border:1px solid #dde7f2;border-radius:4px;font-size:12px}
+  .userpage-equipped .row b{color:#003366;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .userpage-equipped .row span{color:#555}
+  .userpage-games{padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+  .userpage-games .row{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#f7faff;border:1px solid #dde7f2;border-radius:4px;font-size:12px;cursor:pointer;transition:.1s}
+  .userpage-games .row:hover{border-color:#4a7ab8;background:#eef3fa}
+  .userpage-games .row b{color:#003366}
+  .userpage-games .row span{font-size:10px;color:#4a9948;font-weight:bold}
+
   @media(max-width:780px){
     .header{padding:8px 10px;gap:8px}
     .logo{font-size:18px}
@@ -306,6 +363,8 @@
     .item-thumb{height:110px}
     .dm-layout{grid-template-columns:1fr;height:calc(100vh - 160px)}
     .dm-sidebar{border-right:none;border-bottom:1px solid #e6e6e6;max-height:40%}
+    .item-detail-layout,.userpage-layout{grid-template-columns:1fr}
+    .userpage-avatar{min-height:300px}
   }
   @media(max-width:480px){
     .purchase-box{max-width:100%}
@@ -316,7 +375,6 @@
 </style>
 </head>
 <body>
-
 <div id="no-inspect"><div><b>ACCESS DENIED</b><br><br>Developer tools detected.<br>Close them to continue.</div></div>
 
 <div id="loading-screen">
@@ -600,6 +658,92 @@
         </section>
       </div>
 
+      <!-- ============ ITEM DETAIL PAGE ============ -->
+      <div class="page" id="page-itemdetail">
+        <section class="panel">
+          <div class="panel-title">
+            <span id="itemdetail-panel-title">Item Details</span>
+            <button class="btn-back" id="itemdetail-back" style="padding:4px 14px;font-size:11px;margin:0">&#8592; Back</button>
+          </div>
+          <div class="panel-body">
+            <div class="item-detail-layout">
+              <div class="item-detail-hero" id="itemdetail-hero"></div>
+              <div class="item-detail-info">
+                <h2 id="itemdetail-name">Loading...</h2>
+                <div class="item-detail-author">by <b id="itemdetail-author">...</b></div>
+                <div class="item-detail-meta">
+                  <span id="itemdetail-category">accessory</span>
+                  <span id="itemdetail-created">-</span>
+                  <span id="itemdetail-updated">-</span>
+                </div>
+                <div class="item-detail-price">
+                  <span class="blox-glyph"></span>
+                  <span id="itemdetail-price">0</span>
+                  <span style="font-size:14px;color:#666;font-family:inherit;font-weight:bold">Blox</span>
+                </div>
+                <div class="item-detail-stats">
+                  <div class="row"><span>Sales</span><b id="itemdetail-sales">-</b></div>
+                  <div class="row"><span>Category</span><b id="itemdetail-cat">-</b></div>
+                  <div class="row"><span>Published</span><b id="itemdetail-pub">-</b></div>
+                  <div class="row"><span>Your balance</span><b id="itemdetail-balance">0 Blox</b></div>
+                </div>
+                <div class="item-detail-actions">
+                  <button class="btn-tryon" id="itemdetail-tryon">Try On</button>
+                  <button class="btn-buy-detail" id="itemdetail-buy">Buy</button>
+                </div>
+                <div id="itemdetail-desc" style="margin-top:16px;color:#666;font-size:12px;line-height:1.6"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ USER PROFILE PAGE ============ -->
+      <div class="page" id="page-userprofile">
+        <section class="panel">
+          <div class="panel-title">
+            <span id="userprofile-panel-title">Profile</span>
+            <button class="btn-back" id="userprofile-back" style="padding:4px 14px;font-size:11px;margin:0">&#8592; Back</button>
+          </div>
+          <div class="panel-body">
+            <div class="userpage-layout">
+              <div class="userpage-avatar" id="userprofile-avatar"></div>
+              <div class="userpage-info">
+                <h2 id="userprofile-name">Loading...</h2>
+                <div class="userpage-meta"><b>User ID:</b> <span id="userprofile-id">#0</span></div>
+                <div class="userpage-meta"><b>Joined:</b> <span id="userprofile-joined">-</span></div>
+                <div class="userpage-blox">
+                  <span class="blox-glyph"></span>
+                  <span id="userprofile-blox">0</span>
+                  <span style="font-size:11px;font-family:inherit;font-weight:bold">Blox</span>
+                </div>
+                <div class="userpage-actions" id="userprofile-actions"></div>
+
+                <div class="userpage-section">
+                  <div class="userpage-section-title">
+                    <span>Equipped Items</span>
+                    <span class="cnt" id="userprofile-equipped-count">0 items</span>
+                  </div>
+                  <div class="userpage-equipped" id="userprofile-equipped">
+                    <div class="empty-note">Nothing equipped.</div>
+                  </div>
+                </div>
+
+                <div class="userpage-section">
+                  <div class="userpage-section-title">
+                    <span>Games Created</span>
+                    <span class="cnt" id="userprofile-games-count">0 games</span>
+                  </div>
+                  <div class="userpage-games" id="userprofile-games">
+                    <div class="empty-note">No games yet.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
     </main>
   </div>
 </div>
@@ -691,6 +835,9 @@ const state = {
   dmConversations: {}, dmLastMessage: {}, dmUnread: {},
   dmActiveFriend: null, dmChannel: null, dmFriendCache: {},
   pendingPurchase: null,
+  currentItemDetail: null,
+  currentUserProfileId: null,
+  tryOnActive: false,
 };
 
 const DEFAULT_AVATAR={head:'#f5cd30',torso:'#0d69ac',leftArm:'#f5cd30',rightArm:'#f5cd30',leftLeg:'#4b974b',rightLeg:'#4b974b'};
@@ -845,13 +992,16 @@ async function buildAccessoryGroup(THREE, item, GLTFLoader) {
       partGroup = buildShapeMesh(THREE, p.shape || 'box', p.color || '#888888');
     }
     if (partGroup) {
+      const sc = p.scale_x != null || p.scale_y != null || p.scale_z != null
+        ? { x: Number(p.scale_x) || 1, y: Number(p.scale_y) || 1, z: Number(p.scale_z) || 1 }
+        : { x: Number(p.scale) || 1, y: Number(p.scale) || 1, z: Number(p.scale) || 1 };
       partGroup.position.set(p.position?.x || 0, p.position?.y || 0, p.position?.z || 0);
       partGroup.rotation.set(
         THREE.MathUtils.degToRad(p.rotation?.x || 0),
         THREE.MathUtils.degToRad(p.rotation?.y || 0),
         THREE.MathUtils.degToRad(p.rotation?.z || 0)
       );
-      partGroup.scale.setScalar(p.scale || 1);
+      partGroup.scale.set(sc.x, sc.y, sc.z);
       group.add(partGroup);
     }
   }
@@ -996,7 +1146,7 @@ async function mountAvatar3D(container, colors, opts={}) {
     });
   }
 
-    async function compositeFaceTexture(faceUrl, headColorCss) {
+  async function compositeFaceTexture(faceUrl, headColorCss) {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -1331,6 +1481,9 @@ async function confirmPurchase() {
     renderOwnedItems();
     renderEquippedList();
     refreshAllAvatars();
+    if (state.currentPage === 'itemdetail' && state.currentItemDetail && state.currentItemDetail.id === item.id) {
+      renderItemDetail();
+    }
   } catch (e) {
     console.error(e);
     showToast('Purchase failed: ' + e.message, 'error');
@@ -1383,6 +1536,9 @@ async function equipItem(itemId){
   renderOwnedItems();
   renderEquippedList();
   refreshAllAvatars();
+  if (state.currentPage === 'itemdetail' && state.currentItemDetail && state.currentItemDetail.id === itemId) {
+    renderItemDetail();
+  }
 }
 
 function renderEquippedList(){
@@ -1459,6 +1615,7 @@ function renderCatalog(){
     const owned = isOwned(item.id);
     const card = document.createElement('div');
     card.className = 'item-card' + (owned ? ' owned' : '');
+    card.style.cursor = 'pointer';
 
     card.innerHTML =
       '<div class="item-thumb"></div>' +
@@ -1481,16 +1638,21 @@ function renderCatalog(){
       const price = Number(item.price || 0);
       buyBtn.textContent = state.blox >= price ? ('Buy ' + price) : 'Not enough';
       buyBtn.disabled = state.blox < price;
-      buyBtn.addEventListener('click', () => openPurchaseModal(item.id));
+      buyBtn.addEventListener('click', (e) => { e.stopPropagation(); openPurchaseModal(item.id); });
       actions.appendChild(buyBtn);
     } else {
       const eqBtn = document.createElement('button');
       const equipped = isEquipped(item.id);
       eqBtn.className = equipped ? 'iequipped' : 'iequip';
       eqBtn.textContent = equipped ? 'Equipped' : 'Equip';
-      eqBtn.addEventListener('click', () => equipItem(item.id));
+      eqBtn.addEventListener('click', (e) => { e.stopPropagation(); equipItem(item.id); });
       actions.appendChild(eqBtn);
     }
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      openItemDetail(item.id);
+    });
 
     grid.appendChild(card);
   }
@@ -1499,14 +1661,42 @@ function renderCatalog(){
 async function mountItemThumb(container, item) {
   if (item.category === 'face') {
     if (item.texture_url) {
-      const img = document.createElement('img');
+      const headColor = (state.profile && state.profile.avatar_colors && state.profile.avatar_colors.head) || '#f5cd30';
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256; canvas.height = 256;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = headColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const outImg = document.createElement('img');
+          outImg.src = canvas.toDataURL('image/png');
+          outImg.alt = item.name;
+          outImg.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+          container.appendChild(outImg);
+        } catch (e) {
+          const img2 = document.createElement('img');
+          img2.src = item.texture_url;
+          img2.alt = item.name;
+          img2.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+          container.appendChild(img2);
+        }
+      };
+      img.onerror = () => {
+        const img2 = document.createElement('img');
+        img2.src = item.texture_url;
+        img2.alt = item.name;
+        img2.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+        container.appendChild(img2);
+      };
       img.src = item.texture_url;
-      img.alt = item.name;
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
-      container.appendChild(img);
     } else {
+      const headColor = (state.profile && state.profile.avatar_colors && state.profile.avatar_colors.head) || '#f5cd30';
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'width:100%;height:100%;background:#f5cd30;display:flex;align-items:center;justify-content:center';
+      wrap.style.cssText = 'width:100%;height:100%;background:' + headColor + ';display:flex;align-items:center;justify-content:center';
       wrap.innerHTML =
         '<svg viewBox="0 0 128 128" style="width:70%;height:70%">' +
         '<ellipse cx="44" cy="52" rx="8" ry="11" fill="#1a1a1a"/>' +
@@ -1702,7 +1892,6 @@ async function onLoggedIn(user){
   renderOwnedItems();
   updateBloxButton();
   const ps = $('profile-streak'); if (ps) ps.textContent = state.profile?.daily_streak || 0;
-  navigate('home');
   await loadGameCards();
   await refreshFriendsData();
   await renderHome();
@@ -1711,6 +1900,11 @@ async function onLoggedIn(user){
   initDMChannel();
   renderDMFriendList();
   updateDMBadge();
+  /* URL routing: if the user landed on /profile/33 or /item/uuid, honour it */
+  if (!handleUrlOnLoad()) {
+    navigate('home');
+    setUrl('/', true);
+  }
   setTimeout(() => handleDailyOnLogin(), 400);
 }
 
@@ -1776,10 +1970,12 @@ function navigate(page){
     renderDMFriendList();
     if(state.dmActiveFriend) renderDMConversation(state.dmActiveFriend);
   }
+  if(page==='itemdetail') renderItemDetail();
+  if(page==='userprofile' && state.currentUserProfileId) renderUserProfilePage(state.currentUserProfileId, false);
 }
 $$('.sidebar-menu button, .header-nav button').forEach(btn=>btn.addEventListener('click',()=>{const t=btn.dataset.nav;if(t)navigate(t)}));
 
-$('logo-btn').addEventListener('click',()=>navigate('home'));
+$('logo-btn').addEventListener('click',()=>{ navigate('home'); setUrl('/', true); });
 $('header-user').addEventListener('click',()=>navigate('profile'));
 $('header-blox').addEventListener('click', async () => {
   const result = await tryClaimDaily();
@@ -2110,42 +2306,13 @@ async function renderHome() {
   }
 }
 
+/* ============================================================
+   PLAYER PROFILE — redirects to full user page
+   ============================================================ */
 async function showPlayerProfile(userId) {
-  const modal = $('player-modal');
-  const avEl = $('player-modal-avatar');
-  modal.classList.add('open');
-  $('player-modal-title').textContent = 'Player';
-  $('player-modal-name').textContent = '...';
-  $('player-modal-id').textContent = '';
-  $('player-modal-status').innerHTML = 'Loading...';
-  $('player-modal-actions').innerHTML = '';
-  avEl.innerHTML = '';
-  const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
-  if (!prof) {
-    $('player-modal-name').textContent = 'Unknown';
-    $('player-modal-status').innerHTML = '<span class="offline">Not found.</span>';
-    return;
-  }
-  prof.avatar_colors = normalizeAvatarColors(prof.avatar_colors);
-  $('player-modal-title').textContent = prof.username;
-  $('player-modal-name').innerHTML = esc(prof.username) + (prof.is_adm ? ' ' + admBadge() : '');
-  $('player-modal-id').textContent = '#' + (prof.display_id || '0');
-  await mountAvatar3D(avEl, prof.avatar_colors, { autoRotate: true, interactive: true, equipped: prof.equipped_items || {} });
-  const pres = state.presenceByUser[userId];
-  let html = '';
-  if (pres) html += '<div class="online">ONLINE</div>';
-  else html += '<div class="offline">OFFLINE</div>';
-  if (typeof prof.blox === 'number') html += '<div style="margin-top:8px;color:#8a6800;font-weight:900">' + prof.blox + ' Blox</div>';
-  $('player-modal-status').innerHTML = html;
-  const isFriend = state.friendsCache.some(f => f.profile && f.profile.id === userId);
-  if (isFriend && userId !== state.user.id) {
-    const msgBtn = document.createElement('button');
-    msgBtn.className = 'pm-msg';
-    msgBtn.textContent = 'Send Message';
-    msgBtn.addEventListener('click', () => { closePlayerModal(); navigate('messages'); setTimeout(() => openDMWith(userId), 80); });
-    $('player-modal-actions').appendChild(msgBtn);
-  }
+  openUserProfilePage(userId);
 }
+
 function closePlayerModal() {
   state.avatarViewers.get($('player-modal-avatar'))?.dispose?.();
   state.avatarViewers.delete($('player-modal-avatar'));
@@ -2317,6 +2484,380 @@ function joinPresence() {
   });
 }
 
+/* ============================================================
+   URL ROUTING
+   ============================================================ */
+function setUrl(path, replace) {
+  try {
+    if (replace) history.replaceState({ path }, '', path);
+    else history.pushState({ path }, '', path);
+  } catch (e) { /* ignore on file:// */ }
+}
+
+function handleUrlOnLoad() {
+  const path = location.pathname;
+  if (path.startsWith('/profile/')) {
+    const id = path.slice('/profile/'.length).replace(/\/$/, '');
+    if (id) { openUserProfilePage(id, false); return true; }
+  } else if (path.startsWith('/item/')) {
+    const itemId = path.slice('/item/'.length).replace(/\/$/, '');
+    if (itemId) { openItemDetail(itemId, false); return true; }
+  }
+  return false;
+}
+
+window.addEventListener('popstate', () => {
+  if (!handleUrlOnLoad()) {
+    navigate('home');
+    setUrl('/', true);
+  }
+});
+
+/* ============================================================
+   ITEM DETAIL PAGE
+   ============================================================ */
+function openItemDetail(itemId, pushUrl = true) {
+  const item = state.allStoreItems.find(i => i.id === itemId) || getStoreItem(itemId);
+  if (!item) { showToast('Item not found', 'error'); return; }
+
+  state.currentItemDetail = item;
+  state.tryOnActive = false;
+
+  renderItemDetail();
+  navigate('itemdetail');
+
+  if (pushUrl) setUrl('/item/' + item.id);
+}
+
+function applyItemToEquipped(equipped, item) {
+  const slot = slotForItem(item);
+  if (isAttachmentSlot(slot)) {
+    if (!Array.isArray(equipped[slot])) equipped[slot] = [];
+    if (!equipped[slot].includes(item.id)) equipped[slot].push(item.id);
+  } else if (slot === FACE_SLOT) {
+    equipped.face = item.id;
+  } else {
+    equipped[slot] = item.id;
+  }
+}
+
+function renderItemDetail() {
+  const item = state.currentItemDetail;
+  if (!item) return;
+
+  $('itemdetail-panel-title').textContent = item.name || 'Item Details';
+  $('itemdetail-name').textContent = item.name || 'Untitled';
+  $('itemdetail-author').textContent = item.author_name || 'unknown';
+  $('itemdetail-category').textContent = item.category || 'accessory';
+  $('itemdetail-created').textContent = 'Created ' + fmtDate(item.created_at);
+  $('itemdetail-updated').textContent = 'Updated ' + fmtAgo(item.updated_at || item.created_at);
+  $('itemdetail-price').textContent = (item.price || 0).toLocaleString();
+  $('itemdetail-cat').textContent = item.category || 'accessory';
+  $('itemdetail-pub').textContent = item.is_published ? 'Yes' : 'No';
+  $('itemdetail-balance').textContent = state.blox.toLocaleString() + ' Blox';
+  $('itemdetail-desc').textContent = item.description || '';
+
+  $('itemdetail-sales').textContent = '...';
+  sb.from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .contains('owned_items', [item.id])
+    .then(({ count, error }) => {
+      if (error) { $('itemdetail-sales').textContent = '—'; return; }
+      $('itemdetail-sales').textContent = (count || 0).toLocaleString();
+    })
+    .catch(() => { $('itemdetail-sales').textContent = '—'; });
+
+  const tryBtn = $('itemdetail-tryon');
+  const buyBtn = $('itemdetail-buy');
+  const isMine = item.user_id === state.user?.id;
+  const owned = isOwned(item.id);
+  const equipped = isEquipped(item.id);
+
+  tryBtn.textContent = state.tryOnActive ? 'Remove Try On' : 'Try On';
+  tryBtn.classList.toggle('active', state.tryOnActive);
+
+  buyBtn.className = 'btn-buy-detail';
+  buyBtn.disabled = false;
+
+  if (isMine) {
+    buyBtn.textContent = 'Your Item';
+    buyBtn.className = 'btn-own-detail';
+    buyBtn.disabled = true;
+  } else if (owned) {
+    buyBtn.textContent = equipped ? 'Unequip' : 'Equip';
+    buyBtn.className = equipped ? 'btn-own-detail' : 'btn-buy-detail';
+  } else {
+    buyBtn.textContent = state.blox >= (item.price || 0) ? ('Buy for ' + (item.price || 0)) : 'Not enough Blox';
+    buyBtn.disabled = state.blox < (item.price || 0);
+  }
+
+  renderItemDetailHero();
+}
+
+function renderItemDetailHero() {
+  const item = state.currentItemDetail;
+  const hero = $('itemdetail-hero');
+  if (!hero || !item) return;
+
+  state.avatarViewers.get(hero)?.dispose?.();
+  state.avatarViewers.delete(hero);
+  hero.innerHTML = '';
+
+  if (state.tryOnActive) {
+    const equippedCopy = JSON.parse(JSON.stringify(state.equipped || {}));
+    applyItemToEquipped(equippedCopy, item);
+    mountAvatar3D(hero, state.profile.avatar_colors, {
+      autoRotate: true,
+      interactive: true,
+      equipped: equippedCopy
+    });
+  } else {
+    mountItemThumb(hero, item);
+  }
+}
+
+/* ============================================================
+   USER PROFILE PAGE
+   ============================================================ */
+async function openUserProfilePage(userIdOrDisplayId, pushUrl = true) {
+  navigate('userprofile');
+  await renderUserProfilePage(userIdOrDisplayId, pushUrl);
+}
+
+async function renderUserProfilePage(userIdOrDisplayId, pushUrl = true) {
+  const avEl = $('userprofile-avatar');
+  avEl.innerHTML = '<div class="loading">Loading...</div>';
+
+  const idStr = String(userIdOrDisplayId);
+  let query = sb.from('profiles').select('*');
+  if (idStr.length === 36 && idStr.includes('-')) {
+    query = query.eq('id', idStr);
+  } else {
+    const num = parseInt(idStr, 10);
+    if (!isFinite(num)) {
+      $('userprofile-name').textContent = 'Invalid ID';
+      avEl.innerHTML = '<div class="loading">Invalid profile ID</div>';
+      return;
+    }
+    query = query.eq('display_id', num);
+  }
+
+  const { data: prof, error } = await query.maybeSingle();
+  if (error || !prof) {
+    $('userprofile-name').textContent = 'User not found';
+    avEl.innerHTML = '<div class="loading">Not found</div>';
+    $('userprofile-actions').innerHTML = '';
+    $('userprofile-equipped').innerHTML = '<div class="empty-note">—</div>';
+    $('userprofile-games').innerHTML = '<div class="empty-note">—</div>';
+    return;
+  }
+
+  prof.avatar_colors = normalizeAvatarColors(prof.avatar_colors);
+  state.currentUserProfileId = prof.id;
+
+  if (pushUrl) setUrl('/profile/' + (prof.display_id || prof.id));
+
+  $('userprofile-panel-title').textContent = '@' + prof.username;
+  $('userprofile-name').innerHTML = esc(prof.username) + (prof.is_adm ? ' ' + admBadge('lg') : '');
+  $('userprofile-id').textContent = '#' + (prof.display_id || '0');
+  $('userprofile-joined').textContent = fmtDate(prof.created_at);
+  $('userprofile-blox').textContent = (prof.blox || 0).toLocaleString();
+
+  state.avatarViewers.get(avEl)?.dispose?.();
+  state.avatarViewers.delete(avEl);
+  avEl.innerHTML = '';
+  await mountAvatar3D(avEl, prof.avatar_colors, {
+    autoRotate: true,
+    interactive: true,
+    equipped: prof.equipped_items || {}
+  });
+
+  const actionsEl = $('userprofile-actions');
+  actionsEl.innerHTML = '';
+
+  const isMe = prof.id === state.user?.id;
+
+  if (isMe) {
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit My Avatar';
+    editBtn.style.background = 'linear-gradient(180deg,#4a7ab8,#356198)';
+    editBtn.style.color = '#fff';
+    editBtn.style.borderColor = '#6b9cd8';
+    editBtn.addEventListener('click', () => navigate('avatar'));
+    actionsEl.appendChild(editBtn);
+  } else {
+    const isFriend = state.friendsCache.some(f => f.profile?.id === prof.id);
+    const isIncoming = state.incomingCache.some(r => r.sender_id === prof.id);
+    const isOutgoing = state.outgoingCache.some(r => r.receiver_id === prof.id);
+
+    if (isFriend) {
+      const msgBtn = document.createElement('button');
+      msgBtn.textContent = 'Send Message';
+      msgBtn.style.background = 'linear-gradient(180deg,#6dd36d,#4a9948)';
+      msgBtn.style.color = '#fff';
+      msgBtn.style.borderColor = '#7cdd7c';
+      msgBtn.addEventListener('click', () => {
+        navigate('messages');
+        setTimeout(() => openDMWith(prof.id), 80);
+      });
+      actionsEl.appendChild(msgBtn);
+
+      const rmBtn = document.createElement('button');
+      rmBtn.textContent = 'Remove Friend';
+      rmBtn.style.background = 'linear-gradient(180deg,#e8e8e8,#d0d0d0)';
+      rmBtn.style.color = '#333';
+      rmBtn.style.borderColor = '#f0f0f0';
+      rmBtn.addEventListener('click', async () => {
+        if (!confirm('Remove ' + prof.username + ' from friends?')) return;
+        const { error } = await sb.rpc('remove_friend', { other_id: prof.id });
+        if (error) { showToast('Error: ' + error.message, 'error'); return; }
+        showToast('Removed', 'success');
+        await refreshFriendsData();
+        renderUserProfilePage(prof.display_id || prof.id, false);
+      });
+      actionsEl.appendChild(rmBtn);
+    } else if (isIncoming) {
+      const acceptBtn = document.createElement('button');
+      acceptBtn.textContent = 'Accept Request';
+      acceptBtn.style.background = 'linear-gradient(180deg,#6dd36d,#4a9948)';
+      acceptBtn.style.color = '#fff';
+      acceptBtn.style.borderColor = '#7cdd7c';
+      acceptBtn.addEventListener('click', async () => {
+        const req = state.incomingCache.find(r => r.sender_id === prof.id);
+        if (!req) return;
+        const { error } = await sb.rpc('respond_friend_request', { req_id: req.id, accept: true });
+        if (error) { showToast('Error: ' + error.message, 'error'); return; }
+        showToast('Friend added', 'success');
+        await refreshFriendsData();
+        renderUserProfilePage(prof.display_id || prof.id, false);
+      });
+      actionsEl.appendChild(acceptBtn);
+    } else if (isOutgoing) {
+      const pendBtn = document.createElement('button');
+      pendBtn.textContent = 'Request Pending';
+      pendBtn.disabled = true;
+      pendBtn.style.background = 'linear-gradient(180deg,#ffe0a0,#f0b800)';
+      pendBtn.style.color = '#663300';
+      pendBtn.style.borderColor = '#ffe680';
+      pendBtn.style.opacity = '.7';
+      actionsEl.appendChild(pendBtn);
+    } else {
+      const addBtn = document.createElement('button');
+      addBtn.textContent = 'Add Friend';
+      addBtn.style.background = 'linear-gradient(180deg,#6dd36d,#4a9948)';
+      addBtn.style.color = '#fff';
+      addBtn.style.borderColor = '#7cdd7c';
+      addBtn.addEventListener('click', async () => {
+        addBtn.disabled = true;
+        addBtn.textContent = 'Sending...';
+        const { data, error } = await sb.rpc('send_friend_request', { target_username: prof.username });
+        if (error || (data && data.error)) {
+          const msg = (data && data.error) || (error && error.message) || 'Error';
+          showToast(typeof msg === 'string' ? msg : 'Error', 'error');
+          addBtn.disabled = false;
+          addBtn.textContent = 'Add Friend';
+          return;
+        }
+        showToast('Friend request sent', 'success');
+        await refreshFriendsData();
+        renderUserProfilePage(prof.display_id || prof.id, false);
+      });
+      actionsEl.appendChild(addBtn);
+    }
+  }
+
+  /* Equipped items */
+  const eqEl = $('userprofile-equipped');
+  const equipped = migrateEquipped(prof.equipped_items);
+  const rows = [];
+
+  const faceId = equipped.face || 'default_face';
+  const faceItem = getStoreItem(faceId);
+  if (faceItem) rows.push({ slot: 'Face', name: faceItem.name });
+
+  for (const slot of ATTACH_SLOTS) {
+    const arr = Array.isArray(equipped[slot]) ? equipped[slot] : [];
+    for (const id of arr) {
+      const it = getStoreItem(id);
+      if (it) rows.push({ slot, name: it.name });
+    }
+  }
+  for (const slot of ['shirt', 'tshirt', 'pants']) {
+    const id = equipped[slot];
+    if (!id) continue;
+    const it = getStoreItem(id);
+    if (it) rows.push({ slot, name: it.name });
+  }
+
+  $('userprofile-equipped-count').textContent = rows.length + (rows.length === 1 ? ' item' : ' items');
+  if (!rows.length) {
+    eqEl.innerHTML = '<div class="empty-note">Nothing equipped.</div>';
+  } else {
+    eqEl.innerHTML = rows.map(r =>
+      '<div class="row"><b>' + esc(r.slot) + '</b><span>' + esc(r.name) + '</span></div>'
+    ).join('');
+  }
+
+  /* Games */
+  const gamesEl = $('userprofile-games');
+  const userGames = (state.gamesCache || []).filter(g => g.author_id === prof.id);
+  $('userprofile-games-count').textContent = userGames.length + (userGames.length === 1 ? ' game' : ' games');
+  if (!userGames.length) {
+    gamesEl.innerHTML = '<div class="empty-note">No games yet.</div>';
+  } else {
+    gamesEl.innerHTML = userGames.map(g =>
+      '<div class="row" data-gid="' + esc(g.id) + '">' +
+        '<b>' + esc(g.name) + '</b>' +
+        '<span>' + (g.featured ? 'FEATURED' : '') + '</span>' +
+      '</div>'
+    ).join('');
+    gamesEl.querySelectorAll('.row').forEach(row => {
+      row.addEventListener('click', () => {
+        const g = state.gamesCache.find(x => x.id === row.dataset.gid);
+        if (g) openGameDetail(g);
+      });
+    });
+  }
+}
+
+/* ============================================================
+   ITEM DETAIL BUTTON WIRING
+   ============================================================ */
+$('itemdetail-back').addEventListener('click', () => {
+  state.tryOnActive = false;
+  state.currentItemDetail = null;
+  navigate('catalog');
+  setUrl('/catalog', true);
+});
+
+$('itemdetail-tryon').addEventListener('click', () => {
+  state.tryOnActive = !state.tryOnActive;
+  renderItemDetail();
+});
+
+$('itemdetail-buy').addEventListener('click', () => {
+  const item = state.currentItemDetail;
+  if (!item) return;
+  const isMine = item.user_id === state.user?.id;
+  if (isMine) return;
+  if (isOwned(item.id)) {
+    equipItem(item.id).then(() => {
+      renderItemDetail();
+    });
+  } else {
+    openPurchaseModal(item.id);
+  }
+});
+
+$('userprofile-back').addEventListener('click', () => {
+  state.currentUserProfileId = null;
+  if (history.length > 1) history.back();
+  else { navigate('home'); setUrl('/', true); }
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
 (async function init(){
   setTimeout(()=>$('loading-screen').classList.add('hidden'),500);
   const ok=await checkSession();

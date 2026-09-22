@@ -173,8 +173,21 @@ def guess_content_type(path):
         '.png':  'image/png',
         '.jpg':  'image/jpeg',
         '.jpeg': 'image/jpeg',
+        '.gif':  'image/gif',
+        '.webp': 'image/webp',
         '.svg':  'image/svg+xml',
         '.ico':  'image/x-icon',
+        '.woff': 'font/woff',
+        '.woff2':'font/woff2',
+        '.ttf':  'font/ttf',
+        '.otf':  'font/otf',
+        '.mp3':  'audio/mpeg',
+        '.ogg':  'audio/ogg',
+        '.wav':  'audio/wav',
+        '.mp4':  'video/mp4',
+        '.webm': 'video/webm',
+        '.glb':  'model/gltf-binary',
+        '.gltf': 'model/gltf+json',
     }.get(ext, 'application/octet-stream')
 
 async def send_response(writer, status, body, ctype):
@@ -199,12 +212,30 @@ async def serve_static(writer, path):
         path = '/index.html'
     if '?' in path:
         path = path.split('?', 1)[0]
+    if '#' in path:
+        path = path.split('#', 1)[0]
     rel = path.lstrip('/')
     full = os.path.normpath(os.path.join(ROOT, rel))
     if not full.startswith(ROOT):
         await send_response(writer, 403, b'Forbidden', 'text/plain')
         return
 
+    # ---------- SPA fallback ----------
+    # /profile/33, /item/uuid, /catalog, /games, /messages ...
+    # Routes without a file extension fall back to index.html
+    # so client-side routing can handle them.
+    if not os.path.isfile(full):
+        last_seg = rel.split('/')[-1] if rel else ''
+        # If path has no extension, treat it as an SPA route
+        if last_seg and '.' not in last_seg:
+            full = os.path.join(ROOT, 'index.html')
+        elif '/' in rel:
+            # e.g. /profile/33 -> last_seg '33' has no '.', already covered.
+            # Fallback for safety: if the requested dir doesn't exist but
+            # the top-level file does, serve index.html
+            pass
+
+    # ---------- Case-insensitive fallback ----------
     if not os.path.isfile(full):
         dir_part = os.path.dirname(full)
         base_part = os.path.basename(full).lower()
@@ -219,14 +250,25 @@ async def serve_static(writer, path):
                 pass
 
     if not os.path.isfile(full):
-        print(f'[serve] 404: {rel} (tried {full})')
-        await send_response(writer, 404, b'Not Found', 'text/plain')
-        return
+        # Final fallback: SPA route to index.html for unknown routes without ext
+        last_seg = rel.split('/')[-1] if rel else ''
+        if last_seg and '.' not in last_seg:
+            idx = os.path.join(ROOT, 'index.html')
+            if os.path.isfile(idx):
+                full = idx
+            else:
+                print(f'[serve] 404: {rel} (no index.html fallback)')
+                await send_response(writer, 404, b'Not Found', 'text/plain')
+                return
+        else:
+            print(f'[serve] 404: {rel} (tried {full})')
+            await send_response(writer, 404, b'Not Found', 'text/plain')
+            return
 
     try:
         with open(full, 'rb') as f:
             body = f.read()
-        print(f'[serve] 200: {rel} ({len(body)} bytes)')
+        print(f'[serve] 200: {rel} ({len(body)} bytes) -> {os.path.basename(full)}')
     except OSError as e:
         print(f'[serve] 500: {rel} -> {e}')
         await send_response(writer, 500, b'Error', 'text/plain')
@@ -321,6 +363,7 @@ async def handle_websocket(reader, writer, headers):
     room = str(data.get('game', 'default'))[:64].strip() or 'default'
     user_id = str(data.get('user_id', '')).strip() or None
 
+    # -------- Session lock: one user_id = one session --------
     if user_id:
         old_pid = active_users.get(user_id)
         if old_pid is not None:
@@ -455,6 +498,7 @@ async def main():
     print(f'   HTMLBLOX - server running (rooms per game)')
     print(f'  ============================================')
     print(f'   Open: http://localhost:{PORT}')
+    print(f'   SPA routes: /profile/<id> /item/<uuid> ...')
     print(f'   Ctrl+C to stop.\n')
     asyncio.create_task(simulation_loop())
     server = await asyncio.start_server(handle_client, HOST, PORT)
