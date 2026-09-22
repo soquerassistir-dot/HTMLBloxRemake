@@ -882,54 +882,23 @@ function initAccessoryScene() {
   /* ============================================================
      GIZMO — local space + keep opposite side fixed when scaling
      ============================================================ */
-  const gizmo = new TransformControls(camera, renderer.domElement);
+ const gizmo = new TransformControls(camera, renderer.domElement);
   gizmo.setMode('translate');
   gizmo.setSize(0.65);
-  gizmo.setSpace('local'); /* <-- scale acts on local axes */
-
-  let scaleDragState = null;
 
   gizmo.addEventListener('dragging-changed', (e) => {
     state._gizmoDragging = e.value;
     if (state.orbit) state.orbit.enabled = !e.value;
-
-    if (e.value && gizmo.mode === 'scale' && gizmo.object) {
-      scaleDragState = {
-        startScale: gizmo.object.scale.clone(),
-        startPos: gizmo.object.position.clone(),
-        axis: (gizmo.axis || 'XYZ').toUpperCase()
-      };
-    } else {
-      scaleDragState = null;
-    }
   });
 
   gizmo.addEventListener('objectChange', () => {
-    const obj = gizmo.object;
-    if (!obj) return;
-
-    /* --- Scale: keep the opposite (min) side fixed --- */
-    if (gizmo.mode === 'scale' && scaleDragState) {
-      const axis = scaleDragState.axis;
-      const s = obj.scale;
-      const ss = scaleDragState.startScale;
-      const sp = scaleDragState.startPos;
-
-      for (const ax of ['x', 'y', 'z']) {
-        if (axis.includes(ax.toUpperCase())) {
-          const delta = s[ax] - ss[ax];
-          /* Position moves by half the scale delta so the -side stays fixed */
-          obj.position[ax] = sp[ax] + delta * 0.5;
-        }
-      }
-    }
-
     syncInputsFromSelection();
   });
 
   scene.add(gizmo);
   state.gizmo = gizmo;
 
+  
   const orbit = new OrbitControls(camera, renderer.domElement);
   orbit.enableDamping = true; orbit.dampingFactor = 0.1;
   orbit.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
@@ -1128,7 +1097,9 @@ function syncInputsFromSelection() {
     if (!entry || !entry.mesh) return;
     const m = entry.mesh;
 
-    const sc = normalizeScale({ x: m.scale.x, y: m.scale.y, z: m.scale.z });
+    /* Força escala uniforme (média dos 3 eixos) — como era antes */
+    const avgScale = (Math.abs(m.scale.x) + Math.abs(m.scale.y) + Math.abs(m.scale.z)) / 3;
+    const safeScale = clampNum(avgScale, 1, 0.01, 50);
 
     entry.data.position = {
       x: clampNum(m.position.x, 0, -100, 100),
@@ -1140,10 +1111,10 @@ function syncInputsFromSelection() {
       y: clampNum(THREE.MathUtils.radToDeg(m.rotation.y), 0, -3600, 3600),
       z: clampNum(THREE.MathUtils.radToDeg(m.rotation.z), 0, -3600, 3600)
     };
-    entry.data.scale = sc;
+    entry.data.scale = { x: safeScale, y: safeScale, z: safeScale };
 
-    /* Do NOT force uniform — keep non-uniform from gizmo */
-    m.scale.set(sc.x, sc.y, sc.z);
+    /* Aplica escala uniforme no mesh */
+    m.scale.setScalar(safeScale);
 
     $('part-pos-x').value = entry.data.position.x.toFixed(2);
     $('part-pos-y').value = entry.data.position.y.toFixed(2);
@@ -1151,9 +1122,9 @@ function syncInputsFromSelection() {
     $('part-rot-x').value = Math.round(entry.data.rotation.x);
     $('part-rot-y').value = Math.round(entry.data.rotation.y);
     $('part-rot-z').value = Math.round(entry.data.rotation.z);
-    $('part-scale-x').value = sc.x.toFixed(2);
-    $('part-scale-y').value = sc.y.toFixed(2);
-    $('part-scale-z').value = sc.z.toFixed(2);
+    $('part-scale-x').value = safeScale.toFixed(2);
+    $('part-scale-y').value = safeScale.toFixed(2);
+    $('part-scale-z').value = safeScale.toFixed(2);
   } else if (state.accGroup) {
     const g = state.accGroup;
 
