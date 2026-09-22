@@ -98,13 +98,13 @@ html, body {
 }
 
 /* ============================================================
-   Chat
+   Chat (com scroll fixo)
    ============================================================ */
 #chat {
   position: fixed;
   left: 14px;
   bottom: 14px;
-  width: 380px;
+  width: 420px;
   max-width: calc(100vw - 28px);
   font-size: 13px;
   z-index: 12;
@@ -115,9 +115,28 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 200px;
-  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
   margin-bottom: 6px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  pointer-events: auto;
+}
+
+#chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+#chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+#chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+#chat-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .chat-msg {
@@ -129,6 +148,7 @@ html, body {
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.95);
   word-wrap: break-word;
   overflow-wrap: break-word;
+  flex-shrink: 0;
   animation: chatFade 0.22s ease-out;
 }
 
@@ -141,7 +161,7 @@ html, body {
    Touch chat tweaks
    ============================================================ */
 @media (pointer: coarse) {
-  #chat-messages { max-height: 160px; }
+  #chat-messages { max-height: 200px; }
   #chat          { font-size: 12px; }
 }
 

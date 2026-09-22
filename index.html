@@ -8,7 +8,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
 </script>
 
 <style>
@@ -16,13 +21,11 @@
   html,body{width:100%;height:100%;font-family:Verdana,Arial,sans-serif;font-size:13px;line-height:1.4;color:#333;background:#e6e6e6;overflow:hidden}
   button,input,select{font-family:inherit;font-size:inherit}
   a{color:#1a4a9c;text-decoration:none}
-
   #app{display:none;width:100vw;height:100vh;flex-direction:column}
   #app.active{display:flex}
-
-  .header{flex-shrink:0;background:linear-gradient(180deg,#1f4d8f 0%,#16407a 100%);border-bottom:3px solid #0a2450;padding:8px 14px;display:flex;align-items:center;gap:14px;color:#fff;box-shadow:0 2px 0 rgba(0,0,0,.15);z-index:100}
+  .header{flex-shrink:0;background:linear-gradient(180deg,#1f4d8f 0%,#16407a 100%);border-bottom:3px solid #0a2450;padding:8px 14px;display:flex;align-items:center;gap:14px;color:#fff;z-index:100}
   .logo{display:flex;align-items:center;gap:10px;font-family:'Arial Black',Arial,sans-serif;font-size:22px;font-weight:900;letter-spacing:-1px;color:#fff;text-shadow:2px 2px 0 #0a2450;cursor:pointer;flex-shrink:0}
-  .logo-img{width:38px;height:38px;border-radius:10px;background:#1f4d8f;border:3px solid #1f4d8f;box-shadow:inset -3px -3px 0 rgba(0,0,0,.2);object-fit:cover;display:block}
+  .logo-img{width:38px;height:38px;border-radius:10px;background:#1f4d8f;border:3px solid #1f4d8f;object-fit:cover;display:block}
   .header-nav{display:flex;gap:2px;margin-left:10px}
   .header-nav button{background:transparent;border:none;color:#cfe0f5;padding:6px 12px;font-size:12px;font-weight:bold;cursor:pointer;border-radius:3px;transition:.1s}
   .header-nav button:hover{background:rgba(255,255,255,.12);color:#fff}
@@ -33,83 +36,72 @@
   .header-avatar{width:32px;height:32px;border-radius:6px;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #8a7524;position:relative;overflow:hidden;flex-shrink:0}
   .header-avatar canvas{width:100%;height:100%;display:block}
   .header-username{color:#fff;font-size:12px;font-weight:bold;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:5px}
-
-  .adm-badge{display:inline-block;background:linear-gradient(180deg,#ff4d4d,#b30000);color:#fff;font-size:9px;font-weight:900;letter-spacing:.8px;padding:1px 6px;border-radius:3px;border:1px solid #6b0000;text-shadow:0 1px 0 rgba(0,0,0,.4);box-shadow:0 1px 2px rgba(0,0,0,.3);vertical-align:middle;line-height:1.2}
+  .header-blox{display:flex;align-items:center;gap:7px;background:linear-gradient(180deg,#ffe680,#ffb800);color:#4a3a00;font-weight:900;font-size:12px;padding:5px 12px;border-radius:20px;border:2px solid #8a7524;text-shadow:0 1px 0 rgba(255,255,255,.4);cursor:pointer;transition:.1s;user-select:none;font-family:Consolas,Monaco,monospace}
+  .header-blox:hover{filter:brightness(1.05);transform:scale(1.03)}
+  .blox-glyph{display:inline-block;width:11px;height:11px;background:linear-gradient(135deg,#fff 0%,#ffd700 45%,#a67c00 100%);transform:rotate(45deg);border:1px solid #6b4500}
+  .adm-badge{display:inline-block;background:linear-gradient(180deg,#ff4d4d,#b30000);color:#fff;font-size:9px;font-weight:900;letter-spacing:.8px;padding:1px 6px;border-radius:3px;border:1px solid #6b0000;vertical-align:middle;line-height:1.2}
   .adm-badge.lg{font-size:11px;padding:2px 9px;border-radius:4px}
-
   .btn-hdr{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:5px 12px;font-size:11px;font-weight:bold;border-radius:3px;cursor:pointer;transition:.1s}
   .btn-hdr:hover{background:rgba(255,255,255,.22)}
   .btn-hdr.danger:hover{background:#c0392b;border-color:#e74c3c}
-
   .mobile-menu-btn{display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;width:36px;height:32px;border-radius:3px;cursor:pointer;font-size:16px;align-items:center;justify-content:center}
-
   .layout{flex:1 1 auto;display:flex;min-height:0;overflow:hidden;position:relative}
   .sidebar{width:210px;flex-shrink:0;background:#fff;border-right:1px solid #c8c8c8;display:flex;flex-direction:column;overflow-y:auto}
   .sidebar-section{border-bottom:1px solid #e6e6e6;padding-bottom:4px}
   .sidebar-section:last-child{border-bottom:none}
-  .sidebar-title{background:linear-gradient(180deg,#4a7ab8 0%,#356198 100%);color:#fff;font-size:10px;font-weight:bold;padding:6px 10px;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid #0a2450;text-shadow:1px 1px 0 rgba(0,0,0,.3)}
+  .sidebar-title{background:linear-gradient(180deg,#4a7ab8 0%,#356198 100%);color:#fff;font-size:10px;font-weight:bold;padding:6px 10px;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid #0a2450}
   .sidebar-menu{list-style:none;padding:3px 0}
   .sidebar-menu li button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 14px;color:#1a4a9c;background:transparent;border:none;border-left:3px solid transparent;font-size:12px;font-weight:bold;cursor:pointer;transition:.1s}
   .sidebar-menu li button:hover{background:#eef3fa;border-left-color:#4a7ab8}
   .sidebar-menu li button.active{background:#dbe7f5;border-left-color:#1f4d8f;color:#0a2450}
   .sidebar-menu .badge{margin-left:auto;background:#c0392b;color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:bold}
-
   .content{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;background:#e6e6e6;padding:16px;min-width:0}
   .page{display:none}
   .page.active{display:block}
-
   .panel{background:#fff;border:1px solid #c8c8c8;border-radius:4px;overflow:hidden;margin-bottom:14px}
-  .panel-title{background:linear-gradient(180deg,#4a7ab8 0%,#356198 100%);color:#fff;font-size:12px;font-weight:bold;padding:7px 12px;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid #0a2450;display:flex;justify-content:space-between;align-items:center;text-shadow:1px 1px 0 rgba(0,0,0,.3)}
-  .panel-count{font-size:10px;color:#cfe0f5;text-transform:none;letter-spacing:0;font-weight:normal;text-shadow:none}
+  .panel-title{background:linear-gradient(180deg,#4a7ab8 0%,#356198 100%);color:#fff;font-size:12px;font-weight:bold;padding:7px 12px;letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid #0a2450;display:flex;justify-content:space-between;align-items:center}
+  .panel-count{font-size:10px;color:#cfe0f5;text-transform:none;letter-spacing:0;font-weight:normal}
   .panel-body{padding:14px}
-
   .game-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
   .game-card{background:#fff;border:1px solid #c8c8c8;border-radius:4px;overflow:hidden;cursor:pointer;transition:.1s;text-align:left;padding:0;display:block;font-family:inherit;color:inherit}
   .game-card:hover{border-color:#4a7ab8;box-shadow:0 0 0 2px rgba(74,122,184,.25);transform:translateY(-1px)}
   .game-thumb{height:130px;position:relative;overflow:hidden;background:linear-gradient(180deg,#87ceeb 0%,#6ab04c 100%)}
   .game-thumb canvas{width:100%;height:100%;display:block}
-  .game-thumb-img{width:100%;height:100%;background-size:cover;background-position:center center;background-repeat:no-repeat;display:block}
-  .game-badge{position:absolute;top:6px;left:6px;background:#fbff25;color:#000000;font-size:9px;font-weight:bold;padding:2px 6px;border-radius:3px;border:1px solid #fde584;letter-spacing:.5px;z-index:2}
+  .game-thumb-img{width:100%;height:100%;background-size:cover;background-position:center}
+  .game-badge{position:absolute;top:6px;left:6px;background:#fbff25;color:#000;font-size:9px;font-weight:bold;padding:2px 6px;border-radius:3px;border:1px solid #fde584;z-index:2}
   .game-info{padding:10px 12px}
   .game-name{font-size:13px;font-weight:bold;color:#1a4a9c;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .game-author{font-size:10px;color:#888;margin-bottom:8px}
   .game-stats{display:flex;justify-content:space-between;align-items:center;font-size:10px;border-top:1px solid #e6e6e6;padding-top:8px}
   .game-online{color:#4a9948;font-weight:bold}
   .game-online::before{content:"\25CF";margin-right:3px;font-size:8px}
-  .game-play{background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;font-size:10px;font-weight:bold;padding:3px 10px;border:1px solid #35702f;border-radius:3px;text-shadow:0 1px 0 rgba(0,0,0,.3)}
-
+  .game-play{background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;font-size:10px;font-weight:bold;padding:3px 10px;border:1px solid #35702f;border-radius:3px}
   .game-detail{display:grid;grid-template-columns:minmax(320px,1.1fr) 1fr;gap:24px;align-items:start}
   .game-detail-hero{aspect-ratio:16/10;background:#111;border:2px solid #c8c8c8;border-radius:6px;overflow:hidden;position:relative}
   .game-detail-hero canvas{width:100%;height:100%;display:block}
-  .game-detail-hero-img{width:100%;height:100%;background-size:cover;background-position:center center;background-repeat:no-repeat;display:block}
-  .game-detail-info h2{font-family:'Arial Black',Arial,sans-serif;font-size:26px;color:#003366;margin-bottom:6px;letter-spacing:-.5px}
+  .game-detail-hero-img{width:100%;height:100%;background-size:cover;background-position:center}
+  .game-detail-info h2{font-family:'Arial Black',Arial,sans-serif;font-size:26px;color:#003366;margin-bottom:6px}
   .game-author-lg{color:#555;font-size:13px;margin-bottom:12px}
   .game-author-lg b{color:#1a4a9c}
   .game-detail-meta{display:flex;gap:10px;font-size:11px;color:#666;margin-bottom:14px;flex-wrap:wrap}
   .game-detail-meta span{background:#f0f0f0;border:1px solid #d0d0d0;padding:3px 10px;border-radius:12px}
-  .game-detail-meta span b{color:#003366}
-  .game-detail-desc{color:#444;line-height:1.6;margin-bottom:20px;font-size:13px}
-  .btn-play-lg{background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;border:3px outset #7cdd7c;border-radius:6px;font-size:20px;font-weight:bold;padding:14px 40px;cursor:pointer;text-shadow:1px 1px 0 #005500;letter-spacing:1px}
-  .btn-play-lg:hover{filter:brightness(1.08)}
-  .btn-play-lg:active{border-style:inset}
+  .game-detail-desc{color:#444;line-height:1.6;margin-bottom:20px}
+  .btn-play-lg{background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;border:3px outset #7cdd7c;border-radius:6px;font-size:20px;font-weight:bold;padding:14px 40px;cursor:pointer;text-shadow:1px 1px 0 #005500}
   .btn-back{background:linear-gradient(180deg,#e8e8e8 0%,#d0d0d0 100%);color:#333;border:2px outset #f0f0f0;border-radius:4px;padding:10px 20px;font-size:13px;font-weight:bold;cursor:pointer;margin-right:10px}
-  .btn-back:hover{filter:brightness(1.04)}
-  .btn-back:active{border-style:inset}
-
   #auth-screen{display:none;width:100vw;height:100vh;background:linear-gradient(135deg,#1f4d8f 0%,#0a2450 100%);align-items:center;justify-content:center;padding:20px;overflow-y:auto}
   #auth-screen.active{display:flex}
   .auth-box{background:#fff;border:3px outset #4a7ab8;width:100%;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
   .auth-header{background:linear-gradient(180deg,#4a7ab8 0%,#356198 100%);color:#ffdd00;padding:12px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #0a2450}
-  .auth-header img{width:36px;height:36px;border-radius:8px;background:#d4b428;border:2px solid #8a7524;object-fit:cover}
-  .auth-header .title{font-family:'Arial Black',Arial,sans-serif;font-size:20px;font-weight:900;letter-spacing:-.5px;text-shadow:2px 2px 0 rgba(0,0,0,.4);color:#fff}
-  .auth-header .subtitle{font-size:10px;color:#cfe0f5;margin-top:1px}
+  .auth-header img{width:36px;height:36px;border-radius:8px;background:#d4b428;border:2px solid #8a7524}
+  .auth-header .title{font-family:'Arial Black',Arial,sans-serif;font-size:20px;font-weight:900;color:#fff}
+  .auth-header .subtitle{font-size:10px;color:#cfe0f5}
   .auth-body{padding:18px}
   .auth-tabs{display:flex;gap:2px;margin-bottom:14px;border-bottom:2px solid #c8c8c8}
   .auth-tab{flex:1;padding:8px;background:#f0f0f0;border:2px solid #c8c8c8;border-bottom:none;color:#666;font-weight:bold;cursor:pointer;border-radius:4px 4px 0 0;font-size:12px}
   .auth-tab.active{background:#fff;color:#003366;border-bottom:2px solid #fff;margin-bottom:-2px;padding-bottom:10px}
   .auth-form .field{margin-bottom:12px}
   .auth-form label{display:block;font-size:11px;color:#444;font-weight:bold;margin-bottom:4px}
-  .auth-form input{width:100%;padding:9px 10px;border:2px solid #b0b8c0;border-radius:3px;font-size:13px;background:#fdfdfd;outline:none;transition:.1s}
+  .auth-form input{width:100%;padding:9px 10px;border:2px solid #b0b8c0;border-radius:3px;font-size:13px;background:#fdfdfd;outline:none}
   .auth-form input:focus{border-color:#4a7ab8;background:#fff}
   .auth-form .hint{font-size:10px;color:#888;margin-top:3px}
   .auth-form .hint.ok{color:#0a8a0a;font-weight:bold}
@@ -117,206 +109,210 @@
   .auth-error{background:#ffe6e6;border:2px solid #ff8080;color:#b00000;padding:8px 10px;border-radius:3px;font-size:11px;margin-bottom:12px;display:none}
   .auth-error.show{display:block}
   .auth-error.success{background:#e6ffe6;border-color:#80d080;color:#006600}
-  .btn-auth{width:100%;padding:11px 0;background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;border:2px solid #35702f;border-radius:3px;font-size:14px;font-weight:bold;letter-spacing:.5px;cursor:pointer;text-shadow:0 1px 0 rgba(0,0,0,.3);margin-top:6px;transition:.1s}
-  .btn-auth:hover:not(:disabled){filter:brightness(1.05)}
+  .btn-auth{width:100%;padding:11px 0;background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;border:2px solid #35702f;border-radius:3px;font-size:14px;font-weight:bold;cursor:pointer;margin-top:6px}
   .btn-auth:disabled{opacity:.6;cursor:wait}
-  .btn-auth.secondary{background:linear-gradient(180deg,#e8e8e8 0%,#d0d0d0 100%);color:#333;border-color:#a0a0a0;text-shadow:none}
-
+  .btn-auth.secondary{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#a0a0a0}
   .profile-header{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
-  .avatar-container{flex-shrink:0;width:170px;height:230px;background:linear-gradient(180deg,#87ceeb 0%,#d6ecff 100%);border:2px solid #c8c8c8;border-radius:6px;position:relative;overflow:hidden}
+  .avatar-container{flex-shrink:0;width:170px;height:230px;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #c8c8c8;border-radius:6px;overflow:hidden}
   .avatar-container canvas{width:100%;height:100%;display:block}
   .profile-info{flex:1;min-width:200px}
-  .profile-username{font-family:'Arial Black',Arial,sans-serif;font-size:24px;color:#003366;margin-bottom:4px;letter-spacing:-.5px;display:flex;align-items:center;gap:10px}
-  .profile-id{display:inline-block;background:#d4b428;color:#4a3a00;font-size:11px;font-weight:bold;padding:3px 10px;border-radius:12px;border:1px solid #8a7524;margin-bottom:12px;font-family:Consolas,Monaco,monospace}
+  .profile-username{font-family:'Arial Black',sans-serif;font-size:24px;color:#003366;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+  .profile-id{display:inline-block;background:#d4b428;color:#4a3a00;font-size:11px;font-weight:bold;padding:3px 10px;border-radius:12px;border:1px solid #8a7524;margin-bottom:12px;font-family:Consolas,monospace}
   .profile-meta{font-size:11px;color:#666;margin-bottom:4px}
   .profile-meta b{color:#333}
-
   .editor-layout{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
-  .editor-preview{background:linear-gradient(180deg,#87ceeb 0%,#d6ecff 100%);border:2px solid #c8c8c8;border-radius:6px;height:380px;position:relative;overflow:hidden}
+  .editor-preview{background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #c8c8c8;border-radius:6px;height:380px;position:relative;overflow:hidden}
   .editor-preview canvas{width:100%;height:100%;display:block;cursor:grab}
-  .editor-preview canvas:active{cursor:grabbing}
-  .editor-preview-hint{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:10px;padding:3px 10px;border-radius:10px;pointer-events:none}
   .color-picker-row{display:grid;grid-template-columns:110px 1fr 90px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #e6e6e6}
-  .color-picker-row:last-child{border-bottom:none}
   .color-picker-row label{font-size:12px;font-weight:bold;color:#003366}
   .color-picker-row input[type="color"]{width:100%;height:36px;border:2px solid #c8c8c8;border-radius:4px;background:#fff;cursor:pointer;padding:2px}
-  .color-picker-row .hex{font-family:Consolas,Monaco,monospace;font-size:11px;color:#666;text-align:right}
-
+  .color-picker-row .hex{font-family:Consolas,monospace;font-size:11px;color:#666;text-align:right}
   .friend-add-row{display:flex;gap:8px;padding:12px;background:#f7faff;border:1px solid #cfe0f5;border-radius:4px}
   .friend-add-row input{flex:1;padding:9px 12px;border:2px solid #b0b8c0;border-radius:3px;font-size:13px;background:#fff;outline:none}
-  .friend-add-row input:focus{border-color:#4a7ab8}
-  .friend-add-row button{padding:9px 22px;background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;border:2px solid #35702f;border-radius:3px;font-weight:bold;font-size:13px;cursor:pointer;text-shadow:0 1px 0 rgba(0,0,0,.3)}
-  .friend-add-row button:hover:not(:disabled){filter:brightness(1.05)}
-  .friend-add-row button:disabled{opacity:.6;cursor:wait}
-
+  .friend-add-row button{padding:9px 22px;background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border:2px solid #35702f;border-radius:3px;font-weight:bold;cursor:pointer}
   .friends-grid,.requests-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
   .friend-card,.request-card{background:#fff;border:1px solid #c8c8c8;border-radius:4px;overflow:hidden;transition:.1s;position:relative}
   .friend-card:hover{border-color:#4a7ab8;box-shadow:0 0 0 2px rgba(74,122,184,.25)}
-  .friend-avatar-3d,.request-avatar-3d{height:160px;background:linear-gradient(180deg,#87ceeb 0%,#d6ecff 100%);position:relative;overflow:hidden}
+  .friend-avatar-3d,.request-avatar-3d{height:160px;background:linear-gradient(180deg,#87ceeb,#d6ecff);overflow:hidden}
   .friend-avatar-3d canvas,.request-avatar-3d canvas{width:100%;height:100%;display:block}
   .friend-info,.request-info{padding:10px 12px;border-top:1px solid #e6e6e6}
   .friend-name,.request-name{font-size:13px;font-weight:bold;color:#1a4a9c;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .friend-id,.request-id{font-size:10px;color:#888;font-family:Consolas,Monaco,monospace;margin-top:3px}
-  .friend-remove{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;border:none;width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:12px;line-height:1;display:none;align-items:center;justify-content:center;font-weight:bold}
-  .friend-card:hover .friend-remove{display:flex}
-  .friend-remove:hover{background:#c0392b}
+  .friend-id,.request-id{font-size:10px;color:#888;font-family:Consolas,monospace;margin-top:3px}
+  .friend-remove{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;border:none;width:22px;height:22px;border-radius:4px;cursor:pointer;display:none;font-weight:bold}
+  .friend-card:hover .friend-remove{display:flex;align-items:center;justify-content:center}
   .request-actions{display:flex;gap:6px;padding:10px 12px;border-top:1px solid #e6e6e6}
   .request-actions button{flex:1;padding:7px 0;border-radius:3px;font-weight:bold;font-size:11px;cursor:pointer;border:2px outset}
-  .req-accept{background:linear-gradient(180deg,#6dd36d 0%,#4a9948 100%);color:#fff;border-color:#7cdd7c;text-shadow:1px 1px 0 #005500}
-  .req-reject{background:linear-gradient(180deg,#e8e8e8 0%,#d0d0d0 100%);color:#333;border-color:#f0f0f0}
-  .req-cancel{background:linear-gradient(180deg,#ffe0a0 0%,#f0b800 100%);color:#663300;border-color:#ffe680;text-shadow:1px 1px 0 #fff}
-  .req-accept:hover{filter:brightness(1.06)}
-  .req-reject:hover{filter:brightness(1.06)}
-  .req-cancel:hover{filter:brightness(1.06)}
+  .req-accept{background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border-color:#7cdd7c}
+  .req-reject{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333}
+  .req-cancel{background:linear-gradient(180deg,#ffe0a0,#f0b800);color:#663300}
   .empty-note{padding:24px;text-align:center;color:#888;font-size:12px;font-style:italic}
-
-  #loading-screen{position:fixed;inset:0;background:linear-gradient(180deg,#1f4d8f 0%,#16407a 100%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity .4s;gap:20px}
+  #loading-screen{position:fixed;inset:0;background:linear-gradient(180deg,#1f4d8f,#16407a);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:20px}
   #loading-screen.hidden{opacity:0;pointer-events:none}
-  #loading-screen .logo-big{width:80px;height:80px;border-radius:20px;border:4px solid #1f4d8f;object-fit:cover}
-  #loading-screen .title{font-family:'Arial Black',Arial,sans-serif;font-size:32px;font-weight:900;letter-spacing:-1px;color:#fff;text-shadow:2px 2px 0 #0a2450}
+  #loading-screen .logo-big{width:80px;height:80px;border-radius:20px;border:4px solid #1f4d8f}
+  #loading-screen .title{font-family:'Arial Black',sans-serif;font-size:32px;font-weight:900;color:#fff;text-shadow:2px 2px 0 #0a2450}
   .spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,.2);border-top-color:#ffdd00;border-radius:50%;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-
-  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#333;color:#fff;padding:12px 20px;border-radius:6px;font-size:13px;font-weight:bold;z-index:1000;transition:transform .3s;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:calc(100vw - 40px);text-align:center}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#333;color:#fff;padding:12px 20px;border-radius:6px;font-size:13px;font-weight:bold;z-index:1000;transition:transform .3s;max-width:calc(100vw - 40px);text-align:center}
   #toast.show{transform:translateX(-50%) translateY(0)}
   #toast.success{background:#2e7d32}
   #toast.error{background:#c0392b}
-
   #no-inspect{position:fixed;inset:0;background:#0a0a0f;color:#ff5555;z-index:99999;display:none;align-items:center;justify-content:center;font-family:'Arial Black',sans-serif;font-size:22px;text-align:center;padding:40px}
   #no-inspect.show{display:flex}
-
-  /* ============================================================
-     HOME — Welcome banner + Friends row
-     ============================================================ */
-  .home-welcome{
-    background:linear-gradient(135deg,#2a5fa8 0%,#1a3d70 100%);
-    border:1px solid #0a2450;
-    border-radius:8px;
-    padding:22px 26px;
-    display:flex;
-    align-items:center;
-    gap:26px;
-    margin-bottom:16px;
-    color:#fff;
-    box-shadow:0 4px 20px rgba(0,0,0,.15);
-    flex-wrap:wrap;
-  }
-  .home-welcome-avatar{
-    width:120px;height:120px;flex-shrink:0;
-    border-radius:50%;
-    overflow:hidden;
-    border:4px solid #ffdd00;
-    background:linear-gradient(180deg,#87ceeb,#d6ecff);
-    box-shadow:0 8px 24px rgba(0,0,0,.35);
-    position:relative;
-  }
+  .home-welcome{background:linear-gradient(135deg,#2a5fa8,#1a3d70);border:1px solid #0a2450;border-radius:8px;padding:22px 26px;display:flex;align-items:center;gap:26px;margin-bottom:16px;color:#fff;flex-wrap:wrap}
+  .home-welcome-avatar{width:120px;height:120px;flex-shrink:0;border-radius:50%;overflow:hidden;border:4px solid #ffdd00;background:linear-gradient(180deg,#87ceeb,#d6ecff);position:relative}
   .home-welcome-avatar canvas{width:100%;height:100%;display:block}
   .home-welcome-info{flex:1;min-width:220px}
-  .home-welcome-label{
-    font-size:12px;letter-spacing:3px;
-    text-transform:uppercase;opacity:.8;font-weight:bold;
-  }
-  .home-welcome-name{
-    font-family:'Arial Black',Arial,sans-serif;
-    font-size:30px;font-weight:900;letter-spacing:-1px;
-    margin-top:4px;
-    text-shadow:2px 2px 0 rgba(0,0,0,.3);
-    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-  }
-  .home-welcome-stats{
-    margin-top:10px;font-size:12px;opacity:.9;
-    display:flex;gap:16px;flex-wrap:wrap;
-  }
+  .home-welcome-label{font-size:12px;letter-spacing:3px;text-transform:uppercase;opacity:.8;font-weight:bold}
+  .home-welcome-name{font-family:'Arial Black',sans-serif;font-size:30px;font-weight:900;margin-top:4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .home-welcome-stats{margin-top:10px;font-size:12px;opacity:.9;display:flex;gap:16px;flex-wrap:wrap}
   .home-welcome-stats b{color:#ffdd00}
-
-  .home-friends-row{
-    display:flex;gap:18px;overflow-x:auto;
-    padding:6px 4px 16px;
-    scrollbar-width:thin;
-  }
-  .home-friend{
-    display:flex;flex-direction:column;align-items:center;gap:8px;
-    cursor:pointer;transition:transform .12s;
-    flex-shrink:0;width:96px;background:transparent;border:none;
-    font-family:inherit;padding:0;
-  }
+  .home-friends-row{display:flex;gap:18px;overflow-x:auto;padding:6px 4px 16px}
+  .home-friend{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:transform .12s;flex-shrink:0;width:96px;background:transparent;border:none;padding:0}
   .home-friend:hover{transform:translateY(-3px)}
-  .home-friend-avatar-wrap{
-    width:88px;height:88px;border-radius:50%;
-    overflow:hidden;position:relative;
-    border:3px solid #4a7ab8;
-    background:linear-gradient(180deg,#87ceeb,#d6ecff);
-    box-shadow:0 4px 14px rgba(0,0,0,.18);
-    transition:border-color .12s;
-  }
-  .home-friend:hover .home-friend-avatar-wrap{border-color:#ffdd00}
+  .home-friend-avatar-wrap{width:88px;height:88px;border-radius:50%;overflow:hidden;position:relative;border:3px solid #4a7ab8;background:linear-gradient(180deg,#87ceeb,#d6ecff)}
   .home-friend-avatar-wrap canvas{width:100%;height:100%;display:block}
-  .home-friend-name{
-    font-size:11px;font-weight:bold;color:#003366;
-    text-align:center;white-space:nowrap;overflow:hidden;
-    text-overflow:ellipsis;max-width:96px;width:100%;
-  }
-  .home-friend-online{
-    position:absolute;bottom:4px;right:4px;
-    width:14px;height:14px;border-radius:50%;
-    background:#4a9948;border:2px solid #fff;
-    box-shadow:0 0 6px rgba(74,153,72,.7);
-    z-index:3;
-  }
-  .home-friend-add .home-friend-avatar-wrap{
-    border:3px dashed #4a7ab8;background:#f0f6ff;
-    display:flex;align-items:center;justify-content:center;
-  }
-  .home-friend-add .home-friend-avatar-wrap::before{
-    content:'+';font-size:44px;font-weight:900;color:#4a7ab8;
-    line-height:1;margin-top:-4px;
-  }
-  .home-friend-add:hover .home-friend-avatar-wrap{
-    border-color:#ffdd00;background:#fffbe0;
-  }
+  .home-friend-name{font-size:11px;font-weight:bold;color:#003366;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px;width:100%}
+  .home-friend-online{position:absolute;bottom:4px;right:4px;width:14px;height:14px;border-radius:50%;background:#4a9948;border:2px solid #fff;z-index:3}
+  .home-friend-add .home-friend-avatar-wrap{border:3px dashed #4a7ab8;background:#f0f6ff;display:flex;align-items:center;justify-content:center}
+  .home-friend-add .home-friend-avatar-wrap::before{content:'+';font-size:44px;font-weight:900;color:#4a7ab8;line-height:1;margin-top:-4px}
   .home-friend-add .home-friend-name{color:#4a7ab8}
-
-  /* Player profile modal */
   #player-modal{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
   #player-modal.open{display:flex}
-  .player-modal-box{background:#fff;border:3px solid #1f4d8f;border-radius:10px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+  .player-modal-box{background:#fff;border:3px solid #1f4d8f;border-radius:10px;max-width:420px;width:100%;overflow:hidden}
   .player-modal-header{background:linear-gradient(180deg,#1f4d8f,#16407a);padding:12px 16px;display:flex;align-items:center;color:#fff}
-  .player-modal-header .t{flex:1;font-family:'Arial Black',sans-serif;font-size:15px;letter-spacing:-.3px}
-  .player-modal-header .close{background:#c0392b;color:#fff;border:2px outset #e74c3c;width:26px;height:26px;border-radius:3px;cursor:pointer;font-weight:bold;font-size:15px;line-height:1}
+  .player-modal-header .t{flex:1;font-family:'Arial Black',sans-serif;font-size:15px}
+  .player-modal-header .close{background:#c0392b;color:#fff;border:2px outset #e74c3c;width:26px;height:26px;border-radius:3px;cursor:pointer;font-weight:bold}
   .player-modal-body{padding:22px;text-align:center}
   .player-modal-avatar{width:180px;height:240px;margin:0 auto 16px;border-radius:12px;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #c8c8c8;overflow:hidden}
   .player-modal-avatar canvas{width:100%;height:100%;display:block}
-  .player-modal-name{font-family:'Arial Black',sans-serif;font-size:22px;color:#003366;letter-spacing:-.5px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .player-modal-name{font-family:'Arial Black',sans-serif;font-size:22px;color:#003366;display:flex;align-items:center;justify-content:center;gap:8px}
   .player-modal-id{font-family:monospace;color:#888;margin-top:4px;font-size:12px}
   .player-modal-status{margin-top:14px;padding:12px 14px;background:#f0f6ff;border:1px solid #cfe0f5;border-radius:6px;font-size:12px;color:#333;line-height:1.6}
   .player-modal-status .online{color:#2e7d32;font-weight:bold}
   .player-modal-status .offline{color:#999;font-weight:bold}
-  .player-modal-status .playing a{color:#1a4a9c;font-weight:bold;text-decoration:underline;cursor:pointer}
+  .player-modal-actions{margin-top:14px;display:flex;gap:8px;justify-content:center}
+  .player-modal-actions button{padding:8px 18px;border-radius:4px;font-weight:bold;font-size:12px;cursor:pointer;border:2px outset}
+  .pm-msg{background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border-color:#7cdd7c}
+  .item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+  .item-card{background:#fff;border:1px solid #c8c8c8;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;transition:.15s;position:relative}
+  .item-card:hover{border-color:#4a7ab8;box-shadow:0 0 0 2px rgba(74,122,184,.22);transform:translateY(-2px)}
+  .item-card.owned{border-color:#4a9948}
+  .item-card.equipped{border-color:#ffb800;box-shadow:0 0 0 2px rgba(255,184,0,.35)}
+  .item-card.default-face{border-color:#8b5cf6;box-shadow:0 0 0 2px rgba(139,92,246,.25)}
+  .item-thumb{height:150px;background:linear-gradient(135deg,#e8f2ff,#d6ecff);position:relative;overflow:hidden}
+  .item-thumb canvas,.item-thumb img{width:100%;height:100%;display:block;object-fit:contain}
+  .item-info{padding:10px 12px;flex:1;display:flex;flex-direction:column;gap:6px}
+  .item-name{font-size:12px;font-weight:bold;color:#003366;line-height:1.2}
+  .item-author{font-size:10px;color:#8899aa}
+  .item-type{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px}
+  .item-price{display:flex;align-items:center;gap:6px;font-weight:900;font-size:13px;color:#8a6800;font-family:Consolas,monospace}
+  .item-price .blox-glyph{width:10px;height:10px}
+  .item-actions{margin-top:auto;display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e6e6e6}
+  .item-actions button{flex:1;padding:7px 0;border-radius:3px;font-weight:bold;font-size:11px;cursor:pointer;border:2px outset}
+  .item-actions .ibuy{background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border-color:#7cdd7c}
+  .item-actions .ibuy:disabled{opacity:.5;cursor:default}
+  .item-actions .iequip{background:linear-gradient(180deg,#ffdd00,#f0b800);color:#663300;border-color:#ffe680}
+  .item-actions .iequipped{background:linear-gradient(180deg,#4a9948,#2e6b2e);color:#fff;border-color:#7cdd7c}
+  .item-badge{position:absolute;top:8px;right:8px;background:#4a9948;color:#fff;font-size:8px;font-weight:900;padding:2px 6px;border-radius:3px;z-index:2}
+  .item-badge.equipped{background:#ffb800;color:#4a3a00}
+  .item-badge.mine{background:#8b5cf6}
+  .catalog-tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+  .catalog-tab{padding:6px 14px;background:#f0f0f0;border:2px solid #c8c8c8;border-radius:4px;font-size:11px;font-weight:bold;cursor:pointer;color:#444}
+  .catalog-tab.active{background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border-color:#0a2450}
+  .dm-layout{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 200px);min-height:420px;background:#fff;border:1px solid #c8c8c8;border-radius:6px;overflow:hidden}
+  .dm-sidebar{border-right:1px solid #e6e6e6;display:flex;flex-direction:column;background:#fafbfd;overflow:hidden}
+  .dm-sidebar-header{padding:12px 14px;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;font-size:12px;font-weight:bold;text-transform:uppercase;display:flex;justify-content:space-between}
+  .dm-friend-list{flex:1;overflow-y:auto;padding:4px}
+  .dm-friend-item{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-radius:6px;margin-bottom:2px;border:1px solid transparent;background:transparent;width:100%;text-align:left}
+  .dm-friend-item:hover{background:#eef3fa}
+  .dm-friend-item.active{background:#dbe7f5;border-color:#4a7ab8}
+  .dm-friend-avatar{width:44px;height:44px;flex-shrink:0;border-radius:50%;overflow:hidden;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #4a7ab8;position:relative}
+  .dm-friend-avatar canvas{width:100%;height:100%;display:block}
+  .dm-friend-avatar .online-dot{position:absolute;bottom:1px;right:1px;width:11px;height:11px;border-radius:50%;background:#4a9948;border:2px solid #fff;z-index:5}
+  .dm-friend-meta{flex:1;min-width:0}
+  .dm-friend-meta .row1{display:flex;justify-content:space-between;gap:6px}
+  .dm-friend-name{font-size:12px;font-weight:bold;color:#003366;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dm-friend-time{font-size:9px;color:#8899aa}
+  .dm-friend-preview{font-size:11px;color:#666;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dm-friend-preview.unread{color:#0d69ac;font-weight:bold}
+  .dm-unread-badge{display:inline-block;background:#c0392b;color:#fff;font-size:9px;font-weight:900;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;padding:0 5px;margin-left:4px}
+  .dm-conv{display:flex;flex-direction:column;background:#fff;min-width:0}
+  .dm-conv-header{padding:12px 16px;border-bottom:1px solid #e6e6e6;display:flex;align-items:center;gap:12px}
+  .dm-conv-header .dm-friend-avatar{width:38px;height:38px}
+  .dm-conv-header-info{flex:1;min-width:0}
+  .dm-conv-header-name{font-size:13px;font-weight:bold;color:#003366;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dm-conv-header-status{font-size:10px;color:#666;margin-top:1px}
+  .dm-conv-header-status.online{color:#2e7d32;font-weight:bold}
+  .dm-messages{flex:1;overflow-y:auto;padding:14px 18px;background:#f7faff;display:flex;flex-direction:column;gap:6px;min-height:0}
+  .dm-msg{max-width:72%;padding:8px 12px;border-radius:14px;font-size:13px;word-wrap:break-word}
+  .dm-msg.self{align-self:flex-end;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border-bottom-right-radius:4px}
+  .dm-msg.other{align-self:flex-start;background:#fff;color:#222;border:1px solid #e6ecf5;border-bottom-left-radius:4px}
+  .dm-msg-time{font-size:9px;opacity:.7;margin-top:3px;text-align:right}
+  .dm-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:#8899aa;font-style:italic;font-size:13px;padding:30px;text-align:center}
+  .dm-input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid #e6e6e6;background:#fff}
+  .dm-input-row input{flex:1;padding:10px 14px;border:2px solid #b0b8c0;border-radius:20px;font-size:13px;outline:none;background:#fdfdfd}
+  .dm-input-row input:focus{border-color:#4a7ab8;background:#fff}
+  .dm-input-row button{padding:10px 22px;border-radius:20px;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border:2px solid #0a2450;font-weight:bold;font-size:12px;cursor:pointer}
+
+  /* ============================================================
+     PURCHASE MODAL
+     ============================================================ */
+  #purchase-modal{position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
+  #purchase-modal.show{display:flex}
+  .purchase-box{background:#fff;border:3px solid #1f4d8f;border-radius:10px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:purchasePop .18s ease-out}
+  @keyframes purchasePop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .purchase-header{background:linear-gradient(180deg,#1f4d8f,#16407a);padding:12px 16px;display:flex;align-items:center;gap:12px}
+  .purchase-header .purchase-title{flex:1;font-family:'Arial Black',sans-serif;font-size:15px;color:#fff;text-shadow:1px 1px 0 #0a2450}
+  .purchase-header .purchase-close{background:#c0392b;color:#fff;border:2px outset #e74c3c;width:26px;height:26px;border-radius:3px;cursor:pointer;font-weight:bold;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+  .purchase-header .purchase-close:hover{background:#e74c3c}
+  .purchase-body{padding:20px 22px}
+  .purchase-thumb{width:100%;height:170px;background:linear-gradient(135deg,#e8f2ff,#d6ecff);border:1px solid #c8d8e8;border-radius:6px;overflow:hidden;margin-bottom:14px;display:flex;align-items:center;justify-content:center}
+  .purchase-thumb canvas,.purchase-thumb img{width:100%;height:100%;display:block;object-fit:contain}
+  .purchase-info{text-align:center;margin-bottom:14px}
+  .purchase-item-type{font-size:10px;color:#8899aa;text-transform:uppercase;letter-spacing:1.5px;font-weight:bold;margin-bottom:4px}
+  .purchase-item-name{font-family:'Arial Black',sans-serif;font-size:18px;color:#003366}
+  .purchase-rows{background:#f7faff;border:1px solid #cfe0f5;border-radius:6px;padding:12px 14px;margin-bottom:14px}
+  .purchase-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;color:#445}
+  .purchase-row b{font-family:Consolas,monospace;color:#8a6800}
+  .purchase-checkbox{display:flex;align-items:center;gap:8px;padding:10px;background:#f7faff;border:1px solid #cfe0f5;border-radius:6px;font-size:12px;color:#333;cursor:pointer}
+  .purchase-checkbox input{width:18px;height:18px;cursor:pointer;accent-color:#4a7ab8}
+  .purchase-actions{display:flex;gap:8px;padding:12px 16px;background:#f0f4fa;border-top:1px solid #c8d8e8}
+  .purchase-btn{flex:1;padding:11px 0;border-radius:5px;font-family:inherit;font-weight:bold;font-size:13px;cursor:pointer;border:2px outset;letter-spacing:.3px}
+  .purchase-btn.confirm{background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border-color:#7cdd7c;text-shadow:1px 1px 0 #005500}
+  .purchase-btn.confirm:disabled{opacity:.6;cursor:wait}
+  .purchase-btn.cancel{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#f0f0f0}
 
   @media(max-width:780px){
     .header{padding:8px 10px;gap:8px}
     .logo{font-size:18px}
-    .logo-img{width:32px;height:32px;border-radius:8px}
+    .logo-img{width:32px;height:32px}
     .header-nav{display:none}
     .mobile-menu-btn{display:flex}
-    .header-username{max-width:70px}
-    .sidebar{position:absolute;top:0;left:0;bottom:0;z-index:200;width:240px;transform:translateX(-100%);transition:transform .25s;box-shadow:4px 0 20px rgba(0,0,0,.3)}
+    .header-username{max-width:60px}
+    .header-blox{padding:4px 9px;font-size:11px}
+    .sidebar{position:absolute;top:0;left:0;bottom:0;z-index:200;width:240px;transform:translateX(-100%);transition:transform .25s}
     .sidebar.open{transform:translateX(0)}
     .content{padding:12px}
-    .game-grid,.friends-grid,.requests-grid{grid-template-columns:1fr 1fr;gap:8px}
+    .game-grid,.friends-grid,.requests-grid,.item-grid{grid-template-columns:1fr 1fr;gap:8px}
     .game-thumb{height:90px}
     .friend-avatar-3d,.request-avatar-3d{height:120px}
     .editor-layout,.game-detail{grid-template-columns:1fr}
-    .overlay-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:150}
-    .overlay-backdrop.show{display:block}
     .home-welcome{padding:16px;gap:16px}
     .home-welcome-avatar{width:88px;height:88px;border-width:3px}
     .home-welcome-name{font-size:22px}
     .home-friend{width:80px}
     .home-friend-avatar-wrap{width:72px;height:72px}
     .home-friend-name{font-size:10px;max-width:80px}
+    .item-thumb{height:110px}
+    .dm-layout{grid-template-columns:1fr;height:calc(100vh - 160px)}
+    .dm-sidebar{border-right:none;border-bottom:1px solid #e6e6e6;max-height:40%}
   }
-  @media(max-width:420px){.game-grid,.friends-grid,.requests-grid{grid-template-columns:1fr}}
+  @media(max-width:480px){
+    .purchase-box{max-width:100%}
+    .purchase-body{padding:16px}
+    .purchase-thumb{height:130px}
+  }
+  @media(max-width:420px){.game-grid,.friends-grid,.requests-grid,.item-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -335,7 +331,7 @@
       <img src="logo.png" onerror="this.style.display='none'" alt="" />
       <div>
         <div class="title">HTMLBLOX</div>
-        <div class="subtitle">Play, create, share — free in your browser</div>
+        <div class="subtitle">Play, create, share</div>
       </div>
     </div>
     <div class="auth-body">
@@ -348,19 +344,19 @@
       <form class="auth-form" id="signup-form">
         <div class="field">
           <label>Username</label>
-          <input type="text" id="su-username" placeholder="3-20 characters" maxlength="20" autocomplete="username" required />
+          <input type="text" id="su-username" maxlength="20" autocomplete="username" required />
           <div class="hint" id="su-username-hint">Letters, numbers, _ and - only</div>
         </div>
-        <div class="field"><label>Email</label><input type="email" id="su-email" placeholder="you@example.com" autocomplete="email" required /></div>
+        <div class="field"><label>Email</label><input type="email" id="su-email" autocomplete="email" required /></div>
         <div class="field"><label>Date of birth</label><input type="date" id="su-birthdate" required /></div>
-        <div class="field"><label>Password</label><input type="password" id="su-password" placeholder="Minimum 6 characters" minlength="6" autocomplete="new-password" required /></div>
-        <div class="field"><label>Confirm password</label><input type="password" id="su-password2" placeholder="Repeat password" minlength="6" autocomplete="new-password" required /></div>
+        <div class="field"><label>Password</label><input type="password" id="su-password" minlength="6" autocomplete="new-password" required /></div>
+        <div class="field"><label>Confirm password</label><input type="password" id="su-password2" minlength="6" autocomplete="new-password" required /></div>
         <button type="submit" class="btn-auth" id="su-submit">Create Account</button>
       </form>
 
       <form class="auth-form" id="login-form" style="display:none">
-        <div class="field"><label>Email</label><input type="email" id="li-email" placeholder="you@example.com" autocomplete="email" required /></div>
-        <div class="field"><label>Password</label><input type="password" id="li-password" placeholder="Your password" autocomplete="current-password" required /></div>
+        <div class="field"><label>Email</label><input type="email" id="li-email" autocomplete="email" required /></div>
+        <div class="field"><label>Password</label><input type="password" id="li-password" autocomplete="current-password" required /></div>
         <button type="submit" class="btn-auth" id="li-submit">Log In</button>
       </form>
     </div>
@@ -369,7 +365,7 @@
 
 <div id="app">
   <header class="header">
-    <button class="mobile-menu-btn" id="mobile-menu-btn">≡</button>
+    <button class="mobile-menu-btn" id="mobile-menu-btn">&#9776;</button>
     <div class="logo" id="logo-btn">
       <img src="logo.png" class="logo-img" onerror="this.style.display='none'" alt="" />
       <span>HTMLBLOX</span>
@@ -377,10 +373,16 @@
     <nav class="header-nav">
       <button data-nav="home" class="active">Home</button>
       <button data-nav="games">Games</button>
+      <button data-nav="catalog">Catalog</button>
+      <button data-nav="messages">Messages</button>
       <button data-nav="friends">Friends</button>
       <button data-nav="profile">Profile</button>
     </nav>
     <div class="header-right">
+      <button class="header-blox" id="header-blox" title="Blox balance">
+        <span class="blox-glyph"></span>
+        <span id="blox-count">0</span>
+      </button>
       <div class="header-user" id="header-user">
         <div class="header-avatar" id="header-avatar"></div>
         <div class="header-username" id="header-username">...</div>
@@ -398,9 +400,11 @@
         <ul class="sidebar-menu">
           <li><button data-nav="home" class="active">Home</button></li>
           <li><button data-nav="games">Games</button></li>
+          <li><button data-nav="catalog">Catalog</button></li>
+          <li><button data-nav="messages">Messages <span class="badge" id="nav-dm-badge" style="display:none">0</span></button></li>
           <li><button data-nav="friends">Friends <span class="badge" id="nav-req-badge" style="display:none">0</span></button></li>
           <li><button data-nav="profile">Profile</button></li>
-          <li><button data-nav="avatar">Edit Avatar</button></li>
+          <li><button data-nav="avatar">Avatar Editor</button></li>
         </ul>
       </div>
       <div class="sidebar-section">
@@ -423,31 +427,24 @@
     </aside>
 
     <main class="content" id="content">
-
       <div class="page active" id="page-home">
         <div class="home-welcome">
           <div class="home-welcome-avatar" id="home-welcome-avatar"></div>
           <div class="home-welcome-info">
             <div class="home-welcome-label">Welcome back</div>
             <div class="home-welcome-name" id="home-welcome-name">@username</div>
-            <div class="home-welcome-stats" id="home-welcome-stats">
+            <div class="home-welcome-stats">
               <span><b id="home-friends-stat">0</b> friends</span>
               <span><b id="home-games-stat">0</b> games</span>
               <span><b id="home-online-stat">0</b> online now</span>
+              <span><b id="home-blox-stat">0</b> Blox</span>
             </div>
           </div>
         </div>
-
         <section class="panel">
-          <div class="panel-title">
-            Friends
-            <span class="panel-count" id="home-friends-count">0 friends</span>
-          </div>
-          <div class="panel-body">
-            <div class="home-friends-row" id="home-friends-row"></div>
-          </div>
+          <div class="panel-title">Friends <span class="panel-count" id="home-friends-count">0 friends</span></div>
+          <div class="panel-body"><div class="home-friends-row" id="home-friends-row"></div></div>
         </section>
-
         <section class="panel">
           <div class="panel-title">Featured <span class="panel-count" id="home-count">0 games</span></div>
           <div class="panel-body"><div class="game-grid" id="home-game-grid"></div></div>
@@ -463,10 +460,7 @@
 
       <div class="page" id="page-gamedetail">
         <section class="panel">
-          <div class="panel-title">
-            <span id="detail-panel-title">Game</span>
-            <span class="panel-count" id="detail-online">0 online</span>
-          </div>
+          <div class="panel-title"><span id="detail-panel-title">Game</span><span class="panel-count" id="detail-online">0 online</span></div>
           <div class="panel-body">
             <div class="game-detail">
               <div class="game-detail-hero" id="detail-hero"></div>
@@ -480,8 +474,45 @@
                 </div>
                 <p class="game-detail-desc" id="detail-desc">...</p>
                 <div>
-                  <button class="btn-back" id="detail-back">← Back</button>
-                  <button class="btn-play-lg" id="detail-play">▶ PLAY</button>
+                  <button class="btn-back" id="detail-back">&larr; Back</button>
+                  <button class="btn-play-lg" id="detail-play">PLAY</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="page" id="page-catalog">
+        <section class="panel">
+          <div class="panel-title">Catalog <span class="panel-count" id="catalog-count">0 items</span></div>
+          <div class="panel-body">
+            <div class="catalog-tabs" id="catalog-tabs">
+              <button class="catalog-tab active" data-cat="all">All</button>
+              <button class="catalog-tab" data-cat="accessory">3D Accessories</button>
+              <button class="catalog-tab" data-cat="shirt">Shirts</button>
+              <button class="catalog-tab" data-cat="tshirt">T-Shirts</button>
+              <button class="catalog-tab" data-cat="pants">Pants</button>
+              <button class="catalog-tab" data-cat="face">Faces</button>
+            </div>
+            <div class="item-grid" id="catalog-grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="page" id="page-messages">
+        <section class="panel" style="margin-bottom:0">
+          <div class="panel-title">Messages <span class="panel-count" id="dm-total-count">0 conversations</span></div>
+          <div class="panel-body" style="padding:0">
+            <div class="dm-layout">
+              <div class="dm-sidebar">
+                <div class="dm-sidebar-header"><span>Friends</span><span id="dm-friends-count">0</span></div>
+                <div class="dm-friend-list" id="dm-friend-list"></div>
+              </div>
+              <div class="dm-conv" id="dm-conv">
+                <div class="dm-empty">
+                  <div>Select a friend to start chatting</div>
+                  <div style="font-size:11px;color:#aab">Only friends can send messages to each other</div>
                 </div>
               </div>
             </div>
@@ -491,25 +522,22 @@
 
       <div class="page" id="page-friends">
         <section class="panel">
-          <div class="panel-title">Add Friend <span class="panel-count">send a request</span></div>
+          <div class="panel-title">Add Friend</div>
           <div class="panel-body">
             <div class="friend-add-row">
-              <input type="text" id="friend-username" placeholder="Enter username (e.g. Edge)" maxlength="20" autocomplete="off" />
+              <input type="text" id="friend-username" maxlength="20" autocomplete="off" />
               <button id="friend-add-btn">Send Request</button>
             </div>
           </div>
         </section>
-
         <section class="panel">
           <div class="panel-title">Incoming Requests <span class="panel-count" id="requests-count">0</span></div>
           <div class="panel-body"><div class="requests-grid" id="incoming-requests"></div></div>
         </section>
-
         <section class="panel">
           <div class="panel-title">Sent Requests <span class="panel-count" id="outgoing-count">0</span></div>
           <div class="panel-body"><div class="requests-grid" id="outgoing-requests"></div></div>
         </section>
-
         <section class="panel">
           <div class="panel-title">My Friends <span class="panel-count" id="friends-count">0</span></div>
           <div class="panel-body"><div class="friends-grid" id="friends-grid"></div></div>
@@ -527,26 +555,24 @@
                 <div class="profile-id" id="profile-id">#0</div>
                 <div class="profile-meta"><b>Birthdate:</b> <span id="profile-birthdate">...</span></div>
                 <div class="profile-meta"><b>Joined:</b> <span id="profile-joined">...</span></div>
-                <div class="profile-meta"><b>Games played:</b> <span id="profile-games">0</span></div>
-                <div style="margin-top:14px"><button class="btn-hdr" style="background:#4a7ab8;color:#fff;padding:8px 16px" id="profile-edit-btn">Edit Avatar</button></div>
+                <div class="profile-meta"><b>Blox balance:</b> <span id="profile-blox" style="color:#8a6800;font-weight:900">0</span></div>
+                <div class="profile-meta"><b>Daily streak:</b> <span id="profile-streak">0</span> days</div>
+                <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn-hdr" style="background:#4a7ab8;color:#fff;padding:8px 16px" id="profile-edit-btn">Edit Avatar</button>
+                  <button class="btn-hdr" style="background:#f0b800;color:#4a3a00;padding:8px 16px" id="profile-catalog-btn">Catalog</button>
+                </div>
               </div>
             </div>
           </div>
-        </section>
-        <section class="panel">
-          <div class="panel-title">My Games</div>
-          <div class="panel-body"><div class="game-grid" id="profile-games-grid"></div></div>
         </section>
       </div>
 
       <div class="page" id="page-avatar">
         <section class="panel">
-          <div class="panel-title">Edit Avatar <span class="panel-count">drag to rotate</span></div>
+          <div class="panel-title">Avatar Editor</div>
           <div class="panel-body">
             <div class="editor-layout">
-              <div class="editor-preview" id="edit-avatar-3d">
-                <div class="editor-preview-hint">Drag to rotate</div>
-              </div>
+              <div class="editor-preview" id="edit-avatar-3d"></div>
               <div>
                 <div class="color-picker-row"><label>Head</label><input type="color" id="edit-head" value="#f5cd30" /><span class="hex" id="hex-head">#f5cd30</span></div>
                 <div class="color-picker-row"><label>Torso</label><input type="color" id="edit-torso" value="#0d69ac" /><span class="hex" id="hex-torso">#0d69ac</span></div>
@@ -556,7 +582,17 @@
                 <div class="color-picker-row"><label>Right Leg</label><input type="color" id="edit-rightLeg" value="#4b974b" /><span class="hex" id="hex-rightLeg">#4b974b</span></div>
                 <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
                   <button class="btn-auth" style="width:auto;padding:10px 24px;margin:0" id="save-avatar-btn">Save Avatar</button>
-                  <button class="btn-auth secondary" style="width:auto;padding:10px 24px;margin:0" id="reset-avatar-btn">Reset to Classic</button>
+                  <button class="btn-auth secondary" style="width:auto;padding:10px 24px;margin:0" id="reset-avatar-btn">Reset</button>
+                </div>
+                <div style="margin-top:16px;padding:12px;background:#f7faff;border:1px solid #cfe0f5;border-radius:6px">
+                  <div style="font-size:11px;font-weight:bold;color:#003366;margin-bottom:8px;display:flex;justify-content:space-between">
+                    <span>Equipped Items</span><span id="equipped-count" style="font-weight:normal;color:#8899aa">0</span>
+                  </div>
+                  <div id="equipped-list" style="font-size:11px;color:#666">Nothing equipped.</div>
+                </div>
+                <div style="margin-top:16px">
+                  <div style="font-size:11px;font-weight:bold;color:#003366;margin-bottom:8px">My Items</div>
+                  <div class="item-grid" id="avatar-items-grid" style="grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px"></div>
                 </div>
               </div>
             </div>
@@ -572,13 +608,44 @@
   <div class="player-modal-box">
     <div class="player-modal-header">
       <span class="t" id="player-modal-title">Player</span>
-      <button class="close" id="player-modal-close">×</button>
+      <button class="close" id="player-modal-close">&times;</button>
     </div>
     <div class="player-modal-body">
       <div class="player-modal-avatar" id="player-modal-avatar"></div>
       <div class="player-modal-name" id="player-modal-name">...</div>
       <div class="player-modal-id" id="player-modal-id">#0</div>
       <div class="player-modal-status" id="player-modal-status">Loading...</div>
+      <div class="player-modal-actions" id="player-modal-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PURCHASE MODAL ============ -->
+<div id="purchase-modal" class="overlay">
+  <div class="purchase-box">
+    <div class="purchase-header">
+      <span class="purchase-title">Confirm Purchase</span>
+      <button class="purchase-close" id="purchase-close">&times;</button>
+    </div>
+    <div class="purchase-body">
+      <div class="purchase-thumb" id="purchase-thumb"></div>
+      <div class="purchase-info">
+        <div class="purchase-item-type" id="purchase-type">ACCESSORY</div>
+        <div class="purchase-item-name" id="purchase-name">Item</div>
+      </div>
+      <div class="purchase-rows">
+        <div class="purchase-row"><span>Price:</span><b id="purchase-price">0 Blox</b></div>
+        <div class="purchase-row"><span>Current balance:</span><b id="purchase-current">0 Blox</b></div>
+        <div class="purchase-row"><span>After purchase:</span><b id="purchase-remaining">0 Blox</b></div>
+      </div>
+      <label class="purchase-checkbox">
+        <input type="checkbox" id="purchase-auto-equip" />
+        <span>Equip automatically after purchase</span>
+      </label>
+    </div>
+    <div class="purchase-actions">
+      <button class="purchase-btn cancel" id="purchase-cancel">Cancel</button>
+      <button class="purchase-btn confirm" id="purchase-confirm">Confirm Purchase</button>
     </div>
   </div>
 </div>
@@ -586,9 +653,8 @@
 <div id="toast"></div>
 
 <script>
-/* ============================================================
-   ANTI-INSPECT
-   ============================================================ */
+/* Anti-inspect (comentado para debug local — descomente em produção) */
+/*
 (function(){
   const block=document.getElementById('no-inspect');let triggered=false;
   const trigger=()=>{if(triggered)return;triggered=true;block.classList.add('show');try{document.body.innerHTML=''}catch(e){}try{window.location.replace('about:blank')}catch(e){}setTimeout(()=>{try{window.close()}catch(e){}},100)};
@@ -604,37 +670,53 @@
   let lW=window.outerWidth-window.innerWidth,lH=window.outerHeight-window.innerHeight;
   setInterval(()=>{const w=window.outerWidth-window.innerWidth,h=window.outerHeight-window.innerHeight;if((w>200&&w!==lW)||(h>200&&h!==lH))trigger();lW=w;lH=h},1500);
 })();
+*/
 
-/* ============================================================
-   SUPABASE
-   ============================================================ */
 const SUPABASE_URL='https://rzkqzbwqewduzybfuefa.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_drMZMPTsXCKFqhtduGhfEw_FswXH22T';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storage:window.localStorage}});
 
-/* ============================================================
-   STATE
-   ============================================================ */
+const DAILY_BLOX = 25;
+
 const state = {
   user: null, profile: null, currentPage: 'home',
-  playerCount: 0,
-  gameCounts: {},                 // slug -> count
-  presenceByUser: {},             // user_id -> { username, game, online_at }
+  playerCount: 0, gameCounts: {}, presenceByUser: {},
   presenceChannel: null,
   gamesCache: [], friendsCache: [], incomingCache: [], outgoingCache: [],
   avatarViewers: new Map(),
-  currentGameDetail: null
+  currentGameDetail: null,
+  blox: 0, ownedItems: new Set(), equipped: {},
+  catalogFilter: 'all',
+  allStoreItems: [],
+  dmConversations: {}, dmLastMessage: {}, dmUnread: {},
+  dmActiveFriend: null, dmChannel: null, dmFriendCache: {},
+  pendingPurchase: null,
 };
 
 const DEFAULT_AVATAR={head:'#f5cd30',torso:'#0d69ac',leftArm:'#f5cd30',rightArm:'#f5cd30',leftLeg:'#4b974b',rightLeg:'#4b974b'};
 
-/* ============================================================
-   UTIL
-   ============================================================ */
+const DEFAULT_FACE = {
+  id: 'default_face',
+  name: 'Default Face',
+  category: 'face',
+  texture_url: null,
+  price: 0,
+  is_default: true,
+  user_id: null,
+  author_name: 'HTMLBlox',
+  is_published: true,
+  is_public: true
+};
+
+const ATTACH_SLOTS = ['Head', 'Torso', 'Back', 'LeftArm', 'RightArm', 'LeftLeg', 'RightLeg'];
+const FACE_SLOT = 'face';
+
 function $(id){return document.getElementById(id)}
 function $$(s){return document.querySelectorAll(s)}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])}
-function fmtDate(d){if(!d)return '—';try{return new Date(d).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}catch{return '—'}}
+function fmtDate(d){if(!d)return '-';try{return new Date(d).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}catch{return '-'}}
+function fmtTime(d){if(!d)return '';try{return new Date(d).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}catch{return ''}}
+function fmtAgo(d){if(!d)return '';const s=Math.floor((Date.now()-new Date(d).getTime())/1000);if(s<60)return 'now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';if(s<604800)return Math.floor(s/86400)+'d';return fmtDate(d)}
 function showToast(msg,type=''){const t=$('toast');t.textContent=msg;t.className='show '+type;clearTimeout(t._timer);t._timer=setTimeout(()=>{t.className=''},2600)}
 function showAuthError(msg,success=false){const el=$('auth-error');el.textContent=msg;el.className='auth-error show'+(success?' success':'')}
 function clearAuthError(){$('auth-error').className='auth-error'}
@@ -645,78 +727,900 @@ function normalizeAvatarColors(a){
   return{head:a.head||DEFAULT_AVATAR.head,torso:a.torso||DEFAULT_AVATAR.torso,leftArm:a.leftArm||DEFAULT_AVATAR.leftArm,rightArm:a.rightArm||DEFAULT_AVATAR.rightArm,leftLeg:a.leftLeg||DEFAULT_AVATAR.leftLeg,rightLeg:a.rightLeg||DEFAULT_AVATAR.rightLeg};
 }
 function admBadge(cls){return '<span class="adm-badge'+(cls?' '+cls:'')+'">ADM</span>'}
+function cssUrlSafe(url){return String(url).replace(/["\\\n\r]/g, ch => ({'"':'%22','\\':'%5C','\n':'','\r':''})[ch] || ch);}
 
-function cssUrlSafe(url){
-  return String(url).replace(/["\\\n\r]/g, ch => ({
-    '"': '%22', '\\': '%5C', '\n': '', '\r': ''
-  })[ch] || ch);
+const CL_ATLAS_LAYOUT = [
+  { col: 1, row: 1 },
+  { col: 0, row: 1 },
+  { col: 0, row: 0 },
+  { col: 1, row: 0 },
+  { col: 0, row: 2 },
+  { col: 1, row: 2 },
+];
+
+function applyClothingAtlasUV(geo){
+  const uv = geo.attributes.uv;
+  if (!uv) return;
+  const cols = 2, rows = 3;
+  for (let f = 0; f < 6; f++) {
+    const base = f * 4;
+    const { col, row } = CL_ATLAS_LAYOUT[f];
+    const u0 = col / cols, u1 = (col + 1) / cols;
+    const v0 = (2 - row) / rows, v1 = (3 - row) / rows;
+    for (let i = 0; i < 4; i++) {
+      const origU = uv.getX(base + i);
+      const origV = uv.getY(base + i);
+      uv.setXY(base + i, origU < 0.5 ? u0 : u1, origV < 0.5 ? v0 : v1);
+    }
+  }
+  uv.needsUpdate = true;
 }
 
-/* ============================================================
-   AVATAR 3D
-   ============================================================ */
-async function mountAvatar3D(container,colors,opts={}){
-  if(!container) return null;
-  const prev=state.avatarViewers.get(container);
-  if(prev){try{prev.dispose()}catch(e){}state.avatarViewers.delete(container)}
-  const THREE=await import('three');
-  container.innerHTML='';
-  const canvas=document.createElement('canvas');
-  canvas.style.cssText='width:100%;height:100%;display:block';
-  if(opts.interactive)canvas.style.cursor='grab';
+function buildShapeMesh(THREE, shape, color){
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#888888'), roughness: 0.55, metalness: 0.05 });
+  const g = new THREE.Group();
+  switch (shape) {
+    case 'box': g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat)); break;
+    case 'sphere': g.add(new THREE.Mesh(new THREE.SphereGeometry(0.6, 24, 16), mat)); break;
+    case 'cylinder': g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 24), mat)); break;
+    case 'cone': g.add(new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 20), mat)); break;
+    case 'torus': g.add(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 12, 24), mat)); break;
+    case 'hat_top': {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.3, 16), mat); b.position.y = 0.75; g.add(b);
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.1, 16), mat); br.position.y = 0.1; g.add(br);
+      break;
+    }
+    case 'cap': {
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 12, 0, Math.PI*2, 0, Math.PI/2), mat));
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.72), mat); bl.position.set(0, -0.02, -0.55); g.add(bl);
+      break;
+    }
+    case 'crown': {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.45, 20), mat); base.position.y = 0.22; g.add(base);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.55, 8), mat);
+        sp.position.set(Math.cos(a) * 0.6, 0.72, Math.sin(a) * 0.6); g.add(sp);
+      }
+      break;
+    }
+    case 'glasses': {
+      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#333333'), roughness: .3, metalness: .4 });
+      const lL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06), m); lL.position.set(-0.35, 0, 0); g.add(lL);
+      const rL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06), m); rL.position.set(0.35, 0, 0); g.add(rL);
+      const bg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.06), m); g.add(bg);
+      break;
+    }
+    case 'cape': {
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.4),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#cc0000'), roughness: .85, side: THREE.DoubleSide }));
+      plane.position.set(0, 1.2, 0); g.add(plane);
+      break;
+    }
+    default: g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat));
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+async function buildAccessoryGroup(THREE, item, GLTFLoader) {
+  const group = new THREE.Group();
+  if (['shirt','tshirt','pants','face'].includes(item.category)) return group;
+  const parts = Array.isArray(item.parts) && item.parts.length ? item.parts : (
+    item.shape || item.model_url ? [{
+      shape: item.shape, color: item.color, model_url: item.model_url,
+      position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: 1
+    }] : []
+  );
+  for (const p of parts) {
+    let partGroup;
+    if (p.model_url) {
+      try {
+        const loader = new GLTFLoader();
+        const gltf = await new Promise((res, rej) => { loader.load(p.model_url, res, undefined, rej); });
+        const model = gltf.scene || gltf.scenes[0];
+        if (model) {
+          const box = new THREE.Box3().setFromObject(model);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          model.scale.setScalar(1.5 / maxDim);
+          const box2 = new THREE.Box3().setFromObject(model);
+          const center = box2.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+          if (p.color) {
+            model.traverse(o => {
+              if (o.isMesh && o.material && o.material.color && !o.material.map) {
+                if (Array.isArray(o.material)) o.material.forEach(m => m.color?.set(p.color));
+                else o.material.color.set(p.color);
+              }
+            });
+          }
+          model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          partGroup = new THREE.Group(); partGroup.add(model);
+        }
+      } catch (e) {
+        partGroup = buildShapeMesh(THREE, p.shape || 'box', p.color);
+      }
+    } else {
+      partGroup = buildShapeMesh(THREE, p.shape || 'box', p.color || '#888888');
+    }
+    if (partGroup) {
+      partGroup.position.set(p.position?.x || 0, p.position?.y || 0, p.position?.z || 0);
+      partGroup.rotation.set(
+        THREE.MathUtils.degToRad(p.rotation?.x || 0),
+        THREE.MathUtils.degToRad(p.rotation?.y || 0),
+        THREE.MathUtils.degToRad(p.rotation?.z || 0)
+      );
+      partGroup.scale.setScalar(p.scale || 1);
+      group.add(partGroup);
+    }
+  }
+  return group;
+}
+
+function getClothingAtlasForPart(item, partName) {
+  if (!item) return null;
+  const parts = item.parts;
+  if (Array.isArray(parts)) {
+    const hit = parts.find(p => (p.part || '').toLowerCase() === partName.toLowerCase());
+    if (hit) return hit.atlas_url || hit.texture_url || null;
+  } else if (parts && typeof parts === 'object') {
+    const v = parts[partName];
+    if (typeof v === 'string') return v;
+    if (v && typeof v === 'object') return v.atlas_url || v.texture_url || null;
+  }
+  return item.texture_url || null;
+}
+
+function mapAttachToSlot(attach){
+  switch(attach){
+    case 'Head': return 'Head';
+    case 'Torso': return 'Torso';
+    case 'Back': return 'Back';
+    case 'LeftArm': return 'LeftArm';
+    case 'RightArm': return 'RightArm';
+    case 'LeftLeg': return 'LeftLeg';
+    case 'RightLeg': return 'RightLeg';
+    default: return 'Head';
+  }
+}
+
+function isAttachmentSlot(slot){ return ATTACH_SLOTS.includes(slot); }
+
+function slotForItem(item) {
+  if (['shirt','tshirt','pants'].includes(item.category)) return item.category;
+  if (item.category === 'face') return FACE_SLOT;
+  return mapAttachToSlot(item.attach_part);
+}
+
+function getStoreItem(id) {
+  if (id === 'default_face') return DEFAULT_FACE;
+  return state.allStoreItems.find(i => i.id === id) || null;
+}
+
+function isOwned(itemId) {
+  if (itemId === 'default_face') return true;
+  if (state.ownedItems.has(itemId)) return true;
+  const item = getStoreItem(itemId);
+  return !!(item && state.user && item.user_id === state.user.id);
+}
+
+function isEquipped(itemId) {
+  for (const slot in state.equipped) {
+    const v = state.equipped[slot];
+    if (Array.isArray(v)) { if (v.includes(itemId)) return true; }
+    else if (v === itemId) return true;
+  }
+  return false;
+}
+
+function migrateEquipped(raw) {
+  const out = {
+    Head: [], Torso: [], Back: [],
+    LeftArm: [], RightArm: [], LeftLeg: [], RightLeg: [],
+    face: 'default_face',
+    shirt: null, tshirt: null, pants: null
+  };
+  if (!raw || typeof raw !== 'object') return out;
+
+  const legacyMap = {
+    hat: 'Head', torso_acc: 'Torso', cape: 'Back',
+    leftarm_acc: 'LeftArm', rightarm_acc: 'RightArm',
+    leftleg_acc: 'LeftLeg', rightleg_acc: 'RightLeg',
+    acc: 'Head'
+  };
+
+  for (const key of Object.keys(raw)) {
+    const val = raw[key];
+    if (!val) continue;
+
+    if (key === 'face') {
+      out.face = (typeof val === 'string' && val) ? val : 'default_face';
+    } else if (['shirt', 'tshirt', 'pants'].includes(key)) {
+      out[key] = typeof val === 'string' ? val : null;
+    } else if (legacyMap[key]) {
+      const target = legacyMap[key];
+      if (typeof val === 'string') out[target].push(val);
+      else if (Array.isArray(val)) out[target] = out[target].concat(val.filter(x => typeof x === 'string'));
+    } else if (ATTACH_SLOTS.includes(key)) {
+      if (typeof val === 'string') out[key].push(val);
+      else if (Array.isArray(val)) out[key] = out[key].concat(val.filter(x => typeof x === 'string'));
+    }
+  }
+
+  if (!out.face) out.face = 'default_face';
+  for (const slot of ATTACH_SLOTS) out[slot] = [...new Set(out[slot])];
+  return out;
+}
+
+async function mountAvatar3D(container, colors, opts={}) {
+  if (!container) return null;
+  const prev = state.avatarViewers.get(container);
+  if (prev) { try { prev.dispose(); } catch(e){} state.avatarViewers.delete(container); }
+  const THREE = await import('three');
+  const GLTFLoader = (await import('three/addons/loaders/GLTFLoader.js')).GLTFLoader;
+
+  container.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'width:100%;height:100%;display:block';
+  if (opts.interactive) canvas.style.cursor = 'grab';
   container.appendChild(canvas);
-  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-  renderer.outputColorSpace=THREE.SRGBColorSpace;
-  const scene=new THREE.Scene();
-  const camera=new THREE.PerspectiveCamera(32,1,.1,100);
-  camera.position.set(0,.4,12);camera.lookAt(0,.4,0);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x404050,1));
-  const dl1=new THREE.DirectionalLight(0xffffff,.9);dl1.position.set(5,8,6);scene.add(dl1);
-  const dl2=new THREE.DirectionalLight(0xffffff,.35);dl2.position.set(-6,5,-4);scene.add(dl2);
-  const c=normalizeAvatarColors(colors);
-  const hex=(s)=>typeof s==='number'?s:parseInt(String(s).replace('#',''),16);
-  const geoLeg=new THREE.BoxGeometry(1,2,1),geoArm=new THREE.BoxGeometry(1,2,1),geoTorso=new THREE.BoxGeometry(2,2,1),geoHead=new THREE.BoxGeometry(1.25,1.25,1.25);
-  const matLegL=new THREE.MeshStandardMaterial({color:hex(c.leftLeg),roughness:.75});
-  const matLegR=new THREE.MeshStandardMaterial({color:hex(c.rightLeg),roughness:.75});
-  const matTorso=new THREE.MeshStandardMaterial({color:hex(c.torso),roughness:.75});
-  const matArmL=new THREE.MeshStandardMaterial({color:hex(c.leftArm),roughness:.75});
-  const matArmR=new THREE.MeshStandardMaterial({color:hex(c.rightArm),roughness:.75});
-  const matHead=new THREE.MeshStandardMaterial({color:hex(c.head),roughness:.7});
-  const fc=document.createElement('canvas');fc.width=fc.height=128;
-  const fx=fc.getContext('2d');fx.fillStyle=c.head;fx.fillRect(0,0,128,128);
-  fx.fillStyle='#1a1a1a';fx.beginPath();fx.ellipse(44,52,8,11,0,0,Math.PI*2);fx.fill();fx.beginPath();fx.ellipse(84,52,8,11,0,0,Math.PI*2);fx.fill();
-  fx.strokeStyle='#1a1a1a';fx.lineWidth=7;fx.lineCap='round';fx.beginPath();fx.arc(64,60,28,.14*Math.PI,.86*Math.PI);fx.stroke();
-  const faceTex=new THREE.CanvasTexture(fc);faceTex.colorSpace=THREE.SRGBColorSpace;
-  const matFace=new THREE.MeshStandardMaterial({map:faceTex,roughness:.7});
-  const group=new THREE.Group();
-  const legL=new THREE.Mesh(geoLeg,matLegL);legL.position.set(-.5,1,0);group.add(legL);
-  const legR=new THREE.Mesh(geoLeg,matLegR);legR.position.set(.5,1,0);group.add(legR);
-  const torso=new THREE.Mesh(geoTorso,matTorso);torso.position.set(0,3,0);group.add(torso);
-  const armL=new THREE.Mesh(geoArm,matArmL);armL.position.set(-1.5,3,0);group.add(armL);
-  const armR=new THREE.Mesh(geoArm,matArmR);armR.position.set(1.5,3,0);group.add(armR);
-  const head=new THREE.Mesh(geoHead,[matHead,matHead,matHead,matHead,matFace,matHead]);
-  head.position.set(0,4.625,0);group.add(head);
-  group.position.y=-2.625;scene.add(group);
-  const resize=()=>{const r=container.getBoundingClientRect();if(!r.width||!r.height)return;renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()};
-  const ro=new ResizeObserver(resize);ro.observe(container);resize();setTimeout(resize,60);
-  let rotY=opts.initialRotation||0,targetRotY=rotY,dragging=false,lastX=0;
-  const onDown=(e)=>{if(!opts.interactive)return;dragging=true;lastX=e.clientX;canvas.style.cursor='grabbing';e.preventDefault()};
-  const onMove=(e)=>{if(!dragging)return;const dx=e.clientX-lastX;lastX=e.clientX;targetRotY+=dx*.012};
-  const onUp=()=>{if(!opts.interactive)return;dragging=false;canvas.style.cursor='grab'};
-  canvas.addEventListener('pointerdown',onDown);
-  window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',onUp);
-  let alive=true,raf=0;
-  const tick=()=>{if(!alive)return;raf=requestAnimationFrame(tick);if(opts.autoRotate&&!dragging)targetRotY+=.006;rotY+=(targetRotY-rotY)*.18;group.rotation.y=rotY;renderer.render(scene,camera)};
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+  camera.position.set(0, 0.4, 12);
+  camera.lookAt(0, 0.4, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1));
+  const dl1 = new THREE.DirectionalLight(0xffffff, 0.9); dl1.position.set(5, 8, 6); scene.add(dl1);
+  const dl2 = new THREE.DirectionalLight(0xffffff, 0.35); dl2.position.set(-6, 5, -4); scene.add(dl2);
+
+  const baseColors = normalizeAvatarColors(colors);
+  const c = Object.assign({}, baseColors);
+  const equipped = opts.equipped || state.equipped || {};
+
+  async function loadTexture(url) {
+    if (!url) return null;
+    return new Promise((resolve) => {
+      const loader = new THREE.TextureLoader();
+      loader.load(url, (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.minFilter = THREE.LinearFilter;
+        t.magFilter = THREE.LinearFilter;
+        t.generateMipmaps = false;
+        resolve(t);
+      }, undefined, () => resolve(null));
+    });
+  }
+
+    async function compositeFaceTexture(faceUrl, headColorCss) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = headColorCss || '#f5cd30';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const tex = new THREE.CanvasTexture(canvas);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.generateMipmaps = false;
+          resolve(tex);
+        } catch (e) {
+          console.warn('Face composite failed (CORS?)', e);
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        console.warn('Face image load failed:', faceUrl);
+        resolve(null);
+      };
+      img.src = faceUrl;
+    });
+  }
+
+  const hex = (s) => typeof s === 'number' ? s : parseInt(String(s).replace('#',''), 16);
+
+  const geoLeg = new THREE.BoxGeometry(1, 2, 1); applyClothingAtlasUV(geoLeg);
+  const geoArm = new THREE.BoxGeometry(1, 2, 1); applyClothingAtlasUV(geoArm);
+  const geoTorso = new THREE.BoxGeometry(2, 2, 1); applyClothingAtlasUV(geoTorso);
+  const geoHead = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+
+  function matFor(hexColor, texture) {
+    const m = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.75 });
+    if (texture) {
+      m.map = texture;
+      m.color.set('#ffffff');
+      m.needsUpdate = true;
+    }
+    return m;
+  }
+
+  const shirtId = equipped.shirt;
+  const tshirtId = equipped.tshirt;
+  const pantsId = equipped.pants;
+  const shirtItem  = shirtId  ? state.allStoreItems.find(i => i.id === shirtId)  : null;
+  const tshirtItem = tshirtId ? state.allStoreItems.find(i => i.id === tshirtId) : null;
+  const pantsItem  = pantsId  ? state.allStoreItems.find(i => i.id === pantsId)  : null;
+
+  let torsoTex = null, armLTex = null, armRTex = null, legLTex = null, legRTex = null;
+
+  if (tshirtItem) {
+    torsoTex = await loadTexture(getClothingAtlasForPart(tshirtItem, 'torso'));
+  } else if (shirtItem) {
+    torsoTex = await loadTexture(getClothingAtlasForPart(shirtItem, 'torso'));
+    armLTex = await loadTexture(getClothingAtlasForPart(shirtItem, 'leftArm'));
+    armRTex = await loadTexture(getClothingAtlasForPart(shirtItem, 'rightArm'));
+  }
+
+  if (pantsItem) {
+    legLTex = await loadTexture(getClothingAtlasForPart(pantsItem, 'leftLeg'));
+    legRTex = await loadTexture(getClothingAtlasForPart(pantsItem, 'rightLeg'));
+  }
+
+  const faceId = equipped.face;
+  const faceItem = (faceId && faceId !== 'default_face')
+    ? state.allStoreItems.find(i => i.id === faceId)
+    : null;
+  let faceCompositeTex = null;
+  if (faceItem && faceItem.texture_url) {
+    faceCompositeTex = await compositeFaceTexture(faceItem.texture_url, c.head);
+  }
+
+  const matLegL = matFor(hex(c.leftLeg), legLTex);
+  const matLegR = matFor(hex(c.rightLeg), legRTex);
+  const matTorso = matFor(hex(c.torso), torsoTex);
+  const matArmL = matFor(hex(c.leftArm), armLTex);
+  const matArmR = matFor(hex(c.rightArm), armRTex);
+  const matHead = new THREE.MeshStandardMaterial({ color: hex(c.head), roughness: 0.7 });
+
+  let matFace;
+  let faceTex = null;
+  if (faceCompositeTex) {
+    matFace = new THREE.MeshStandardMaterial({ map: faceCompositeTex, roughness: 0.7 });
+  } else {
+    const fc = document.createElement('canvas'); fc.width = fc.height = 128;
+    const fx = fc.getContext('2d');
+    fx.fillStyle = c.head; fx.fillRect(0, 0, 128, 128);
+    fx.fillStyle = '#1a1a1a';
+    fx.beginPath(); fx.ellipse(44, 52, 8, 11, 0, 0, Math.PI*2); fx.fill();
+    fx.beginPath(); fx.ellipse(84, 52, 8, 11, 0, 0, Math.PI*2); fx.fill();
+    fx.strokeStyle = '#1a1a1a'; fx.lineWidth = 7; fx.lineCap = 'round';
+    fx.beginPath(); fx.arc(64, 60, 28, 0.14*Math.PI, 0.86*Math.PI); fx.stroke();
+    faceTex = new THREE.CanvasTexture(fc);
+    faceTex.colorSpace = THREE.SRGBColorSpace;
+    matFace = new THREE.MeshStandardMaterial({ map: faceTex, roughness: 0.7 });
+  }
+
+  const group = new THREE.Group();
+  const legL = new THREE.Mesh(geoLeg, matLegL); legL.position.set(-0.5, 1, 0); group.add(legL);
+  const legR = new THREE.Mesh(geoLeg, matLegR); legR.position.set(0.5, 1, 0); group.add(legR);
+  const torso = new THREE.Mesh(geoTorso, matTorso); torso.position.set(0, 3, 0); group.add(torso);
+  const armL = new THREE.Mesh(geoArm, matArmL); armL.position.set(-1.5, 3, 0); group.add(armL);
+  const armR = new THREE.Mesh(geoArm, matArmR); armR.position.set(1.5, 3, 0); group.add(armR);
+  const head = new THREE.Mesh(geoHead, [matHead, matHead, matHead, matHead, matFace, matHead]);
+  head.position.set(0, 4.625, 0); group.add(head);
+
+  const parts = { head, torso, armL, armR, legL, legR };
+  function getPart(name) {
+    switch (name) {
+      case 'Head': return head;
+      case 'Torso': return torso;
+      case 'LeftArm': return armL;
+      case 'RightArm': return armR;
+      case 'LeftLeg': return legL;
+      case 'RightLeg': return legR;
+      case 'Back': return torso;
+      default: return head;
+    }
+  }
+
+  for (const slot of ATTACH_SLOTS) {
+    const raw = equipped[slot];
+    const ids = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    for (const itemId of ids) {
+      if (!itemId) continue;
+      const item = state.allStoreItems.find(i => i.id === itemId);
+      if (!item) continue;
+      if (['shirt', 'tshirt', 'pants', 'face'].includes(item.category)) continue;
+      try {
+        const accGroup = await buildAccessoryGroup(THREE, item, GLTFLoader);
+        accGroup.position.set(item.offset_x || 0, item.offset_y || 0, item.offset_z || 0);
+        accGroup.rotation.set(
+          THREE.MathUtils.degToRad(item.rot_x || 0),
+          THREE.MathUtils.degToRad(item.rot_y || 0),
+          THREE.MathUtils.degToRad(item.rot_z || 0)
+        );
+        accGroup.scale.setScalar(item.scale || 1);
+        const parent = getPart(item.attach_part || slot);
+        if (parent) parent.add(accGroup);
+      } catch (e) {
+        console.warn('Failed to add accessory', itemId, e);
+      }
+    }
+  }
+
+  group.position.y = -2.625;
+  scene.add(group);
+
+  const resize = () => {
+    const r = container.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  };
+  const ro = new ResizeObserver(resize);
+  ro.observe(container); resize();
+  setTimeout(resize, 60);
+
+  let rotY = opts.initialRotation || 0, targetRotY = rotY, dragging = false, lastX = 0;
+  const onDown = (e) => { if (!opts.interactive) return; dragging = true; lastX = e.clientX; canvas.style.cursor = 'grabbing'; e.preventDefault(); };
+  const onMove = (e) => { if (!dragging) return; const dx = e.clientX - lastX; lastX = e.clientX; targetRotY += dx * 0.012; };
+  const onUp = () => { if (!opts.interactive) return; dragging = false; canvas.style.cursor = 'grab'; };
+  canvas.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+
+  let alive = true, raf = 0;
+  const tick = () => {
+    if (!alive) return;
+    raf = requestAnimationFrame(tick);
+    if (opts.autoRotate && !dragging) targetRotY += 0.006;
+    rotY += (targetRotY - rotY) * 0.18;
+    group.rotation.y = rotY;
+    renderer.render(scene, camera);
+  };
   tick();
-  const inst={dispose(){alive=false;cancelAnimationFrame(raf);ro.disconnect();canvas.removeEventListener('pointerdown',onDown);window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',onUp);renderer.dispose();geoLeg.dispose();geoArm.dispose();geoTorso.dispose();geoHead.dispose();faceTex.dispose()}};
-  state.avatarViewers.set(container,inst);
+
+  const inst = {
+    dispose() {
+      alive = false;
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      canvas.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      renderer.dispose();
+      geoLeg.dispose(); geoArm.dispose(); geoTorso.dispose(); geoHead.dispose();
+      if (faceTex) faceTex.dispose();
+    }
+  };
+  state.avatarViewers.set(container, inst);
   return inst;
 }
 
-/* ============================================================
-   AUTH
-   ============================================================ */
+function refreshAllAvatars(){
+  if (!state.profile) return;
+  mountAvatar3D($('header-avatar'), state.profile.avatar_colors, { autoRotate: true, equipped: state.equipped });
+  const hv = $('home-welcome-avatar');
+  if (hv) mountAvatar3D(hv, state.profile.avatar_colors, { autoRotate: true, interactive: true, equipped: state.equipped });
+  const pv = $('profile-avatar-3d');
+  if (pv && state.currentPage === 'profile') mountAvatar3D(pv, state.profile.avatar_colors, { autoRotate: true, interactive: true, equipped: state.equipped });
+  const ev = $('edit-avatar-3d');
+  if (ev && state.currentPage === 'avatar') {
+    const c = getEditorColors();
+    mountAvatar3D(ev, c, { interactive: true, autoRotate: false, equipped: state.equipped });
+  }
+}
+
+function setBlox(n){
+  state.blox = Math.max(0, Math.floor(n));
+  $('blox-count').textContent = state.blox;
+  const pb = $('profile-blox'); if (pb) pb.textContent = state.blox;
+  const hb = $('home-blox-stat'); if (hb) hb.textContent = state.blox;
+}
+async function persistBlox(){
+  if (!state.user) return;
+  try { await sb.from('profiles').update({ blox: state.blox }).eq('id', state.user.id); } catch (e) {}
+}
+async function persistItems(){
+  if (!state.user) return;
+  try {
+    await sb.from('profiles').update({
+      owned_items: Array.from(state.ownedItems),
+      equipped_items: state.equipped,
+    }).eq('id', state.user.id);
+  } catch (e) { console.warn('persistItems failed', e); }
+}
+
+async function tryClaimDaily() {
+  try {
+    const { data, error } = await sb.rpc('claim_daily_blox');
+    if (error) { console.warn('Daily RPC error', error); return null; }
+    return data;
+  } catch (e) { console.warn(e); return null; }
+}
+
+async function handleDailyOnLogin() {
+  const result = await tryClaimDaily();
+  if (!result) return;
+  if (result.success) {
+    state.blox = result.blox;
+    if (state.profile) { state.profile.blox = result.blox; state.profile.daily_streak = result.streak; }
+    setBlox(state.blox);
+    const ps = $('profile-streak'); if (ps) ps.textContent = result.streak;
+    showToast('Daily reward: +' + result.amount + ' Blox (streak ' + result.streak + ')', 'success');
+  } else if (result.error === 'already_claimed') {
+    state.blox = result.blox;
+    if (state.profile) { state.profile.blox = result.blox; state.profile.daily_streak = result.streak; }
+    setBlox(state.blox);
+    const ps = $('profile-streak'); if (ps) ps.textContent = result.streak || 0;
+  }
+  updateBloxButton();
+}
+
+function updateBloxButton() {
+  const btn = $('header-blox');
+  if (!btn) return;
+  btn.classList.remove('claimable');
+  btn.title = 'Click to claim daily Blox or view Catalog';
+}
+
+function openPurchaseModal(itemId) {
+  const item = getStoreItem(itemId);
+  if (!item) return;
+  if (item.id === 'default_face') return;
+  if (item.user_id === state.user.id) return;
+  if (isOwned(itemId)) { showToast('You already own this'); return; }
+  const price = Number(item.price || 0);
+  const remaining = state.blox - price;
+  if (remaining < 0) { showToast('Not enough Blox!', 'error'); return; }
+  state.pendingPurchase = { itemId, autoEquip: false };
+  $('purchase-name').textContent = item.name || 'Item';
+  $('purchase-type').textContent = String(item.category || 'accessory').toUpperCase();
+  $('purchase-price').textContent = price + ' Blox';
+  $('purchase-current').textContent = state.blox + ' Blox';
+  $('purchase-remaining').textContent = remaining + ' Blox';
+  $('purchase-auto-equip').checked = false;
+  const thumb = $('purchase-thumb'); thumb.innerHTML = '';
+  mountItemThumb(thumb, item);
+  $('purchase-modal').classList.add('show');
+}
+
+function closePurchaseModal() {
+  $('purchase-modal').classList.remove('show');
+  state.pendingPurchase = null;
+}
+
+async function confirmPurchase() {
+  const pending = state.pendingPurchase;
+  if (!pending) return;
+  const item = getStoreItem(pending.itemId);
+  if (!item) return closePurchaseModal();
+  const price = Number(item.price || 0);
+  if (isOwned(item.id)) { closePurchaseModal(); renderOwnedItems(); return; }
+  if (state.blox < price) { closePurchaseModal(); showToast('Not enough Blox!', 'error'); return; }
+  const autoEquip = $('purchase-auto-equip').checked;
+  const btn = $('purchase-confirm');
+  btn.disabled = true; btn.textContent = 'Processing...';
+  try {
+    state.blox -= price;
+    state.ownedItems.add(item.id);
+    setBlox(state.blox);
+    if (autoEquip) {
+      const slot = slotForItem(item);
+      if (isAttachmentSlot(slot)) {
+        if (!Array.isArray(state.equipped[slot])) state.equipped[slot] = [];
+        state.equipped[slot].push(item.id);
+      } else if (slot === FACE_SLOT) {
+        state.equipped.face = item.id;
+      } else {
+        state.equipped[slot] = item.id;
+      }
+    }
+    await Promise.all([persistBlox(), persistItems()]);
+    if (price > 0 && item.user_id) {
+      try {
+        const { data: seller } = await sb.from('profiles').select('blox').eq('id', item.user_id).maybeSingle();
+        if (seller) await sb.from('profiles').update({ blox: (seller.blox || 0) + price }).eq('id', item.user_id);
+      } catch (e) { console.warn('Seller credit failed', e); }
+    }
+    closePurchaseModal();
+    showToast(autoEquip ? 'Purchased and equipped: ' + item.name : 'Purchased: ' + item.name, 'success');
+    renderCatalog();
+    renderOwnedItems();
+    renderEquippedList();
+    refreshAllAvatars();
+  } catch (e) {
+    console.error(e);
+    showToast('Purchase failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Confirm Purchase';
+  }
+}
+
+async function equipItem(itemId){
+  const item = getStoreItem(itemId);
+  if (!item) return;
+  if (!isOwned(itemId)) { showToast('You do not own this', 'error'); return; }
+  const slot = slotForItem(item);
+
+  if (isAttachmentSlot(slot)) {
+    if (!Array.isArray(state.equipped[slot])) state.equipped[slot] = [];
+    const arr = state.equipped[slot];
+    const idx = arr.indexOf(itemId);
+    if (idx >= 0) {
+      arr.splice(idx, 1);
+      showToast('Unequipped: ' + item.name);
+    } else {
+      arr.push(itemId);
+      showToast('Equipped: ' + item.name, 'success');
+    }
+  } else if (slot === FACE_SLOT) {
+    if (itemId === 'default_face') {
+      showToast('The default face is always worn');
+      return;
+    }
+    if (state.equipped.face === itemId) {
+      state.equipped.face = 'default_face';
+      showToast('Reverted to Default Face');
+    } else {
+      state.equipped.face = itemId;
+      showToast('Equipped: ' + item.name, 'success');
+    }
+  } else {
+    const current = state.equipped[slot];
+    if (current === itemId) {
+      state.equipped[slot] = null;
+      showToast('Unequipped: ' + item.name);
+    } else {
+      state.equipped[slot] = itemId;
+      showToast('Equipped: ' + item.name, 'success');
+    }
+  }
+
+  await persistItems();
+  renderOwnedItems();
+  renderEquippedList();
+  refreshAllAvatars();
+}
+
+function renderEquippedList(){
+  const el = $('equipped-list');
+  if (!el) return;
+
+  const rows = [];
+
+  const faceId = state.equipped.face || 'default_face';
+  const faceItem = getStoreItem(faceId);
+  if (faceItem) {
+    rows.push({
+      slot: 'Face',
+      name: faceItem.name,
+      id: faceItem.id,
+      isDefault: faceItem.is_default === true
+    });
+  }
+
+  for (const slot of ATTACH_SLOTS) {
+    const arr = Array.isArray(state.equipped[slot]) ? state.equipped[slot] : [];
+    for (const id of arr) {
+      const it = getStoreItem(id);
+      if (it) rows.push({ slot, name: it.name, id: it.id });
+    }
+  }
+
+  for (const slot of ['shirt', 'tshirt', 'pants']) {
+    const id = state.equipped[slot];
+    if (!id) continue;
+    const it = getStoreItem(id);
+    if (it) rows.push({ slot, name: it.name, id: it.id });
+  }
+
+  const count = $('equipped-count');
+  if (count) count.textContent = rows.length;
+
+  if (!rows.length) { el.textContent = 'Nothing equipped.'; return; }
+
+  el.innerHTML = rows.map(r => {
+    const label = r.slot.charAt(0).toUpperCase() + r.slot.slice(1);
+    const unequipBtn = r.isDefault
+      ? '<span style="color:#8899aa;font-size:10px;font-style:italic">always on</span>'
+      : '<button data-unequip="' + esc(r.id) + '" style="background:none;border:none;color:#c0392b;cursor:pointer;font-weight:bold;font-size:14px;line-height:1">&times;</button>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0">' +
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px"><b>' + esc(label) + ':</b> ' + esc(r.name) + '</span>' +
+      unequipBtn +
+      '</div>';
+  }).join('');
+
+  el.querySelectorAll('[data-unequip]').forEach(b => {
+    b.addEventListener('click', () => equipItem(b.dataset.unequip));
+  });
+}
+
+function renderCatalog(){
+  const grid = $('catalog-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const myId = state.user?.id;
+  const items = state.allStoreItems.filter(i => i.user_id !== myId);
+  const filter = state.catalogFilter;
+  const filtered = filter === 'all' ? items : items.filter(i => i.category === filter);
+
+  $('catalog-count').textContent = filtered.length + (filtered.length === 1 ? ' item' : ' items');
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-note" style="grid-column:1/-1">No published items are available yet.</div>';
+    return;
+  }
+
+  for (const item of filtered) {
+    const owned = isOwned(item.id);
+    const card = document.createElement('div');
+    card.className = 'item-card' + (owned ? ' owned' : '');
+
+    card.innerHTML =
+      '<div class="item-thumb"></div>' +
+      (owned ? '<div class="item-badge">OWNED</div>' : '') +
+      '<div class="item-info">' +
+        '<div class="item-type">' + esc(item.category || 'accessory') + '</div>' +
+        '<div class="item-name">' + esc(item.name) + '</div>' +
+        '<div class="item-author">by ' + esc(item.author_name || 'unknown') + '</div>' +
+        '<div class="item-price"><span class="blox-glyph"></span>' + (item.price || 0) + '</div>' +
+      '</div>' +
+      '<div class="item-actions"></div>';
+
+    mountItemThumb(card.querySelector('.item-thumb'), item);
+
+    const actions = card.querySelector('.item-actions');
+
+    if (!owned) {
+      const buyBtn = document.createElement('button');
+      buyBtn.className = 'ibuy';
+      const price = Number(item.price || 0);
+      buyBtn.textContent = state.blox >= price ? ('Buy ' + price) : 'Not enough';
+      buyBtn.disabled = state.blox < price;
+      buyBtn.addEventListener('click', () => openPurchaseModal(item.id));
+      actions.appendChild(buyBtn);
+    } else {
+      const eqBtn = document.createElement('button');
+      const equipped = isEquipped(item.id);
+      eqBtn.className = equipped ? 'iequipped' : 'iequip';
+      eqBtn.textContent = equipped ? 'Equipped' : 'Equip';
+      eqBtn.addEventListener('click', () => equipItem(item.id));
+      actions.appendChild(eqBtn);
+    }
+
+    grid.appendChild(card);
+  }
+}
+
+async function mountItemThumb(container, item) {
+  if (item.category === 'face') {
+    if (item.texture_url) {
+      const img = document.createElement('img');
+      img.src = item.texture_url;
+      img.alt = item.name;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block';
+      container.appendChild(img);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'width:100%;height:100%;background:#f5cd30;display:flex;align-items:center;justify-content:center';
+      wrap.innerHTML =
+        '<svg viewBox="0 0 128 128" style="width:70%;height:70%">' +
+        '<ellipse cx="44" cy="52" rx="8" ry="11" fill="#1a1a1a"/>' +
+        '<ellipse cx="84" cy="52" rx="8" ry="11" fill="#1a1a1a"/>' +
+        '<path d="M36 78 Q64 100 92 78" stroke="#1a1a1a" stroke-width="7" fill="none" stroke-linecap="round"/>' +
+        '</svg>';
+      container.appendChild(wrap);
+    }
+    return;
+  }
+
+  if (['shirt','tshirt','pants'].includes(item.category) && item.texture_url) {
+    const img = document.createElement('img');
+    img.src = item.texture_url;
+    img.alt = item.name;
+    container.appendChild(img);
+    return;
+  }
+
+  const THREE = await import('three');
+  const GLTFLoader = (await import('three/addons/loaders/GLTFLoader.js')).GLTFLoader;
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'width:100%;height:100%;display:block';
+  container.appendChild(canvas);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xe8f2ff);
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+  camera.position.set(2.5, 2.5, 3.5); camera.lookAt(0, 0.5, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1.1));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.85); dl.position.set(5, 6, 4); scene.add(dl);
+  const group = await buildAccessoryGroup(THREE, item, GLTFLoader);
+  group.position.set(item.offset_x || 0, item.offset_y || 0, item.offset_z || 0);
+  group.scale.setScalar(item.scale || 1);
+  scene.add(group);
+  const resize = () => {
+    const r = container.getBoundingClientRect();
+    if (!r.width) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  };
+  setTimeout(resize, 30);
+  const ro = new ResizeObserver(resize);
+  ro.observe(container);
+  let alive = true, t = 0;
+  const tick = () => {
+    if (!alive) return;
+    requestAnimationFrame(tick);
+    t += 0.015;
+    group.rotation.y = t;
+    renderer.render(scene, camera);
+  };
+  tick();
+  if (!state._itemThumbDisposers) state._itemThumbDisposers = [];
+  state._itemThumbDisposers.push(() => {
+    alive = false;
+    ro.disconnect();
+    renderer.dispose();
+  });
+}
+
+function renderOwnedItems(){
+  const grid = $('avatar-items-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const owned = Array.from(state.ownedItems).map(id => getStoreItem(id)).filter(Boolean);
+  const allItems = [DEFAULT_FACE, ...owned];
+
+  const count = $('inventory-count');
+  if (count) count.textContent = allItems.length + (allItems.length === 1 ? ' item' : ' items');
+
+  for (const item of allItems) {
+    const equipped = isEquipped(item.id);
+    const isDefaultFace = item.id === 'default_face';
+    const card = document.createElement('div');
+    card.className = 'item-card owned' + (equipped ? ' equipped' : '') + (isDefaultFace ? ' default-face' : '');
+    card.innerHTML =
+      '<div class="item-thumb"></div>' +
+      (equipped ? '<div class="item-badge equipped">EQUIPPED</div>' : '') +
+      (isDefaultFace ? '<div class="item-badge mine">DEFAULT</div>' : '') +
+      '<div class="item-info">' +
+        '<div class="item-type">' + esc(item.category || 'accessory') + '</div>' +
+        '<div class="item-name">' + esc(item.name) + '</div>' +
+      '</div>' +
+      '<div class="item-actions"></div>';
+    mountItemThumb(card.querySelector('.item-thumb'), item);
+
+    const actions = card.querySelector('.item-actions');
+    const eqBtn = document.createElement('button');
+
+    if (isDefaultFace && equipped) {
+      eqBtn.className = 'iequipped';
+      eqBtn.textContent = 'Equipped';
+      eqBtn.disabled = true;
+    } else {
+      eqBtn.className = equipped ? 'iequipped' : 'iequip';
+      eqBtn.textContent = equipped ? 'Unequip' : 'Equip';
+      eqBtn.addEventListener('click', () => equipItem(item.id));
+    }
+
+    actions.appendChild(eqBtn);
+    grid.appendChild(card);
+  }
+}
+
+$('purchase-close').addEventListener('click', closePurchaseModal);
+$('purchase-cancel').addEventListener('click', closePurchaseModal);
+$('purchase-confirm').addEventListener('click', confirmPurchase);
+$('purchase-modal').addEventListener('click', e => { if (e.target === $('purchase-modal')) closePurchaseModal(); });
+
 let _userCheckTimer=null;
 $('su-username').addEventListener('input',()=>{
   clearTimeout(_userCheckTimer);
@@ -777,28 +1681,65 @@ async function onLoggedIn(user){
   let{data}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
   if(!data){
     const meta=user.user_metadata||{};
-    const{data:created}=await sb.from('profiles').insert({id:user.id,username:meta.username||('user_'+user.id.substring(0,6)),birthdate:meta.birthdate||null,avatar_colors:DEFAULT_AVATAR}).select().single();
+    const{data:created}=await sb.from('profiles').insert({
+      id:user.id, username:meta.username||('user_'+user.id.substring(0,6)),
+      birthdate:meta.birthdate||null, avatar_colors:DEFAULT_AVATAR,
+    }).select().single();
     if(created)data=created;
   }
   if(data)data.avatar_colors=normalizeAvatarColors(data.avatar_colors);
   state.profile=data;
+  state.blox = (data && typeof data.blox === 'number') ? data.blox : 500;
+  state.ownedItems = new Set(Array.isArray(data?.owned_items) ? data.owned_items : []);
+  state.equipped = migrateEquipped(data && data.equipped_items);
+  await loadStoreItems();
   $('auth-screen').classList.remove('active');
   $('app').classList.add('active');
+  document.body.classList.add('logged-in');
   await updateHeaderUI();
+  setBlox(state.blox);
+  renderEquippedList();
+  renderOwnedItems();
+  updateBloxButton();
+  const ps = $('profile-streak'); if (ps) ps.textContent = state.profile?.daily_streak || 0;
   navigate('home');
   await loadGameCards();
   await refreshFriendsData();
   await renderHome();
   joinPresence();
+  await loadAllDMs();
+  initDMChannel();
+  renderDMFriendList();
+  updateDMBadge();
+  setTimeout(() => handleDailyOnLogin(), 400);
+}
+
+async function loadStoreItems() {
+  const { data, error } = await sb.from('custom_accessories')
+    .select('*').eq('is_published', true).order('created_at', { ascending: false });
+  if (error) { console.warn('loadStoreItems', error); return; }
+  const authorIds = Array.from(new Set((data || []).map(i => i.user_id).filter(Boolean)));
+  let authorMap = {};
+  if (authorIds.length) {
+    const { data: profs } = await sb.from('profiles').select('id,username').in('id', authorIds);
+    for (const p of (profs || [])) authorMap[p.id] = p.username;
+  }
+  state.allStoreItems = (data || []).map(i => ({ ...i, author_name: authorMap[i.user_id] || 'unknown' }));
+  if (state.user) {
+    for (const item of state.allStoreItems) if (item.user_id === state.user.id) state.ownedItems.add(item.id);
+  }
 }
 
 $('logout-btn').addEventListener('click',async()=>{
   if(!confirm('Log out of HTMLBlox?'))return;
   await sb.auth.signOut();
   if(state.presenceChannel){try{await sb.removeChannel(state.presenceChannel)}catch{}state.presenceChannel=null}
+  if(state.dmChannel){try{await sb.removeChannel(state.dmChannel)}catch{}state.dmChannel=null}
   state.user=null;state.profile=null;
   state.avatarViewers.forEach(v=>{try{v.dispose()}catch(e){}});state.avatarViewers.clear();
+  if (state._itemThumbDisposers) { for (const fn of state._itemThumbDisposers) { try { fn(); } catch(e){} } state._itemThumbDisposers = []; }
   $('app').classList.remove('active');
+  document.body.classList.remove('logged-in');
   $('auth-screen').classList.add('active');
   $$('.auth-tab').forEach(t=>t.classList.toggle('active',t.dataset.authTab==='login'));
   $('signup-form').style.display='none';$('login-form').style.display='block';
@@ -812,19 +1753,13 @@ async function checkSession(){
 }
 sb.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session){if(state.user?.id!==session.user.id)onLoggedIn(session.user)}});
 
-/* ============================================================
-   HEADER
-   ============================================================ */
 async function updateHeaderUI(){
   if(!state.profile)return;
   const uname=$('header-username');
   uname.innerHTML='<span>'+esc(state.profile.username)+'</span>'+(state.profile.is_adm?admBadge():'');
-  await mountAvatar3D($('header-avatar'),state.profile.avatar_colors,{autoRotate:true});
+  await mountAvatar3D($('header-avatar'),state.profile.avatar_colors,{autoRotate:true, equipped: state.equipped});
 }
 
-/* ============================================================
-   NAV
-   ============================================================ */
 function navigate(page){
   state.currentPage=page;
   $$('.page').forEach(p=>p.classList.remove('active'));
@@ -836,41 +1771,59 @@ function navigate(page){
   if(page==='profile')renderProfilePage();
   if(page==='avatar')renderAvatarEditor();
   if(page==='friends')renderFriendsPage();
+  if(page==='catalog'){ loadStoreItems().then(() => renderCatalog()); }
+  if(page==='messages'){
+    renderDMFriendList();
+    if(state.dmActiveFriend) renderDMConversation(state.dmActiveFriend);
+  }
 }
 $$('.sidebar-menu button, .header-nav button').forEach(btn=>btn.addEventListener('click',()=>{const t=btn.dataset.nav;if(t)navigate(t)}));
+
 $('logo-btn').addEventListener('click',()=>navigate('home'));
 $('header-user').addEventListener('click',()=>navigate('profile'));
+$('header-blox').addEventListener('click', async () => {
+  const result = await tryClaimDaily();
+  if (result && result.success) {
+    state.blox = result.blox;
+    setBlox(state.blox);
+    if (state.profile) { state.profile.blox = result.blox; state.profile.daily_streak = result.streak; }
+    const ps = $('profile-streak'); if (ps) ps.textContent = result.streak;
+    showToast('Daily reward: +' + result.amount + ' Blox (streak ' + result.streak + ')', 'success');
+  } else {
+    navigate('catalog');
+  }
+  updateBloxButton();
+});
 $('profile-edit-btn')&&$('profile-edit-btn').addEventListener('click',()=>navigate('avatar'));
+$('profile-catalog-btn')&&$('profile-catalog-btn').addEventListener('click',()=>navigate('catalog'));
 $('mobile-menu-btn').addEventListener('click',()=>{$('sidebar').classList.toggle('open');$('overlay-backdrop').classList.toggle('show')});
 $('overlay-backdrop').addEventListener('click',()=>{$('sidebar').classList.remove('open');$('overlay-backdrop').classList.remove('show')});
 
-/* ============================================================
-   GAME CARDS
-   ============================================================ */
+$$('.catalog-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('.catalog-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    state.catalogFilter = tab.dataset.cat;
+    renderCatalog();
+  });
+});
+
 async function loadGameCards(){
   let games=[];
   const{data,error}=await sb.from('games').select('*').order('created_at');
   if(!error&&data)games=data;
-
   const myId = state.user ? state.user.id : null;
-  if (myId) {
-    games = games.filter(g => g.is_public !== false || g.author_id === myId);
-  } else {
-    games = games.filter(g => g.is_public !== false);
-  }
-
+  if (myId) games = games.filter(g => g.is_public !== false || g.author_id === myId);
+  else games = games.filter(g => g.is_public !== false);
   state.gamesCache=games;
   const homeGrid=$('home-game-grid'),gamesGrid=$('games-grid'),profileGrid=$('profile-games-grid');
-  homeGrid.innerHTML='';gamesGrid.innerHTML='';profileGrid.innerHTML='';
+  if (homeGrid) homeGrid.innerHTML='';
+  if (gamesGrid) gamesGrid.innerHTML='';
+  if (profileGrid) profileGrid.innerHTML='';
   const featured = games.filter(g => g.featured);
   const list = featured.length ? featured : games;
-  list.forEach(g => homeGrid.appendChild(buildGameCard(g)));
-  games.forEach(g => gamesGrid.appendChild(buildGameCard(g)));
-  if(state.user){
-    const mine=games.filter(g=>g.author_id===state.user.id);
-    if(mine.length)mine.forEach(g=>profileGrid.appendChild(buildGameCard(g)));
-    else profileGrid.innerHTML='<div style="color:#888;font-size:12px">You haven\'t created any games yet.</div>';
-  }
+  if (homeGrid) list.forEach(g => homeGrid.appendChild(buildGameCard(g)));
+  if (gamesGrid) games.forEach(g => gamesGrid.appendChild(buildGameCard(g)));
   $('home-count').textContent = list.length + (list.length === 1 ? ' game' : ' games');
   $('games-count').textContent = games.length + (games.length === 1 ? ' game' : ' games');
   updatePlayerCounts();
@@ -879,33 +1832,25 @@ async function loadGameCards(){
 function buildGameCard(game){
   const card=document.createElement('button');
   card.className='game-card';card.type='button';
-
   const hasThumb = game.thumbnail_url && String(game.thumbnail_url).trim();
   const thumbHTML = hasThumb ? '<div class="game-thumb-img"></div>' : '<canvas></canvas>';
-
   card.innerHTML=
-    '<div class="game-thumb">'+
-      (game.featured?'<div class="game-badge">FEATURED</div>':'')+
-      thumbHTML +
-    '</div>'+
-    '<div class="game-info">'+
-      '<div class="game-name">'+esc(game.name)+'</div>'+
-      '<div class="game-author">by '+esc(game.author_name||'unknown')+'</div>'+
+    '<div class="game-thumb">' + (game.featured?'<div class="game-badge">FEATURED</div>':'') + thumbHTML + '</div>' +
+    '<div class="game-info">' +
+      '<div class="game-name">'+esc(game.name)+'</div>' +
+      '<div class="game-author">by '+esc(game.author_name||'unknown')+'</div>' +
       '<div class="game-stats">' +
         '<span class="game-online" data-online-count data-game="' + esc(game.slug) + '">0 online</span>' +
         '<span class="game-play">VIEW</span>' +
       '</div>' +
     '</div>';
-
   card.addEventListener('click',()=>openGameDetail(game));
-
   if (hasThumb) {
     const imgDiv = card.querySelector('.game-thumb-img');
     imgDiv.style.backgroundImage = 'url("' + cssUrlSafe(game.thumbnail_url) + '")';
   } else {
     setTimeout(()=>{const cv=card.querySelector('canvas');if(cv)drawGamePreview(cv)},10);
   }
-
   return card;
 }
 
@@ -922,11 +1867,6 @@ function drawGamePreview(canvas){
   ctx.fillStyle='#5a9b3d';for(let i=0;i<w;i+=24)ctx.fillRect(i,h*.7,1,h*.3);
   ctx.fillStyle='#a3a2a5';
   ctx.fillRect(w*.15,h*.55,30,30);ctx.fillRect(w*.55,h*.4,40,40);ctx.fillRect(w*.7,h*.55,25,25);
-  const nX=w*.35,nY=h*.45;
-  ctx.fillStyle='#f5cd30';ctx.fillRect(nX-6,nY,12,8);
-  ctx.fillStyle='#0d69ac';ctx.fillRect(nX-10,nY+8,20,14);
-  ctx.fillStyle='#f5cd30';ctx.fillRect(nX-14,nY+8,4,14);ctx.fillRect(nX+10,nY+8,4,14);
-  ctx.fillStyle='#4b974b';ctx.fillRect(nX-8,nY+22,6,12);ctx.fillRect(nX+2,nY+22,6,12);
 }
 
 function updatePlayerCounts() {
@@ -936,37 +1876,19 @@ function updatePlayerCounts() {
     el.textContent = c === 1 ? '1 online' : c + ' online';
     el.style.color = c > 0 ? '#4a9948' : '#999';
   });
-  const dp = $('detail-online');
-  if (dp) {
-    const g = state.currentGameDetail;
-    const c = (g && state.gameCounts[g.slug]) || 0;
-    dp.textContent = c === 1 ? '1 online' : c + ' online';
-  }
-  const dpl = $('detail-players');
-  if (dpl) {
-    const g = state.currentGameDetail;
-    dpl.textContent = (g && state.gameCounts[g.slug]) || 0;
-  }
 }
 
-/* ============================================================
-   OPEN GAME DETAIL
-   ============================================================ */
 function openGameDetail(game){
   state.currentGameDetail=game;
   $('detail-panel-title').textContent=game.name;
   $('detail-title').textContent=game.name;
   $('detail-author').textContent=game.author_name||'unknown';
   $('detail-genre').textContent=game.genre||'Sandbox';
-  $('detail-created').textContent=game.created_at?new Date(game.created_at).getFullYear():'—';
+  $('detail-created').textContent=game.created_at?new Date(game.created_at).getFullYear():'-';
   $('detail-desc').textContent=game.description||'No description.';
-  const _c = state.gameCounts[game.slug] || 0;
-  $('detail-players').textContent = _c;
-  $('detail-online').textContent = _c === 1 ? '1 online' : _c + ' online';
-
-  const hero = $('detail-hero');
-  hero.innerHTML = '';
-
+  $('detail-players').textContent = state.gameCounts[game.slug] || 0;
+  $('detail-online').textContent = (state.gameCounts[game.slug] || 0) + ' online';
+  const hero = $('detail-hero'); hero.innerHTML = '';
   const hasThumb = game.thumbnail_url && String(game.thumbnail_url).trim();
   if (hasThumb) {
     const div = document.createElement('div');
@@ -978,78 +1900,65 @@ function openGameDetail(game){
     hero.appendChild(cv);
     setTimeout(()=>drawGamePreview(cv),10);
   }
-
   navigate('gamedetail');
 }
 
 $('detail-back').addEventListener('click',()=>navigate('games'));
 $('detail-play').addEventListener('click',()=>{
-  const g=state.currentGameDetail;
-  if(!g)return;
+  const g=state.currentGameDetail; if(!g)return;
   window.location.href='game.html?game='+encodeURIComponent(g.slug);
 });
 
-/* ============================================================
-   PROFILE
-   ============================================================ */
 async function renderProfilePage(){
   if(!state.profile)return;
   const p=state.profile;
   $('profile-username-wrap').innerHTML='<span>'+esc(p.username)+'</span>'+(p.is_adm?admBadge('lg'):'');
   $('profile-id').textContent='#'+(p.display_id||'0');
-  $('profile-email').textContent=state.user.email||'—';
   $('profile-birthdate').textContent=fmtDate(p.birthdate);
   $('profile-joined').textContent=fmtDate(p.created_at);
-  await mountAvatar3D($('profile-avatar-3d'),p.avatar_colors,{autoRotate:true,interactive:true});
-  const mine=state.gamesCache.filter(g=>g.author_id===state.user.id);
-  $('profile-games').textContent=mine.length;
+  await mountAvatar3D($('profile-avatar-3d'),p.avatar_colors,{autoRotate:true,interactive:true,equipped:state.equipped});
+  $('profile-blox').textContent = state.blox;
+  $('profile-streak').textContent = p.daily_streak || 0;
 }
 
-/* ============================================================
-   EDITOR
-   ============================================================ */
 let _editorViewer=null,_editorRot=0;
 async function renderAvatarEditor(){
   if(!state.profile)return;
   const c=state.profile.avatar_colors;
   ['head','torso','leftArm','rightArm','leftLeg','rightLeg'].forEach(k=>{$('edit-'+k).value=c[k];$('hex-'+k).textContent=c[k]});
   _editorRot=0;
-  _editorViewer=await mountAvatar3D($('edit-avatar-3d'),c,{interactive:true,autoRotate:false,initialRotation:0});
+  _editorViewer=await mountAvatar3D($('edit-avatar-3d'),c,{interactive:true,autoRotate:false,initialRotation:0,equipped:state.equipped});
+  renderEquippedList();
+  renderOwnedItems();
 }
 function getEditorColors(){return{head:$('edit-head').value,torso:$('edit-torso').value,leftArm:$('edit-leftArm').value,rightArm:$('edit-rightArm').value,leftLeg:$('edit-leftLeg').value,rightLeg:$('edit-rightLeg').value}}
 async function updateEditorPreview(){
   const c=getEditorColors();
   ['head','torso','leftArm','rightArm','leftLeg','rightLeg'].forEach(k=>$('hex-'+k).textContent=c[k]);
-  _editorViewer=await mountAvatar3D($('edit-avatar-3d'),c,{interactive:true,autoRotate:false,initialRotation:_editorRot});
+  _editorViewer=await mountAvatar3D($('edit-avatar-3d'),c,{interactive:true,autoRotate:false,initialRotation:_editorRot,equipped:state.equipped});
 }
 ['edit-head','edit-torso','edit-leftArm','edit-rightArm','edit-leftLeg','edit-rightLeg'].forEach(id=>$(id).addEventListener('input',updateEditorPreview));
-$('reset-avatar-btn').addEventListener('click',()=>{['head','torso','leftArm','rightArm','leftLeg','rightLeg'].forEach(k=>$('edit-'+k).value=DEFAULT_AVATAR[k]);updateEditorPreview();showToast('Reset to classic colors')});
+$('reset-avatar-btn').addEventListener('click',()=>{['head','torso','leftArm','rightArm','leftLeg','rightLeg'].forEach(k=>$('edit-'+k).value=DEFAULT_AVATAR[k]);updateEditorPreview()});
 $('save-avatar-btn').addEventListener('click',async()=>{
   if(!state.user)return;
   const colors=getEditorColors(),btn=$('save-avatar-btn');
   btn.disabled=true;btn.textContent='Saving...';
-  const{error}=await sb.from('profiles').update({avatar_colors:colors,updated_at:new Date().toISOString()}).eq('id',state.user.id);
+  const{error}=await sb.from('profiles').update({avatar_colors:colors}).eq('id',state.user.id);
   btn.disabled=false;btn.textContent='Save Avatar';
   if(error)return showToast('Error: '+error.message,'error');
   state.profile.avatar_colors=colors;
   await updateHeaderUI();
-  showToast('Avatar saved!','success');
+  showToast('Saved!','success');
 });
 
-/* ============================================================
-   FRIENDS
-   ============================================================ */
 async function refreshFriendsData(){
   if(!state.user)return;
   const myId=state.user.id;
-  const{data:rows,error}=await sb.from('friend_requests').select('*')
-    .or('sender_id.eq.'+myId+',receiver_id.eq.'+myId);
+  const{data:rows,error}=await sb.from('friend_requests').select('*').or('sender_id.eq.'+myId+',receiver_id.eq.'+myId);
   if(error){console.warn(error);return}
-
   const incoming=rows.filter(r=>r.receiver_id===myId&&r.status==='pending');
   const outgoing=rows.filter(r=>r.sender_id===myId&&r.status==='pending');
   const friends=rows.filter(r=>r.status==='accepted');
-
   const ids=new Set();
   incoming.forEach(r=>ids.add(r.sender_id));
   outgoing.forEach(r=>ids.add(r.receiver_id));
@@ -1057,14 +1966,13 @@ async function refreshFriendsData(){
   let profs=[];
   if(ids.size){const{data}=await sb.from('profiles').select('*').in('id',Array.from(ids));profs=data||[]}
   const profMap={};profs.forEach(p=>{p.avatar_colors=normalizeAvatarColors(p.avatar_colors);profMap[p.id]=p});
-
   state.incomingCache=incoming.map(r=>({...r,profile:profMap[r.sender_id]})).filter(r=>r.profile);
   state.outgoingCache=outgoing.map(r=>({...r,profile:profMap[r.receiver_id]})).filter(r=>r.profile);
   state.friendsCache=friends.map(r=>{
     const otherId=r.sender_id===myId?r.receiver_id:r.sender_id;
     return{...r,profile:profMap[otherId],otherId};
   }).filter(r=>r.profile);
-
+  for (const f of state.friendsCache) { if (f.profile) state.dmFriendCache[f.profile.id] = f.profile; }
   updateRequestBadge();
 }
 
@@ -1076,85 +1984,51 @@ function updateRequestBadge(){
 
 async function renderFriendsPage(){
   await refreshFriendsData();
-
   const incEl=$('incoming-requests');
   $('requests-count').textContent=state.incomingCache.length;
-  if(!state.incomingCache.length){
-    incEl.innerHTML='<div class="empty-note">No pending requests.</div>';
-  } else {
+  if(!state.incomingCache.length){incEl.innerHTML='<div class="empty-note">No pending requests.</div>';}
+  else {
     incEl.innerHTML='';
     for(const r of state.incomingCache){
       const f=r.profile;
-      const card=document.createElement('div');
-      card.className='request-card';
-      card.innerHTML=
-        '<div class="request-avatar-3d" style="cursor:pointer"></div>'+
-        '<div class="request-info">'+
-          '<div class="request-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div>'+
-          '<div class="request-id">#'+(f.display_id||'0')+'</div>'+
-        '</div>'+
-        '<div class="request-actions">'+
-          '<button class="req-accept" data-id="'+r.id+'">Accept</button>'+
-          '<button class="req-reject" data-id="'+r.id+'">Decline</button>'+
-        '</div>';
+      const card=document.createElement('div');card.className='request-card';
+      card.innerHTML='<div class="request-avatar-3d" style="cursor:pointer"></div><div class="request-info"><div class="request-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div><div class="request-id">#'+(f.display_id||'0')+'</div></div><div class="request-actions"><button class="req-accept" data-id="'+r.id+'">Accept</button><button class="req-reject" data-id="'+r.id+'">Decline</button></div>';
       incEl.appendChild(card);
-      mountAvatar3D(card.querySelector('.request-avatar-3d'),f.avatar_colors,{autoRotate:true});
+      mountAvatar3D(card.querySelector('.request-avatar-3d'),f.avatar_colors,{autoRotate:true,equipped:f.equipped_items||{}});
       card.querySelector('.request-avatar-3d').addEventListener('click',()=>showPlayerProfile(f.id));
       card.querySelector('.req-accept').addEventListener('click',()=>respondRequest(r.id,true));
       card.querySelector('.req-reject').addEventListener('click',()=>respondRequest(r.id,false));
     }
   }
-
   const outEl=$('outgoing-requests');
   $('outgoing-count').textContent=state.outgoingCache.length;
-  if(!state.outgoingCache.length){
-    outEl.innerHTML='<div class="empty-note">No sent requests.</div>';
-  } else {
+  if(!state.outgoingCache.length){outEl.innerHTML='<div class="empty-note">No sent requests.</div>';}
+  else {
     outEl.innerHTML='';
     for(const r of state.outgoingCache){
       const f=r.profile;
-      const card=document.createElement('div');
-      card.className='request-card';
-      card.innerHTML=
-        '<div class="request-avatar-3d" style="cursor:pointer"></div>'+
-        '<div class="request-info">'+
-          '<div class="request-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div>'+
-          '<div class="request-id">#'+(f.display_id||'0')+'</div>'+
-        '</div>'+
-        '<div class="request-actions">'+
-          '<button class="req-cancel" data-id="'+r.id+'">Cancel</button>'+
-        '</div>';
+      const card=document.createElement('div');card.className='request-card';
+      card.innerHTML='<div class="request-avatar-3d"></div><div class="request-info"><div class="request-name">'+esc(f.username)+'</div><div class="request-id">#'+(f.display_id||'0')+'</div></div><div class="request-actions"><button class="req-cancel" data-id="'+r.id+'">Cancel</button></div>';
       outEl.appendChild(card);
-      mountAvatar3D(card.querySelector('.request-avatar-3d'),f.avatar_colors,{autoRotate:true});
-      card.querySelector('.request-avatar-3d').addEventListener('click',()=>showPlayerProfile(f.id));
+      mountAvatar3D(card.querySelector('.request-avatar-3d'),f.avatar_colors,{autoRotate:true,equipped:f.equipped_items||{}});
       card.querySelector('.req-cancel').addEventListener('click',()=>cancelRequest(r.id));
     }
   }
-
   const fEl=$('friends-grid');
   $('friends-count').textContent=state.friendsCache.length;
-  if(!state.friendsCache.length){
-    fEl.innerHTML='<div class="empty-note">You have no friends yet. Send a request above.</div>';
-  } else {
+  if(!state.friendsCache.length){fEl.innerHTML='<div class="empty-note">No friends yet.</div>';}
+  else {
     fEl.innerHTML='';
     for(const r of state.friendsCache){
       const f=r.profile;
-      const card=document.createElement('div');
-      card.className='friend-card';
-      card.innerHTML=
-        '<button class="friend-remove" title="Remove friend" data-id="'+f.id+'">×</button>'+
-        '<div class="friend-avatar-3d" style="cursor:pointer"></div>'+
-        '<div class="friend-info">'+
-          '<div class="friend-name">'+esc(f.username)+(f.is_adm?admBadge():'')+'</div>'+
-          '<div class="friend-id">#'+(f.display_id||'0')+'</div>'+
-        '</div>';
+      const card=document.createElement('div');card.className='friend-card';
+      card.innerHTML='<button class="friend-remove" data-id="'+f.id+'">&times;</button><div class="friend-avatar-3d" style="cursor:pointer"></div><div class="friend-info"><div class="friend-name">'+esc(f.username)+'</div><div class="friend-id">#'+(f.display_id||'0')+'</div></div>';
       fEl.appendChild(card);
-      mountAvatar3D(card.querySelector('.friend-avatar-3d'),f.avatar_colors,{autoRotate:true});
+      mountAvatar3D(card.querySelector('.friend-avatar-3d'),f.avatar_colors,{autoRotate:true,equipped:f.equipped_items||{}});
       card.querySelector('.friend-avatar-3d').addEventListener('click',()=>showPlayerProfile(f.id));
       card.querySelector('.friend-remove').addEventListener('click',async()=>{
-        if(!confirm('Remove '+f.username+' from your friends?'))return;
+        if(!confirm('Remove '+f.username+'?'))return;
         await sb.rpc('remove_friend',{other_id:f.id});
-        showToast('Friend removed');
         renderFriendsPage();
       });
     }
@@ -1162,15 +2036,13 @@ async function renderFriendsPage(){
 }
 
 async function respondRequest(id,accept){
-  const{data,error}=await sb.rpc('respond_friend_request',{req_id:id,accept});
+  const{error}=await sb.rpc('respond_friend_request',{req_id:id,accept});
   if(error)return showToast('Error: '+error.message,'error');
-  showToast(accept?'Request accepted!':'Request declined',accept?'success':'');
   renderFriendsPage();
 }
 async function cancelRequest(id){
   const{error}=await sb.rpc('cancel_friend_request',{req_id:id});
   if(error)return showToast('Error: '+error.message,'error');
-  showToast('Request canceled');
   renderFriendsPage();
 }
 
@@ -1182,18 +2054,15 @@ $('friend-add-btn').addEventListener('click',async()=>{
   btn.disabled=false;btn.textContent='Send Request';
   if(error){showToast('Error: '+error.message,'error');return}
   if(data&&data.error){
-    const map={user_not_found:'User not found',cannot_add_self:"You can't add yourself",already_friends:'You are already friends',already_pending:'A request is already pending',not_authenticated:'Not authenticated'};
+    const map={user_not_found:'User not found',cannot_add_self:"You can't add yourself",already_friends:'Already friends',already_pending:'Already pending',not_authenticated:'Not logged in'};
     showToast(map[data.error]||data.error,'error');return;
   }
   input.value='';
-  showToast('Request sent!','success');
+  showToast('Sent!','success');
   renderFriendsPage();
 });
 $('friend-username').addEventListener('keydown',(e)=>{if(e.key==='Enter'){e.preventDefault();$('friend-add-btn').click()}});
 
-/* ============================================================
-   HOME — welcome banner + friends row
-   ============================================================ */
 function updateHomeOnlineStat() {
   const el = $('home-online-stat');
   if (el) el.textContent = String(state.playerCount || 0);
@@ -1201,217 +2070,253 @@ function updateHomeOnlineStat() {
 
 async function renderHome() {
   if (!state.profile) return;
-
-  // Avatar + name
   const avEl = $('home-welcome-avatar');
   if (avEl) {
     state.avatarViewers.get(avEl)?.dispose?.();
     state.avatarViewers.delete(avEl);
-    await mountAvatar3D(avEl, state.profile.avatar_colors, { autoRotate: true, interactive: true });
+    await mountAvatar3D(avEl, state.profile.avatar_colors, { autoRotate: true, interactive: true, equipped: state.equipped });
   }
-
   const nameEl = $('home-welcome-name');
-  if (nameEl) {
-    nameEl.innerHTML = '@' + esc(state.profile.username) +
-      (state.profile.is_adm ? ' ' + admBadge('lg') : '');
-  }
-
-  const friendsStat = $('home-friends-stat');
-  if (friendsStat) friendsStat.textContent = String(state.friendsCache.length);
-
-  const gamesStat = $('home-games-stat');
-  if (gamesStat) {
-    const mine = state.gamesCache.filter(g => g.author_id === state.user?.id);
-    gamesStat.textContent = String(mine.length);
-  }
-
+  if (nameEl) nameEl.innerHTML = '@' + esc(state.profile.username) + (state.profile.is_adm ? ' ' + admBadge('lg') : '');
+  $('home-friends-stat').textContent = String(state.friendsCache.length);
+  $('home-games-stat').textContent = String(state.gamesCache.filter(g => g.author_id === state.user?.id).length);
   updateHomeOnlineStat();
-
-  // Friends row
   const row = $('home-friends-row');
   if (!row) return;
   row.innerHTML = '';
-
-  const countEl = $('home-friends-count');
-  if (countEl) countEl.textContent = state.friendsCache.length === 1
-    ? '1 friend'
-    : state.friendsCache.length + ' friends';
-
-  // "Add friend" circle first
+  $('home-friends-count').textContent = state.friendsCache.length + ' friends';
   const addBtn = document.createElement('button');
   addBtn.className = 'home-friend home-friend-add';
   addBtn.type = 'button';
   addBtn.innerHTML = '<div class="home-friend-avatar-wrap"></div><div class="home-friend-name">Add Friend</div>';
-  addBtn.addEventListener('click', () => {
-    navigate('friends');
-    setTimeout(() => {
-      const inp = $('friend-username');
-      if (inp) inp.focus();
-    }, 80);
-  });
+  addBtn.addEventListener('click', () => { navigate('friends'); setTimeout(() => $('friend-username').focus(), 80); });
   row.appendChild(addBtn);
-
-  // Friend circles
   for (const f of state.friendsCache) {
     const prof = f.profile;
     if (!prof) continue;
-
     const btn = document.createElement('button');
     btn.className = 'home-friend';
     btn.type = 'button';
-    btn.title = prof.username;
-
     const wrap = document.createElement('div');
     wrap.className = 'home-friend-avatar-wrap';
-
-    const isOnline = !!state.presenceByUser[prof.id];
-    if (isOnline) {
-      const dot = document.createElement('div');
-      dot.className = 'home-friend-online';
-      wrap.appendChild(dot);
-    }
-
+    if (state.presenceByUser[prof.id]) { const dot = document.createElement('div'); dot.className = 'home-friend-online'; wrap.appendChild(dot); }
     const nameEl = document.createElement('div');
     nameEl.className = 'home-friend-name';
     nameEl.textContent = prof.username;
-
-    btn.appendChild(wrap);
-    btn.appendChild(nameEl);
+    btn.appendChild(wrap); btn.appendChild(nameEl);
     row.appendChild(btn);
-
-    mountAvatar3D(wrap, prof.avatar_colors, { autoRotate: true });
-
+    mountAvatar3D(wrap, prof.avatar_colors, { autoRotate: true, equipped: prof.equipped_items || {} });
     btn.addEventListener('click', () => showPlayerProfile(prof.id));
   }
 }
 
-/* ============================================================
-   PLAYER PROFILE MODAL
-   ============================================================ */
 async function showPlayerProfile(userId) {
   const modal = $('player-modal');
-  const title = $('player-modal-title');
   const avEl = $('player-modal-avatar');
-  const nameEl = $('player-modal-name');
-  const idEl = $('player-modal-id');
-  const statusEl = $('player-modal-status');
-
   modal.classList.add('open');
-  title.textContent = 'Player';
-  nameEl.textContent = '...';
-  idEl.textContent = '';
-  statusEl.innerHTML = 'Loading...';
-
-  state.avatarViewers.get(avEl)?.dispose?.();
-  state.avatarViewers.delete(avEl);
+  $('player-modal-title').textContent = 'Player';
+  $('player-modal-name').textContent = '...';
+  $('player-modal-id').textContent = '';
+  $('player-modal-status').innerHTML = 'Loading...';
+  $('player-modal-actions').innerHTML = '';
   avEl.innerHTML = '';
-
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).maybeSingle();
   if (!prof) {
-    nameEl.textContent = 'Unknown';
-    statusEl.innerHTML = '<span class="offline">Player not found.</span>';
+    $('player-modal-name').textContent = 'Unknown';
+    $('player-modal-status').innerHTML = '<span class="offline">Not found.</span>';
     return;
   }
   prof.avatar_colors = normalizeAvatarColors(prof.avatar_colors);
-
-  title.textContent = prof.username;
-  nameEl.innerHTML = esc(prof.username) + (prof.is_adm ? ' ' + admBadge() : '');
-  idEl.textContent = '#' + (prof.display_id || '0');
-
-  await mountAvatar3D(avEl, prof.avatar_colors, { autoRotate: true, interactive: true });
-
+  $('player-modal-title').textContent = prof.username;
+  $('player-modal-name').innerHTML = esc(prof.username) + (prof.is_adm ? ' ' + admBadge() : '');
+  $('player-modal-id').textContent = '#' + (prof.display_id || '0');
+  await mountAvatar3D(avEl, prof.avatar_colors, { autoRotate: true, interactive: true, equipped: prof.equipped_items || {} });
   const pres = state.presenceByUser[userId];
   let html = '';
-  if (pres) {
-    html += '<div class="online">● ONLINE</div>';
-    if (pres.game) {
-      const g = state.gamesCache.find(x => x.slug === pres.game);
-      const gameLabel = g ? esc(g.name) : esc(pres.game);
-      html += `<div class="playing" style="margin-top:8px">Playing: <a id="player-modal-golink">${gameLabel}</a></div>`;
-    } else {
-      html += '<div style="margin-top:8px">On the website</div>';
-    }
-  } else {
-    html += '<div class="offline">○ OFFLINE</div>';
-  }
-  statusEl.innerHTML = html;
-
-  const link = $('player-modal-golink');
-  if (link && pres && pres.game) {
-    link.addEventListener('click', () => {
-      const g = state.gamesCache.find(x => x.slug === pres.game);
-      if (g) {
-        closePlayerModal();
-        openGameDetail(g);
-      }
-    });
+  if (pres) html += '<div class="online">ONLINE</div>';
+  else html += '<div class="offline">OFFLINE</div>';
+  if (typeof prof.blox === 'number') html += '<div style="margin-top:8px;color:#8a6800;font-weight:900">' + prof.blox + ' Blox</div>';
+  $('player-modal-status').innerHTML = html;
+  const isFriend = state.friendsCache.some(f => f.profile && f.profile.id === userId);
+  if (isFriend && userId !== state.user.id) {
+    const msgBtn = document.createElement('button');
+    msgBtn.className = 'pm-msg';
+    msgBtn.textContent = 'Send Message';
+    msgBtn.addEventListener('click', () => { closePlayerModal(); navigate('messages'); setTimeout(() => openDMWith(userId), 80); });
+    $('player-modal-actions').appendChild(msgBtn);
   }
 }
-
 function closePlayerModal() {
-  const modal = $('player-modal');
-  const avEl = $('player-modal-avatar');
-  state.avatarViewers.get(avEl)?.dispose?.();
-  state.avatarViewers.delete(avEl);
-  modal.classList.remove('open');
+  state.avatarViewers.get($('player-modal-avatar'))?.dispose?.();
+  state.avatarViewers.delete($('player-modal-avatar'));
+  $('player-modal').classList.remove('open');
+}
+$('player-modal-close').addEventListener('click', closePlayerModal);
+$('player-modal').addEventListener('click', (e) => { if (e.target.id === 'player-modal') closePlayerModal(); });
+
+function initDMChannel(){
+  if (state.dmChannel) return;
+  state.dmChannel = sb.channel('dm-global').on('postgres_changes',
+    { event: 'INSERT', schema: 'public', table: 'direct_messages' },
+    (payload) => {
+      const m = payload.new;
+      const me = state.user?.id;
+      if (!me) return;
+      if (m.sender_id !== me && m.receiver_id !== me) return;
+      const otherId = m.sender_id === me ? m.receiver_id : m.sender_id;
+      if (!state.dmConversations[otherId]) state.dmConversations[otherId] = [];
+      state.dmConversations[otherId].push(m);
+      state.dmLastMessage[otherId] = m;
+      if (m.receiver_id === me && state.dmActiveFriend !== otherId) state.dmUnread[otherId] = (state.dmUnread[otherId] || 0) + 1;
+      if (m.receiver_id === me && state.dmActiveFriend === otherId) markDMRead(otherId);
+      renderDMFriendList();
+      if (state.dmActiveFriend === otherId) renderDMConversation(otherId, true);
+      updateDMBadge();
+    }
+  ).subscribe();
+}
+async function loadAllDMs(){
+  if (!state.user) return;
+  const me = state.user.id;
+  const { data, error } = await sb.from('direct_messages').select('*').or('sender_id.eq.' + me + ',receiver_id.eq.' + me).order('created_at', { ascending: true }).limit(500);
+  if (error) { console.warn(error); return; }
+  state.dmConversations = {}; state.dmLastMessage = {}; state.dmUnread = {};
+  for (const m of (data || [])) {
+    const otherId = m.sender_id === me ? m.receiver_id : m.sender_id;
+    if (!state.dmConversations[otherId]) state.dmConversations[otherId] = [];
+    state.dmConversations[otherId].push(m);
+    state.dmLastMessage[otherId] = m;
+    if (m.receiver_id === me && !m.read_at) state.dmUnread[otherId] = (state.dmUnread[otherId] || 0) + 1;
+  }
+  const friendIds = state.friendsCache.map(f => f.profile?.id).filter(Boolean);
+  const convIds = Object.keys(state.dmConversations);
+  const allIds = Array.from(new Set([...friendIds, ...convIds]));
+  if (allIds.length) {
+    const { data: profs } = await sb.from('profiles').select('*').in('id', allIds);
+    for (const p of (profs || [])) { p.avatar_colors = normalizeAvatarColors(p.avatar_colors); state.dmFriendCache[p.id] = p; }
+  }
+}
+async function markDMRead(friendId){
+  if (!state.user || !state.dmUnread[friendId]) return;
+  state.dmUnread[friendId] = 0;
+  try { await sb.from('direct_messages').update({ read_at: new Date().toISOString() }).eq('sender_id', friendId).eq('receiver_id', state.user.id).is('read_at', null); } catch (e) {}
+  updateDMBadge(); renderDMFriendList();
+}
+function updateDMBadge(){
+  let total = 0;
+  for (const id in state.dmUnread) total += state.dmUnread[id];
+  const badge = $('nav-dm-badge');
+  if (badge) { badge.textContent = total; badge.style.display = total > 0 ? 'inline-block' : 'none'; }
+}
+function renderDMFriendList(){
+  const listEl = $('dm-friend-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  const friends = state.friendsCache.map(f => f.profile).filter(Boolean);
+  $('dm-friends-count').textContent = String(friends.length);
+  $('dm-total-count').textContent = friends.filter(f => state.dmLastMessage[f.id]).length + ' conversations';
+  if (!friends.length) { listEl.innerHTML = '<div class="empty-note">No friends yet.</div>'; return; }
+  friends.sort((a, b) => {
+    const la = state.dmLastMessage[a.id], lb = state.dmLastMessage[b.id];
+    if (la && !lb) return -1; if (!la && lb) return 1;
+    if (la && lb) return new Date(lb.created_at) - new Date(la.created_at);
+    return a.username.localeCompare(b.username);
+  });
+  for (const f of friends) {
+    const btn = document.createElement('button');
+    btn.className = 'dm-friend-item' + (state.dmActiveFriend === f.id ? ' active' : '');
+    btn.type = 'button';
+    const last = state.dmLastMessage[f.id];
+    const unread = state.dmUnread[f.id] || 0;
+    const online = !!state.presenceByUser[f.id];
+    const lastText = last ? (last.sender_id === state.user.id ? 'You: ' : '') + last.text : 'No messages yet';
+    const lastTime = last ? fmtAgo(last.created_at) : '';
+    btn.innerHTML =
+      '<div class="dm-friend-avatar">' + (online ? '<div class="online-dot"></div>' : '') + '</div>' +
+      '<div class="dm-friend-meta">' +
+        '<div class="row1"><div class="dm-friend-name">' + esc(f.username) + '</div><div class="dm-friend-time">' + esc(lastTime) + '</div></div>' +
+        '<div class="dm-friend-preview' + (unread ? ' unread' : '') + '">' + esc(lastText) + (unread ? '<span class="dm-unread-badge">' + unread + '</span>' : '') + '</div>' +
+      '</div>';
+    listEl.appendChild(btn);
+    const av = btn.querySelector('.dm-friend-avatar');
+    const cc = document.createElement('div'); cc.style.cssText = 'position:absolute;inset:0'; av.insertBefore(cc, av.firstChild);
+    mountAvatar3D(cc, f.avatar_colors, { autoRotate: false, equipped: f.equipped_items || {} });
+    btn.addEventListener('click', () => openDMWith(f.id));
+  }
+}
+async function openDMWith(friendId){
+  state.dmActiveFriend = friendId;
+  await markDMRead(friendId);
+  renderDMFriendList();
+  renderDMConversation(friendId);
+}
+async function renderDMConversation(friendId){
+  const convEl = $('dm-conv');
+  if (!convEl) return;
+  const f = state.dmFriendCache[friendId] || state.friendsCache.find(x => x.profile?.id === friendId)?.profile;
+  if (!f) { convEl.innerHTML = '<div class="dm-empty">Friend not found</div>'; return; }
+  const online = !!state.presenceByUser[friendId];
+  const messages = state.dmConversations[friendId] || [];
+  convEl.innerHTML =
+    '<div class="dm-conv-header"><div class="dm-friend-avatar">' + (online ? '<div class="online-dot"></div>' : '') + '</div><div class="dm-conv-header-info"><div class="dm-conv-header-name">' + esc(f.username) + '</div><div class="dm-conv-header-status' + (online ? ' online' : '') + '">' + (online ? 'Online' : 'Offline') + '</div></div></div>' +
+    '<div class="dm-messages" id="dm-messages"></div>' +
+    '<div class="dm-input-row"><input type="text" id="dm-input" placeholder="Message..." maxlength="500" autocomplete="off" /><button id="dm-send">Send</button></div>';
+  const av = convEl.querySelector('.dm-friend-avatar');
+  const cc = document.createElement('div'); cc.style.cssText = 'position:absolute;inset:0'; av.insertBefore(cc, av.firstChild);
+  mountAvatar3D(cc, f.avatar_colors, { autoRotate: false, equipped: f.equipped_items || {} });
+  const msgEl = $('dm-messages');
+  if (!messages.length) msgEl.innerHTML = '<div class="dm-empty" style="flex:0">No messages yet.</div>';
+  else {
+    for (const m of messages) {
+      const div = document.createElement('div');
+      const self = m.sender_id === state.user.id;
+      div.className = 'dm-msg ' + (self ? 'self' : 'other');
+      div.innerHTML = esc(m.text) + '<div class="dm-msg-time">' + esc(fmtTime(m.created_at)) + '</div>';
+      msgEl.appendChild(div);
+    }
+    msgEl.scrollTop = msgEl.scrollHeight;
+  }
+  const input = $('dm-input'), send = $('dm-send');
+  const doSend = async () => { const text = input.value.trim(); if (!text) return; input.value = ''; await sendDM(friendId, text); };
+  send.addEventListener('click', doSend);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSend(); } });
+  setTimeout(() => input.focus(), 60);
+}
+async function sendDM(friendId, text){
+  if (!state.user || !state.profile) return;
+  const opt = { id: 'tmp_' + Date.now(), sender_id: state.user.id, receiver_id: friendId, text, read_at: null, created_at: new Date().toISOString() };
+  if (!state.dmConversations[friendId]) state.dmConversations[friendId] = [];
+  state.dmConversations[friendId].push(opt);
+  state.dmLastMessage[friendId] = opt;
+  if (state.dmActiveFriend === friendId) renderDMConversation(friendId);
+  renderDMFriendList();
+  const { data, error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, receiver_id: friendId, text }).select().single();
+  if (error) { console.warn(error); return; }
+  const arr = state.dmConversations[friendId];
+  const idx = arr.findIndex(m => m.id === opt.id);
+  if (idx >= 0) arr[idx] = data;
+  state.dmLastMessage[friendId] = data;
 }
 
-$('player-modal-close').addEventListener('click', closePlayerModal);
-$('player-modal').addEventListener('click', (e) => {
-  if (e.target.id === 'player-modal') closePlayerModal();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && $('player-modal').classList.contains('open')) {
-    closePlayerModal();
-  }
-});
-
-/* ============================================================
-   PRESENCE
-   ============================================================ */
 function joinPresence() {
   if (!state.user) return;
-  state.presenceChannel = sb.channel('online-players', {
-    config: { presence: { key: state.user.id } }
+  state.presenceChannel = sb.channel('online-players', { config: { presence: { key: state.user.id } } });
+  state.presenceChannel.on('presence', { event: 'sync' }, () => {
+    const p = state.presenceChannel.presenceState();
+    const counts = {}; const byUser = {}; let total = 0;
+    for (const key in p) {
+      const metas = p[key]; if (!Array.isArray(metas)) continue;
+      for (const m of metas) { total++; byUser[key] = m; const g = m && m.game; if (g) counts[g] = (counts[g] || 0) + 1; }
+    }
+    state.playerCount = total; state.gameCounts = counts; state.presenceByUser = byUser;
+    updatePlayerCounts(); updateHomeOnlineStat(); renderDMFriendList();
+  }).subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      try { await state.presenceChannel.track({ username: state.profile?.username || 'unknown', game: null, online_at: new Date().toISOString() }); } catch (e) {}
+    }
   });
-  state.presenceChannel
-    .on('presence', { event: 'sync' }, () => {
-      const p = state.presenceChannel.presenceState();
-      const counts = {};
-      const byUser = {};
-      let total = 0;
-      for (const key in p) {
-        const metas = p[key];
-        if (!Array.isArray(metas)) continue;
-        for (const m of metas) {
-          total++;
-          byUser[key] = m;
-          const g = m && m.game;
-          if (g) counts[g] = (counts[g] || 0) + 1;
-        }
-      }
-      state.playerCount = total;
-      state.gameCounts = counts;
-      state.presenceByUser = byUser;
-      updatePlayerCounts();
-      updateHomeOnlineStat();
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        try {
-          await state.presenceChannel.track({
-            username: state.profile?.username || 'unknown',
-            game: null,
-            online_at: new Date().toISOString()
-          });
-        } catch (e) {}
-      }
-    });
 }
 
-/* ============================================================
-   INIT
-   ============================================================ */
 (async function init(){
   setTimeout(()=>$('loading-screen').classList.add('hidden'),500);
   const ok=await checkSession();

@@ -89,16 +89,17 @@ async def ws_send(writer, data):
 # Player state
 # ============================================================
 class ClientState:
-    __slots__ = ('id', 'writer', 'name', 'avatar_colors', 'is_adm',
-                 'room', 'user_id',
+    __slots__ = ('id', 'writer', 'name', 'avatar_colors', 'equipped_items',
+                 'is_adm', 'room', 'user_id',
                  'x', 'y', 'z', 'yaw', 'vy', 'hs', 'g', 'last_activity')
     def __init__(self, pid, writer, name,
-                 avatar_colors=None, is_adm=False,
-                 room='default', user_id=None):
+                 avatar_colors=None, equipped_items=None,
+                 is_adm=False, room='default', user_id=None):
         self.id = pid
         self.writer = writer
         self.name = name
         self.avatar_colors = avatar_colors or {}
+        self.equipped_items = equipped_items or {}
         self.is_adm = bool(is_adm)
         self.room = room
         self.user_id = user_id
@@ -204,7 +205,6 @@ async def serve_static(writer, path):
         await send_response(writer, 403, b'Forbidden', 'text/plain')
         return
 
-    # ---------- Case-insensitive fallback ----------
     if not os.path.isfile(full):
         dir_part = os.path.dirname(full)
         base_part = os.path.basename(full).lower()
@@ -316,11 +316,11 @@ async def handle_websocket(reader, writer, headers):
 
     name = str(data.get('name', 'Player'))[:16].strip() or 'Player'
     avatar_colors = data.get('avatar_colors') or {}
+    equipped_items = data.get('equipped_items') or {}
     is_adm = bool(data.get('is_adm'))
     room = str(data.get('game', 'default'))[:64].strip() or 'default'
     user_id = str(data.get('user_id', '')).strip() or None
 
-    # -------- Session lock: one user_id = one session --------
     if user_id:
         old_pid = active_users.get(user_id)
         if old_pid is not None:
@@ -347,7 +347,8 @@ async def handle_websocket(reader, writer, headers):
     pid = next_player_id
     next_player_id += 1
     client = ClientState(pid, writer, name,
-                         avatar_colors, is_adm, room, user_id)
+                         avatar_colors, equipped_items,
+                         is_adm, room, user_id)
     clients[pid] = client
     if user_id:
         active_users[user_id] = pid
@@ -364,6 +365,7 @@ async def handle_websocket(reader, writer, headers):
             'id': c.id, 'name': c.name, 'npc': False,
             'x': c.x, 'y': c.y, 'z': c.z, 'yaw': c.yaw,
             'avatar_colors': c.avatar_colors,
+            'equipped_items': c.equipped_items,
             'is_adm': c.is_adm
         })
 
@@ -381,6 +383,7 @@ async def handle_websocket(reader, writer, headers):
             'id': pid, 'name': name, 'npc': False,
             'x': client.x, 'y': client.y, 'z': client.z, 'yaw': client.yaw,
             'avatar_colors': client.avatar_colors,
+            'equipped_items': client.equipped_items,
             'is_adm': client.is_adm
         }
     }, room, exclude_id=pid)
@@ -427,6 +430,13 @@ async def handle_websocket(reader, writer, headers):
                         'name': client.name,
                         'text': text
                     }, room, exclude_id=pid)
+            elif mtype == 'equip_update':
+                client.equipped_items = msg.get('equipped_items') or {}
+                await broadcast_room({
+                    'type': 'player_equip',
+                    'id': pid,
+                    'equipped_items': client.equipped_items
+                }, room, exclude_id=pid)
     finally:
         _cleanup_client(pid)
         print(f'[-] {name} (id={pid}) left. Total: {len(clients)}')

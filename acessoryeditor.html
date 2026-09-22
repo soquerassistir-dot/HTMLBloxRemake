@@ -1,0 +1,2538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1f4d8f" />
+<title>HTMLBlox - Creator</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;font-family:Verdana,Arial,sans-serif;font-size:13px;line-height:1.4;color:#333;background:#e6e6e6;overflow:hidden}
+  button,input,select{font-family:inherit;font-size:inherit}
+  a{color:#1a4a9c;text-decoration:none}
+  #app{display:none;width:100vw;height:100vh;flex-direction:column}
+  #app.active{display:flex}
+
+  .header{flex-shrink:0;background:linear-gradient(180deg,#1f4d8f,#16407a);border-bottom:3px solid #0a2450;padding:8px 14px;display:flex;align-items:center;gap:14px;color:#fff;z-index:100}
+  .logo{display:flex;align-items:center;gap:10px;cursor:pointer;flex-shrink:0}
+  .logo-img{width:34px;height:34px;border-radius:9px;background:#1f4d8f;border:3px solid #1f4d8f;object-fit:cover;display:block}
+  .header-title{margin-left:6px;border-left:2px solid rgba(255,255,255,.2);padding-left:14px}
+  .header-title .t1{font-family:'Arial Black',Arial,sans-serif;font-size:16px;font-weight:900;color:#ffdd00;text-shadow:2px 2px 0 #0a2450;letter-spacing:-.5px}
+  .header-title .t2{font-size:10px;color:#cfe0f5;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold}
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .header-user{display:flex;align-items:center;gap:8px;padding:3px 12px 3px 3px;background:rgba(255,255,255,.12);border-radius:20px}
+  .header-avatar{width:30px;height:30px;border-radius:6px;background:linear-gradient(180deg,#87ceeb,#d6ecff);border:2px solid #8a7524;overflow:hidden;flex-shrink:0}
+  .header-avatar canvas{width:100%;height:100%;display:block}
+  .header-username{color:#fff;font-size:12px;font-weight:bold;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .btn-hdr{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 14px;font-size:11px;font-weight:bold;border-radius:3px;cursor:pointer}
+  .btn-hdr:hover{background:rgba(255,255,255,.22)}
+  .btn-hdr.primary{background:linear-gradient(180deg,#6dd36d,#4a9948);border-color:#7cdd7c;text-shadow:1px 1px 0 #005500}
+
+  .mode-tabs{flex-shrink:0;display:flex;background:linear-gradient(180deg,#e8eef5,#d8e2ec);border-bottom:2px solid #a8b8c8;padding:0 14px}
+  .mode-tab{padding:11px 22px;background:transparent;border:none;border-bottom:3px solid transparent;color:#445;font-weight:bold;font-size:12px;cursor:pointer;text-transform:uppercase}
+  .mode-tab.active{color:#003366;border-bottom-color:#4a7ab8;background:#fff}
+
+  .main{flex:1 1 auto;display:flex;overflow:hidden;min-height:0;position:relative}
+  .mode{position:absolute;inset:0;display:none}
+  .mode.active{display:flex}
+
+  .parts-panel{width:250px;flex-shrink:0;background:#fff;border-right:2px solid #a8b8c8;display:flex;flex-direction:column;overflow:hidden}
+  .panel-header{flex-shrink:0;padding:10px 14px;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid #0a2450;display:flex;justify-content:space-between;align-items:center}
+  .panel-header .count{font-size:10px;color:#cfe0f5;font-weight:normal;text-transform:none;letter-spacing:0}
+  .parts-list{flex:1;overflow-y:auto;padding:6px}
+  .part-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:5px;cursor:pointer;margin-bottom:4px;border:2px solid transparent;background:#f7faff}
+  .part-item:hover{background:#eef3fa;border-color:#c8d8e8}
+  .part-item.active{background:#fff8e0;border-color:#ffb800}
+  .part-item.is-group{background:linear-gradient(180deg,#dbe7f5,#c8d8ec);border-color:#4a7ab8}
+  .part-item.is-group.active{background:#fff8e0;border-color:#ffb800}
+  .part-item-icon{width:32px;height:32px;flex-shrink:0;background:#fff;border:1px solid #c8d0d8;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .part-item-icon svg{width:22px;height:22px}
+  .part-item-info{flex:1;min-width:0}
+  .part-item-name{font-size:11px;font-weight:bold;color:#003366;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .part-item-type{font-size:9px;color:#8899aa;text-transform:uppercase;letter-spacing:.6px;margin-top:1px}
+  .part-item-actions{display:flex;gap:2px;flex-shrink:0}
+  .part-item-actions button{width:22px;height:22px;padding:0;border:1px solid #c8d0d8;background:#fff;color:#666;border-radius:3px;cursor:pointer;font-size:10px;line-height:1;font-weight:bold}
+  .part-item-actions button:hover{background:#eef3fa;border-color:#4a7ab8}
+  .part-item-actions button.del:hover{background:#ffe0e0;border-color:#e0b0b0;color:#c0392b}
+  .part-item-actions button:disabled{opacity:.3;cursor:default}
+  .parts-actions{flex-shrink:0;padding:10px 12px;border-top:1px solid #e6eef7;background:#f7faff}
+  .add-part-btn{width:100%;padding:10px 0;background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border:2px outset #7cdd7c;border-radius:4px;font-weight:bold;font-size:12px;cursor:pointer}
+
+  .viewport-wrap{flex:1 1 auto;position:relative;overflow:hidden;min-width:0;min-height:0;background:#bfe3ff}
+  .viewport-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none;touch-action:none}
+  .viewport-badge{position:absolute;top:12px;left:12px;background:rgba(255,251,224,.94);border:2px solid #cc9900;padding:6px 12px;font-size:11px;color:#663300;font-weight:bold;pointer-events:none;max-width:calc(100% - 80px)}
+  .viewport-badge .mode{display:inline-block;background:#4a7ab8;color:#fff;padding:1px 6px;font-size:10px;margin-left:6px;border-radius:2px}
+  .viewport-tools{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:6px;z-index:5}
+  .vtool{width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.92);border:2px solid #4a7ab8;color:#003366;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-weight:bold;font-size:11px}
+  .vtool.active{background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border-color:#0a2450}
+  .vtool svg{width:18px;height:18px;display:block}
+  .viewport-hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(10,32,58,.82);color:#cfe0f5;font-size:11px;padding:6px 14px;border-radius:14px;pointer-events:none;text-align:center;max-width:calc(100% - 24px)}
+  .viewport-hint b{color:#ffdd00}
+
+  .props-panel{width:380px;flex-shrink:0;background:#fff;border-left:2px solid #a8b8c8;display:flex;flex-direction:column;overflow:hidden}
+  .tabs{flex-shrink:0;display:flex;background:linear-gradient(180deg,#e8eef5,#d8e2ec);border-bottom:2px solid #a8b8c8}
+  .tab{flex:1;padding:10px 8px;background:transparent;border:none;border-right:1px solid #c8d0d8;color:#445;font-weight:bold;font-size:11px;cursor:pointer;text-transform:uppercase}
+  .tab:last-child{border-right:none}
+  .tab.active{background:#fff;color:#003366;border-bottom:3px solid #4a7ab8;padding-bottom:7px}
+  .tab-body{flex:1;overflow-y:auto}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  .group{padding:14px 16px;border-bottom:1px solid #e6eef7}
+  .group h4{font-size:10px;color:#003366;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:900;display:flex;align-items:center;gap:8px}
+  .group h4::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,#c8d8e8,transparent)}
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .row:last-child{margin-bottom:0}
+  .row label{min-width:78px;font-size:11px;font-weight:bold;color:#445}
+  .row input[type="text"],.row input[type="number"],.row select{flex:1;padding:7px 10px;border:2px solid #c8d0d8;border-radius:4px;font-size:12px;background:#fdfdfd;outline:none;min-width:0}
+  .row input:focus,.row select:focus{border-color:#4a7ab8;background:#fff}
+  .row input[type="color"]{flex:0 0 46px;height:34px;border:2px solid #c8d0d8;border-radius:4px;cursor:pointer;padding:1px;background:#fff}
+  .row .hex{font-family:Consolas,monospace;font-size:11px;color:#666}
+  .row-vec{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .row-vec .vc{position:relative}
+  .row-vec .vc::before{content:attr(data-l);position:absolute;left:7px;top:50%;transform:translateY(-50%);font-size:10px;color:#8899aa;font-weight:bold;pointer-events:none}
+  .row-vec input{padding-left:20px!important}
+
+  .shape-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .shape-btn{aspect-ratio:1;border:2px solid #c8d0d8;border-radius:6px;background:#f7faff;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+  .shape-btn:hover{border-color:#4a7ab8;background:#eef3fa}
+  .shape-btn.active{border-color:#ffb800;background:#fff8e0;box-shadow:0 0 0 2px rgba(255,184,0,.3)}
+  .shape-btn svg{width:28px;height:28px}
+
+  .action-btn{width:100%;padding:11px 0;border-radius:5px;font-weight:bold;font-size:13px;cursor:pointer;border:2px outset;margin-top:4px;letter-spacing:.3px}
+  .action-btn:disabled{opacity:.5;cursor:default}
+  .action-btn.save{background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border-color:#7cdd7c;text-shadow:1px 1px 0 #005500}
+  .action-btn.new{background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff;border-color:#6b9cd8}
+  .action-btn.import{background:linear-gradient(180deg,#a87cff,#6a3fa8);color:#fff;border-color:#c8a0ff}
+  .action-btn.reset{background:linear-gradient(180deg,#e8e8e8,#d0d0d0);color:#333;border-color:#f0f0f0}
+  .file-name{font-size:11px;color:#666;font-style:italic;margin-top:6px;text-align:center;word-break:break-all}
+  .file-name.has{color:#0a6a0a;font-weight:bold;font-style:normal}
+
+  .acc-list{padding:10px 12px}
+  .acc-list-empty{padding:30px 20px;text-align:center;color:#8899aa;font-style:italic;font-size:12px}
+  .acc-item{display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:#f7faff;border:2px solid #dde7f2;border-radius:6px;cursor:pointer}
+  .acc-item:hover{border-color:#4a7ab8;background:#eef3fa}
+  .acc-item.selected{border-color:#ffb800;background:#fff8e0}
+  .acc-item-thumb{width:52px;height:52px;flex-shrink:0;background:linear-gradient(135deg,#e8f2ff,#d6ecff);border:1px solid #c8d0d8;border-radius:4px;overflow:hidden;position:relative}
+  .acc-item-thumb canvas,.acc-item-thumb img{width:100%;height:100%;display:block;object-fit:cover}
+  .acc-item-info{flex:1;min-width:0}
+  .acc-item-name{font-size:12px;font-weight:bold;color:#003366;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acc-item-meta{font-size:10px;color:#8899aa;margin-top:2px;font-family:Consolas,monospace}
+  .acc-item-actions{display:flex;gap:4px;flex-shrink:0}
+  .acc-item-actions button{width:26px;height:26px;border-radius:4px;border:1px solid;cursor:pointer;font-size:12px;font-weight:bold;display:flex;align-items:center;justify-content:center;padding:0}
+  .acc-item-actions .del{background:#fff;color:#c0392b;border-color:#e0b0b0}
+  .acc-item-actions .edit{background:#fff;color:#4a7ab8;border-color:#b0c8e0}
+
+  .paint-panel{width:300px;flex-shrink:0;background:#fff;border-right:2px solid #a8b8c8;display:flex;flex-direction:column;overflow:hidden}
+  .tool-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .tool-cell{padding:8px 4px;border:2px solid #c8d0d8;border-radius:6px;background:#f7faff;cursor:pointer;font-size:10px;font-weight:bold;color:#445;display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2}
+  .tool-cell:hover{border-color:#4a7ab8;background:#eef3fa}
+  .tool-cell.active{border-color:#ffb800;background:#fff8e0;box-shadow:0 0 0 2px rgba(255,184,0,.25)}
+  .tool-cell svg{width:20px;height:20px;display:block}
+  .palette{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:8px}
+  .swatch{aspect-ratio:1;border-radius:4px;border:2px solid #c8d0d8;cursor:pointer;padding:0}
+  .swatch:hover{transform:scale(1.08)}
+  .swatch.active{border-color:#ffb800;box-shadow:0 0 0 2px rgba(255,184,0,.35);transform:scale(1.08)}
+  .pose-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .pose-btn{padding:9px 4px;border:2px solid #c8d0d8;border-radius:5px;background:#f7faff;cursor:pointer;font-size:11px;font-weight:bold;color:#445}
+  .pose-btn:hover{border-color:#4a7ab8;background:#eef3fa}
+  .pose-btn.active{border-color:#4a7ab8;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff}
+  .type-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .type-btn{padding:9px 4px;border:2px solid #c8d0d8;border-radius:5px;background:#f7faff;cursor:pointer;font-size:11px;font-weight:bold;color:#445}
+  .type-btn:hover{border-color:#4a7ab8;background:#eef3fa}
+  .type-btn.active{border-color:#4a7ab8;background:linear-gradient(180deg,#4a7ab8,#356198);color:#fff}
+  .size-row{display:flex;align-items:center;gap:8px}
+  .size-row input[type="range"]{flex:1}
+  .size-row .val{font-family:Consolas,monospace;font-size:11px;font-weight:bold;color:#003366;min-width:36px;text-align:right}
+  .note{font-size:10px;color:#8899aa;line-height:1.5;margin-top:6px}
+  .note b{color:#445}
+
+  .face-preview-box{width:170px;height:170px;position:relative;background:#f5cd30;border-radius:14px;border:3px solid #c8a020;overflow:hidden;box-shadow:inset 0 0 30px rgba(0,0,0,.15)}
+  .face-preview-img{position:absolute;inset:0;background-size:100% 100%;background-position:center;background-repeat:no-repeat;display:none}
+  .face-preview-default{position:absolute;inset:0;width:100%;height:100%}
+  .face-hero{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:30px;width:100%}
+
+  #loading-screen{position:fixed;inset:0;background:linear-gradient(180deg,#1f4d8f,#16407a);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:20px;transition:opacity .4s}
+  #loading-screen.hidden{opacity:0;pointer-events:none}
+  #loading-screen .logo-big{width:70px;height:70px;border-radius:18px;border:4px solid #1f4d8f}
+  #loading-screen .title{font-family:'Arial Black',sans-serif;font-size:26px;font-weight:900;text-shadow:2px 2px 0 #0a2450}
+  #loading-screen .sub{font-size:11px;color:#cfe0f5;letter-spacing:1.5px;text-transform:uppercase}
+  .spinner{width:38px;height:38px;border:4px solid rgba(255,255,255,.2);border-top-color:#ffdd00;border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:#333;color:#fff;padding:12px 22px;border-radius:6px;font-size:13px;font-weight:bold;z-index:1000;transition:transform .3s;max-width:calc(100vw - 40px);text-align:center}
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.success{background:#2e7d32}
+  #toast.error{background:#c0392b}
+  #auth-screen{position:fixed;inset:0;background:linear-gradient(135deg,#1f4d8f,#0a2450);display:none;align-items:center;justify-content:center;padding:20px;z-index:998}
+  #auth-screen.active{display:flex}
+  .auth-box{background:#fff;border:3px outset #4a7ab8;padding:30px 32px;border-radius:6px;max-width:420px;text-align:center}
+  .auth-box h2{font-family:'Arial Black',sans-serif;font-size:20px;color:#003366;margin-bottom:8px}
+  .auth-box button{padding:11px 28px;border-radius:4px;background:linear-gradient(180deg,#6dd36d,#4a9948);color:#fff;border:2px outset #7cdd7c;font-weight:bold;font-size:13px;cursor:pointer}
+
+  @media(max-width:780px){
+    .main{flex-direction:column}
+    .parts-panel{width:100%;flex:0 0 30%;border-right:none;border-bottom:2px solid #a8b8c8;order:2}
+    .viewport-wrap{flex:1 1 auto;min-height:0;order:1}
+    .props-panel{width:100%;flex:0 0 40%;border-left:none;border-top:2px solid #a8b8c8;order:3}
+    .paint-panel{width:100%;flex:0 0 auto;max-height:45vh;border-right:none;border-bottom:2px solid #a8b8c8;order:2}
+    .header-title .t2{display:none}
+    .header-username{max-width:60px}
+  }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <img src="logo.png" class="logo-big" onerror="this.style.display='none'" alt="" />
+  <div class="title">HTMLBLOX</div>
+  <div class="sub">Creator</div>
+  <div class="spinner"></div>
+</div>
+
+<div id="auth-screen">
+  <div class="auth-box">
+    <h2>Login Required</h2>
+    <p style="color:#666;font-size:12px;margin-bottom:16px">You need to be logged in to HTMLBlox.</p>
+    <button onclick="location.href='index.html'">Go to HTMLBlox</button>
+  </div>
+</div>
+
+<div id="app">
+  <header class="header">
+    <div class="logo" id="logo-btn">
+      <img src="logo.png" class="logo-img" onerror="this.style.display='none'" alt="" />
+    </div>
+    <div class="header-title">
+      <div class="t1">Creator</div>
+      <div class="t2">Accessories and Clothing</div>
+    </div>
+    <div class="header-right">
+      <div class="header-user">
+        <div class="header-avatar" id="header-avatar"></div>
+        <div class="header-username" id="header-username">...</div>
+      </div>
+      <button class="btn-hdr primary" id="back-btn">Back</button>
+    </div>
+  </header>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="3d">3D Accessory</button>
+    <button class="mode-tab" data-mode="2d">Clothing</button>
+    <button class="mode-tab" data-mode="face">Face</button>
+  </div>
+
+  <div class="main">
+
+    <div class="mode active" id="mode-3d">
+      <aside class="parts-panel">
+        <div class="panel-header"><span>Parts</span><span class="count" id="parts-count">1</span></div>
+        <div class="parts-list" id="parts-list"></div>
+        <div class="parts-actions"><button class="add-part-btn" id="add-part-btn">+ Add Part</button></div>
+      </aside>
+
+      <div class="viewport-wrap" id="viewport-wrap">
+        <div class="viewport-badge"><span id="badge-name">New Accessory</span><span class="mode" id="badge-mode">T</span></div>
+        <div class="viewport-tools">
+          <button class="vtool active" id="vtool-translate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg></button>
+          <button class="vtool" id="vtool-rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+          <button class="vtool" id="vtool-scale"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 3l-7 7"/><path d="M21 3h-7"/><path d="M21 3v7"/><path d="M3 21l7-7"/><path d="M3 21h7"/><path d="M3 21v-7"/></svg></button>
+          <button class="vtool" id="vtool-reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/></svg></button>
+        </div>
+        <div class="viewport-hint"><b>Drag gizmo</b> to move. <b>Right-click</b> to orbit.</div>
+      </div>
+
+      <aside class="props-panel">
+        <div class="tabs">
+          <button class="tab active" data-tab="edit">Edit</button>
+          <button class="tab" data-tab="library">My Items</button>
+        </div>
+        <div class="tab-body">
+          <div class="tab-panel active" id="panel-edit">
+            <div class="group">
+              <h4>Accessory Name</h4>
+              <div class="row"><label>Name</label><input type="text" id="acc-name" maxlength="40" placeholder="My Cool Hat" /></div>
+            </div>
+            <div id="group-props">
+              <div class="group">
+                <h4>Group Attachment</h4>
+                <div class="row"><label>Attach to</label><select id="grp-attach">
+                  <option value="Head">Head</option><option value="Torso">Torso</option>
+                  <option value="LeftArm">Left Arm</option><option value="RightArm">Right Arm</option>
+                  <option value="LeftLeg">Left Leg</option><option value="RightLeg">Right Leg</option>
+                  <option value="Back">Back</option>
+                </select></div>
+              </div>
+              <div class="group">
+                <h4>Group Offset</h4>
+                <div class="row-vec">
+                  <div class="vc" data-l="X"><input type="number" id="grp-pos-x" step="0.1" value="0" /></div>
+                  <div class="vc" data-l="Y"><input type="number" id="grp-pos-y" step="0.1" value="0" /></div>
+                  <div class="vc" data-l="Z"><input type="number" id="grp-pos-z" step="0.1" value="0" /></div>
+                </div>
+              </div>
+              <div class="group">
+                <h4>Group Rotation</h4>
+                <div class="row-vec">
+                  <div class="vc" data-l="X"><input type="number" id="grp-rot-x" step="5" value="0" /></div>
+                  <div class="vc" data-l="Y"><input type="number" id="grp-rot-y" step="5" value="0" /></div>
+                  <div class="vc" data-l="Z"><input type="number" id="grp-rot-z" step="5" value="0" /></div>
+                </div>
+              </div>
+              <div class="group">
+                <h4>Group Scale</h4>
+                <div class="row"><label>Size</label><input type="number" id="grp-scale" step="0.1" min="0.1" max="5" value="1" /></div>
+              </div>
+            </div>
+
+            <div id="part-props" style="display:none">
+              <div class="group">
+                <h4>Part Shape</h4>
+                <div class="shape-grid" id="shape-grid">
+                  <button class="shape-btn active" data-shape="box"><svg viewBox="0 0 32 32"><rect x="6" y="6" width="20" height="20" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="sphere"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="cylinder"><svg viewBox="0 0 32 32"><ellipse cx="16" cy="8" rx="8" ry="3" fill="#6b9cd8" stroke="#0a2450" stroke-width="1.5"/><path d="M8 8v16a8 3 0 0 0 16 0V8" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="cone"><svg viewBox="0 0 32 32"><path d="M16 4 L26 26 L6 26 Z" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="torus"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#4a7ab8" stroke-width="6"/><circle cx="16" cy="16" r="11" fill="none" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="hat_top"><svg viewBox="0 0 32 32"><ellipse cx="16" cy="24" rx="13" ry="3" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/><rect x="10" y="6" width="12" height="16" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="cap"><svg viewBox="0 0 32 32"><path d="M6 20 Q6 8 16 8 Q26 8 26 20 Z" fill="#4a7ab8" stroke="#0a2450" stroke-width="1.5"/><path d="M4 20 L28 20 L28 23 L4 23 Z" fill="#6b9cd8" stroke="#0a2450" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="crown"><svg viewBox="0 0 32 32"><path d="M6 22 L6 12 L11 18 L16 10 L21 18 L26 12 L26 22 Z" fill="#ffdd00" stroke="#8a6800" stroke-width="1.5"/></svg></button>
+                  <button class="shape-btn" data-shape="glasses"><svg viewBox="0 0 32 32"><rect x="4" y="13" width="10" height="6" rx="2" fill="#333" stroke="#0a2450" stroke-width="1.5"/><rect x="18" y="13" width="10" height="6" rx="2" fill="#333" stroke="#0a2450" stroke-width="1.5"/><line x1="14" y1="16" x2="18" y2="16" stroke="#0a2450" stroke-width="2"/></svg></button>
+                  <button class="shape-btn" data-shape="cape"><svg viewBox="0 0 32 32"><path d="M10 6 L22 6 L26 26 L16 24 L6 26 Z" fill="#c0392b" stroke="#6b1010" stroke-width="1.5"/></svg></button>
+                </div>
+              </div>
+              <div class="group">
+                <h4>Part Color</h4>
+                <div class="row"><label>Color</label><input type="color" id="part-color" value="#ff8800" /><span class="hex" id="part-color-hex">#ff8800</span></div>
+              </div>
+              <div class="group">
+                <h4>Part Position</h4>
+                <div class="row-vec">
+                  <div class="vc" data-l="X"><input type="number" id="part-pos-x" step="0.1" value="0" /></div>
+                  <div class="vc" data-l="Y"><input type="number" id="part-pos-y" step="0.1" value="0" /></div>
+                  <div class="vc" data-l="Z"><input type="number" id="part-pos-z" step="0.1" value="0" /></div>
+                </div>
+              </div>
+              <div class="group">
+                <h4>Part Rotation</h4>
+                <div class="row-vec">
+                  <div class="vc" data-l="X"><input type="number" id="part-rot-x" step="5" value="0" /></div>
+                  <div class="vc" data-l="Y"><input type="number" id="part-rot-y" step="5" value="0" /></div>
+                  <div class="vc" data-l="Z"><input type="number" id="part-rot-z" step="5" value="0" /></div>
+                </div>
+              </div>
+              <div class="group">
+                <h4>Part Scale</h4>
+                <div class="row"><label>Size</label><input type="number" id="part-scale" step="0.1" min="0.05" max="5" value="1" /></div>
+              </div>
+              <div class="group">
+                <h4>3D Model</h4>
+                <input type="file" id="part-file-input" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" style="display:none" />
+                <button class="action-btn import" id="part-file-btn">Import Model (.glb)</button>
+                <div class="file-name" id="part-file-name">No model — using shape</div>
+                <button class="action-btn reset" id="part-clear-model" style="margin-top:8px">Remove Model</button>
+              </div>
+            </div>
+
+            <div class="group">
+              <h4>Publication</h4>
+              <div class="row"><label>Price</label><input type="number" id="acc-price" min="0" step="5" value="0" /><span style="font-size:11px;color:#666">Blox</span></div>
+              <div class="row"><label>Public</label><input type="checkbox" id="acc-publish" style="width:18px;height:18px;cursor:pointer" /><span style="font-size:11px;color:#666">Publish to Catalog</span></div>
+            </div>
+
+            <div class="group">
+              <button class="action-btn save" id="acc-save">Save</button>
+              <button class="action-btn new" id="acc-new" style="margin-top:8px">New</button>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="panel-library">
+            <div class="acc-list" id="acc-list"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="mode" id="mode-2d">
+      <aside class="paint-panel">
+        <div class="tabs">
+          <button class="tab active" data-ctab="tools">Tools</button>
+          <button class="tab" data-ctab="library">My Items</button>
+        </div>
+        <div class="tab-body">
+          <div class="tab-panel active" id="panel-ctools">
+            <div class="group">
+              <h4>Name</h4>
+              <div class="row"><label>Name</label><input type="text" id="cl-name" maxlength="40" placeholder="Cool Shirt" /></div>
+            </div>
+
+            <div class="group">
+              <h4>Clothing Type</h4>
+              <div class="type-grid" id="cl-type-grid">
+                <button class="type-btn active" data-cltype="shirt">Shirt</button>
+                <button class="type-btn" data-cltype="tshirt">T-Shirt</button>
+                <button class="type-btn" data-cltype="pants">Pants</button>
+              </div>
+              <div class="note" id="cl-type-note">Shirt: paint the torso and both arms.</div>
+            </div>
+
+            <div class="group">
+              <h4>Pose</h4>
+              <div class="pose-grid" id="cl-pose-grid">
+                <button class="pose-btn active" data-clpose="front">Front</button>
+                <button class="pose-btn" data-clpose="apose">A-Pose</button>
+                <button class="pose-btn" data-clpose="armsup">Arms Up</button>
+                <button class="pose-btn" data-clpose="walk">Walk</button>
+              </div>
+              <div class="note">Pose only moves the model while you paint. Saved clothing aligns to the avatar.</div>
+            </div>
+
+            <div class="group">
+              <h4>Tools</h4>
+              <div class="tool-grid" id="cl-tool-grid">
+                <button class="tool-cell active" data-cltool="brush">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20c0-3 1-5 4-6l8-8 4 4-8 8c-1 3-3 4-6 4z"/><line x1="14" y1="6" x2="18" y2="10"/></svg>
+                  Brush
+                </button>
+                <button class="tool-cell" data-cltool="eraser">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16l8-8 8 8-6 6H8z"/><line x1="6" y1="20" x2="20" y2="20"/></svg>
+                  Eraser
+                </button>
+                <button class="tool-cell" data-cltool="fill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l7-7 7 7-7 7z"/><line x1="12" y1="5" x2="12" y2="2"/><path d="M19 15c2 2 2 5 0 5s-2-3 0-5z" fill="currentColor"/></svg>
+                  Fill
+                </button>
+                <button class="tool-cell" data-cltool="picker">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20l6-6"/><circle cx="16" cy="8" r="5"/></svg>
+                  Picker
+                </button>
+                <button class="tool-cell" data-cltool="image">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor"/><polyline points="4 18 10 12 14 16 18 12 20 14"/></svg>
+                  Image
+                </button>
+              </div>
+
+              <input type="file" id="cl-image-input" accept="image/png,image/jpeg,image/webp" hidden />
+
+              <div class="row" style="margin-top:10px">
+                <label>Color</label>
+                <input type="color" id="cl-color" value="#ff8800" />
+                <span class="hex" id="cl-color-hex">#ff8800</span>
+              </div>
+              <div class="palette" id="cl-palette"></div>
+
+              <div class="row" style="margin-top:10px">
+                <label>Size</label>
+                <div class="size-row">
+                  <input type="range" id="cl-size" min="4" max="120" value="28" />
+                  <span class="val" id="cl-size-val">28</span>
+                </div>
+              </div>
+
+              <div class="note" id="cl-image-status">Hover a body part on the model to see it highlighted. Click and drag to paint.</div>
+            </div>
+
+            <div class="group">
+              <h4>Reset</h4>
+              <button class="action-btn reset" id="cl-reset-all">Clear All Parts</button>
+              <button class="action-btn reset" id="cl-reset-selected" style="margin-top:6px">Clear Hovered Part</button>
+            </div>
+
+            <div class="group">
+              <h4>Publication</h4>
+              <div class="row"><label>Price</label><input type="number" id="cl-price" min="0" step="5" value="0" /><span style="font-size:11px;color:#666">Blox</span></div>
+              <div class="row"><label>Public</label><input type="checkbox" id="cl-publish" style="width:18px;height:18px;cursor:pointer" /><span style="font-size:11px;color:#666">Publish</span></div>
+            </div>
+
+            <div class="group">
+              <button class="action-btn save" id="cl-save">Save Clothing</button>
+              <button class="action-btn new" id="cl-new" style="margin-top:8px">New</button>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="panel-clibrary">
+            <div class="acc-list" id="acc-list-2d"></div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="viewport-wrap" id="clothing-viewport">
+        <div class="viewport-badge">
+          <span id="cl-badge">Paint directly on the model</span>
+          <span class="mode" id="cl-badge-tool">BRUSH</span>
+        </div>
+        <div class="viewport-tools">
+          <button class="vtool" id="cl-cam-reset" title="Reset camera">R</button>
+        </div>
+        <div class="viewport-hint">
+          <b>Left-click / drag</b> to paint. <b>Right-click drag</b> to orbit. <b>Wheel</b> to zoom.
+        </div>
+      </div>
+    </div>
+
+    <div class="mode" id="mode-face">
+      <aside class="paint-panel">
+        <div class="tabs">
+          <button class="tab active" data-ftab="editor">Editor</button>
+          <button class="tab" data-ftab="library">My Items</button>
+        </div>
+        <div class="tab-body">
+          <div class="tab-panel active" id="panel-feditor">
+            <div class="group">
+              <h4>Face Name</h4>
+              <div class="row"><label>Name</label><input type="text" id="face-name" maxlength="40" placeholder="Happy Face" /></div>
+            </div>
+
+            <div class="group">
+              <h4>Face Image</h4>
+              <input type="file" id="face-file-input" accept="image/png,image/jpeg,image/webp" style="display:none" />
+              <button class="action-btn import" id="face-file-btn">Upload Face Image</button>
+              <div class="file-name" id="face-file-name">No image — using default</div>
+              <button class="action-btn reset" id="face-clear-image" style="margin-top:8px">Remove Image</button>
+              <div class="note">Recommended 512×512 PNG with transparent background. The image replaces the <b>front of the head</b>.</div>
+            </div>
+
+            <div class="group">
+              <h4>Preview</h4>
+              <div style="display:flex;justify-content:center;padding:8px 0">
+                <div class="face-preview-box">
+                  <div class="face-preview-img" id="face-preview-img"></div>
+                  <svg class="face-preview-default" id="face-preview-default" viewBox="0 0 128 128">
+                    <ellipse cx="44" cy="52" rx="8" ry="11" fill="#1a1a1a"/>
+                    <ellipse cx="84" cy="52" rx="8" ry="11" fill="#1a1a1a"/>
+                    <path d="M36 78 Q64 100 92 78" stroke="#1a1a1a" stroke-width="7" fill="none" stroke-linecap="round"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div class="group">
+              <h4>Publication</h4>
+              <div class="row"><label>Price</label><input type="number" id="face-price" min="0" step="5" value="0" /><span style="font-size:11px;color:#666">Blox</span></div>
+              <div class="row"><label>Public</label><input type="checkbox" id="face-publish" style="width:18px;height:18px;cursor:pointer" /><span style="font-size:11px;color:#666">Publish to Catalog</span></div>
+            </div>
+
+            <div class="group">
+              <button class="action-btn save" id="face-save">Save Face</button>
+              <button class="action-btn new" id="face-new" style="margin-top:8px">New</button>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="panel-flibrary">
+            <div class="acc-list" id="acc-list-face"></div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="viewport-wrap" id="face-viewport">
+        <div class="face-hero">
+          <div style="font-family:'Arial Black',Arial,sans-serif;font-size:22px;color:#003366;text-shadow:2px 2px 0 #fff">FACE EDITOR</div>
+          <div style="color:#445;font-size:12px;max-width:460px;text-align:center;line-height:1.7">
+            Faces are applied to the <b>front of the head</b> and replace the default smile.
+            Every player owns the <b>Default Face</b> automatically, and only one face can be equipped at a time.
+          </div>
+          <div style="color:#8899aa;font-size:11px;margin-top:10px">Use the editor panel on the left to create your face.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const SUPABASE_URL = 'https://rzkqzbwqewduzybfuefa.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_drMZMPTsXCKFqhtduGhfEw_FswXH22T';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
+});
+
+const DEFAULT_AVATAR = { head:'#f5cd30', torso:'#0d69ac', leftArm:'#f5cd30', rightArm:'#f5cd30', leftLeg:'#4b974b', rightLeg:'#4b974b' };
+
+const state = {
+  user: null, profile: null, accessories: [],
+
+  /* 3D accessory */
+  editingId: null,
+  scene: null, camera: null, renderer: null, orbit: null, gizmo: null,
+  avatarGroup: null, parts: {}, resizeObserver: null,
+  accName: 'New Accessory', accGroup: null, accAttach: 'Head',
+  accOffset: { x: 0, y: 0, z: 0 }, accRot: { x: 0, y: 0, z: 0 }, accScale: 1,
+  accPrice: 0, accPublish: false,
+  accParts: [], selectedPartId: null, selectionHelper: null, gizmoMode: 'translate',
+
+  /* Clothing */
+  clEditingId: null,
+  clName: 'New Clothing', clType: 'shirt', clPose: 'front',
+  clTool: 'brush', clColor: '#ff8800', clSize: 28, clImage: null,
+  clPrice: 0, clPublish: false,
+  clScene: null, clCamera: null, clRenderer: null, clOrbit: null,
+  clGroup: null, clParts: {}, clPartData: {},
+  clRaycaster: new THREE.Raycaster(),
+  clPointerDown: false, clLastPaint: null,
+  clHoveredPart: null, clHoveredFace: null,
+  clResizeObserver: null, clRaf: 0, clAlive: true,
+
+  /* Face */
+  faceEditingId: null,
+  faceName: 'New Face',
+  facePrice: 0,
+  facePublish: false,
+  faceImageFile: null,
+  faceImageUrl: null,
+
+  headerAvatarViewer: null,
+  alive: true, raf: 0,
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+
+function showToast(msg, kind) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show ' + (kind || '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 2600);
+}
+
+function normalizeColors(a) {
+  if (!a) return { ...DEFAULT_AVATAR };
+  if (a.arms && !a.leftArm) {
+    return { head: a.head || DEFAULT_AVATAR.head, torso: a.torso || DEFAULT_AVATAR.torso, leftArm: a.arms, rightArm: a.arms, leftLeg: a.legs || DEFAULT_AVATAR.leftLeg, rightLeg: a.legs || DEFAULT_AVATAR.rightLeg };
+  }
+  return { head: a.head || DEFAULT_AVATAR.head, torso: a.torso || DEFAULT_AVATAR.torso, leftArm: a.leftArm || DEFAULT_AVATAR.leftArm, rightArm: a.rightArm || DEFAULT_AVATAR.rightArm, leftLeg: a.leftLeg || DEFAULT_AVATAR.leftLeg, rightLeg: a.rightLeg || DEFAULT_AVATAR.rightLeg };
+}
+
+const hexNum = (s) => typeof s === 'number' ? s : parseInt(String(s).replace('#',''), 16);
+const uid = () => 'p' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+
+/* ============================================================
+   SHAPES
+   ============================================================ */
+function buildShapeMesh(shape, color) {
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#888888'), roughness: 0.55, metalness: 0.05 });
+  const g = new THREE.Group();
+  switch (shape) {
+    case 'box': g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat)); break;
+    case 'sphere': g.add(new THREE.Mesh(new THREE.SphereGeometry(0.6, 24, 16), mat)); break;
+    case 'cylinder': g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 24), mat)); break;
+    case 'cone': g.add(new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 20), mat)); break;
+    case 'torus': g.add(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 12, 24), mat)); break;
+    case 'hat_top': {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.3, 16), mat); b.position.y = 0.75; g.add(b);
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.1, 16), mat); br.position.y = 0.1; g.add(br);
+      break;
+    }
+    case 'cap': {
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 12, 0, Math.PI*2, 0, Math.PI/2), mat));
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.72), mat); bl.position.set(0, -0.02, -0.55); g.add(bl);
+      break;
+    }
+    case 'crown': {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.45, 20), mat); base.position.y = 0.22; g.add(base);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.55, 8), mat);
+        sp.position.set(Math.cos(a) * 0.6, 0.72, Math.sin(a) * 0.6); g.add(sp);
+      }
+      const gem = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshStandardMaterial({ color: 0xff2255, emissive: 0x661122, roughness: 0.3 }));
+      gem.position.set(0, 0.25, 0.72); g.add(gem);
+      break;
+    }
+    case 'glasses': {
+      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#333333'), roughness: .3, metalness: .4 });
+      const lL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06), m); lL.position.set(-0.35, 0, 0); g.add(lL);
+      const rL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06), m); rL.position.set(0.35, 0, 0); g.add(rL);
+      const bg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.06), m); g.add(bg);
+      break;
+    }
+    case 'cape': {
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.4), new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#cc0000'), roughness: .85, side: THREE.DoubleSide }));
+      plane.position.set(0, 1.2, 0); g.add(plane);
+      break;
+    }
+    default: g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat));
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+function defaultPartData() {
+  return { id: uid(), shape: 'box', color: '#4a7ab8',
+    position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
+    scale: 1, model_url: null, _pendingFile: null };
+}
+
+async function buildPartMesh(data) {
+  const wrapper = new THREE.Group();
+  wrapper.userData.partId = data.id;
+  if (data._pendingFile || data.model_url) {
+    try {
+      let url = data._pendingFile ? URL.createObjectURL(data._pendingFile) : data.model_url;
+      const loader = new GLTFLoader();
+      const gltf = await new Promise((res, rej) => { loader.load(url, res, undefined, rej); });
+      if (data._pendingFile) URL.revokeObjectURL(url);
+      const model = gltf.scene || gltf.scenes[0];
+      if (model) {
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        model.scale.setScalar(1.5 / maxDim);
+        const box2 = new THREE.Box3().setFromObject(model);
+        const center = box2.getCenter(new THREE.Vector3());
+        model.position.sub(center);
+        if (data.color) {
+          model.traverse(o => {
+            if (o.isMesh && o.material && o.material.color && !o.material.map) {
+              if (Array.isArray(o.material)) o.material.forEach(m => m.color?.set(data.color));
+              else o.material.color.set(data.color);
+            }
+          });
+        }
+        model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        wrapper.add(model);
+      }
+    } catch (e) {
+      wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
+    }
+  } else {
+    wrapper.add(buildShapeMesh(data.shape || 'box', data.color || '#ff8800'));
+  }
+  return wrapper;
+}
+
+function applyPartTransform(mesh, data) {
+  mesh.position.set(data.position.x || 0, data.position.y || 0, data.position.z || 0);
+  mesh.rotation.set(
+    THREE.MathUtils.degToRad(data.rotation.x || 0),
+    THREE.MathUtils.degToRad(data.rotation.y || 0),
+    THREE.MathUtils.degToRad(data.rotation.z || 0)
+  );
+  mesh.scale.setScalar(data.scale || 1);
+}
+
+/* ============================================================
+   3D ACCESSORY SCENE
+   ============================================================ */
+function initAccessoryScene() {
+  const wrap = $('viewport-wrap');
+  const canvas = document.createElement('canvas');
+  wrap.insertBefore(canvas, wrap.firstChild);
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xbfe3ff);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(4, 5, 8);
+  camera.lookAt(0, 2.5, 0);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x405060, 1.0));
+  const dl1 = new THREE.DirectionalLight(0xffffff, 0.85);
+  dl1.position.set(6, 10, 6); dl1.castShadow = true;
+  dl1.shadow.mapSize.set(1024, 1024);
+  dl1.shadow.camera.left = -6; dl1.shadow.camera.right = 6;
+  dl1.shadow.camera.top = 8; dl1.shadow.camera.bottom = -2;
+  scene.add(dl1);
+  const dl2 = new THREE.DirectionalLight(0xffffff, 0.3);
+  dl2.position.set(-6, 5, -4); scene.add(dl2);
+
+  const grid = new THREE.GridHelper(14, 28, 0x88a8c8, 0xa8c8e0);
+  grid.position.y = 0; grid.material.opacity = 0.5; grid.material.transparent = true; scene.add(grid);
+
+  const colors = normalizeColors(state.profile?.avatar_colors);
+  const geoLeg = new THREE.BoxGeometry(1, 2, 1);
+  const geoArm = new THREE.BoxGeometry(1, 2, 1);
+  const geoTorso = new THREE.BoxGeometry(2, 2, 1);
+  const geoHead = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+  const matLegL = new THREE.MeshStandardMaterial({ color: hexNum(colors.leftLeg), roughness: 0.75 });
+  const matLegR = new THREE.MeshStandardMaterial({ color: hexNum(colors.rightLeg), roughness: 0.75 });
+  const matTorso = new THREE.MeshStandardMaterial({ color: hexNum(colors.torso), roughness: 0.75 });
+  const matArmL = new THREE.MeshStandardMaterial({ color: hexNum(colors.leftArm), roughness: 0.75 });
+  const matArmR = new THREE.MeshStandardMaterial({ color: hexNum(colors.rightArm), roughness: 0.75 });
+  const matHead = new THREE.MeshStandardMaterial({ color: hexNum(colors.head), roughness: 0.7 });
+
+  const group = new THREE.Group();
+  const legL = new THREE.Mesh(geoLeg, matLegL); legL.position.set(-0.5, 1, 0); group.add(legL);
+  const legR = new THREE.Mesh(geoLeg, matLegR); legR.position.set(0.5, 1, 0); group.add(legR);
+  const torso = new THREE.Mesh(geoTorso, matTorso); torso.position.set(0, 3, 0); group.add(torso);
+  const armL = new THREE.Mesh(geoArm, matArmL); armL.position.set(-1.5, 3, 0); group.add(armL);
+  const armR = new THREE.Mesh(geoArm, matArmR); armR.position.set(1.5, 3, 0); group.add(armR);
+  const head = new THREE.Mesh(geoHead, matHead); head.position.set(0, 4.625, 0); group.add(head);
+
+  const fc = document.createElement('canvas'); fc.width = fc.height = 128;
+  const fx = fc.getContext('2d');
+  fx.fillStyle = colors.head; fx.fillRect(0, 0, 128, 128);
+  fx.fillStyle = '#1a1a1a';
+  fx.beginPath(); fx.ellipse(44, 52, 8, 11, 0, 0, Math.PI*2); fx.fill();
+  fx.beginPath(); fx.ellipse(84, 52, 8, 11, 0, 0, Math.PI*2); fx.fill();
+  fx.strokeStyle = '#1a1a1a'; fx.lineWidth = 7; fx.lineCap = 'round';
+  fx.beginPath(); fx.arc(64, 60, 28, 0.14*Math.PI, 0.86*Math.PI); fx.stroke();
+  const faceTex = new THREE.CanvasTexture(fc);
+  faceTex.colorSpace = THREE.SRGBColorSpace;
+  head.material = [matHead, matHead, matHead, matHead, new THREE.MeshStandardMaterial({ map: faceTex, roughness: 0.7 }), matHead];
+
+  group.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(group);
+
+  state.parts = { head, torso, armL, armR, legL, legR };
+  state.avatarGroup = group;
+
+  const accGroup = new THREE.Group();
+  scene.add(accGroup);
+  state.accGroup = accGroup;
+
+  const gizmo = new TransformControls(camera, renderer.domElement);
+  gizmo.setMode('translate'); gizmo.setSize(0.65);
+  gizmo.addEventListener('dragging-changed', (e) => { if (state.orbit) state.orbit.enabled = !e.value; });
+  gizmo.addEventListener('objectChange', () => { syncInputsFromSelection(); });
+  scene.add(gizmo);
+  state.gizmo = gizmo;
+
+  const orbit = new OrbitControls(camera, renderer.domElement);
+  orbit.enableDamping = true; orbit.dampingFactor = 0.1;
+  orbit.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  orbit.target.set(0, 2.5, 0);
+  orbit.enablePan = true; orbit.panSpeed = 0.6;
+  orbit.update();
+  state.orbit = orbit;
+
+  const helper = new THREE.BoxHelper(new THREE.Object3D(), 0xffb800);
+  helper.material.depthTest = false;
+  helper.material.transparent = true;
+  helper.material.opacity = 0.9;
+  helper.visible = false;
+  scene.add(helper);
+  state.selectionHelper = helper;
+
+  const resize = () => {
+    const r = wrap.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  };
+  const ro = new ResizeObserver(resize);
+  ro.observe(wrap); resize();
+  setTimeout(resize, 60); setTimeout(resize, 300);
+  state.resizeObserver = ro;
+
+  state.scene = scene; state.camera = camera; state.renderer = renderer;
+
+  const tick = () => {
+    if (!state.alive) return;
+    state.raf = requestAnimationFrame(tick);
+    orbit.update();
+    if (state.selectionHelper && state.selectionHelper.visible) state.selectionHelper.update();
+    renderer.render(scene, camera);
+  };
+  tick();
+}
+
+function getAvatarPart(name) {
+  const p = state.parts;
+  switch (name) {
+    case 'Head': return p.head;
+    case 'Torso': return p.torso;
+    case 'LeftArm': return p.armL;
+    case 'RightArm': return p.armR;
+    case 'LeftLeg': return p.legL;
+    case 'RightLeg': return p.legR;
+    case 'Back': return p.torso;
+    default: return p.head;
+  }
+}
+
+function attachGroupToPart() {
+  if (!state.accGroup) return;
+  if (state.accGroup.parent) state.accGroup.parent.remove(state.accGroup);
+  const parent = getAvatarPart(state.accAttach);
+  if (parent) parent.add(state.accGroup);
+  applyGroupInputs();
+}
+
+function applyGroupInputs() {
+  if (!state.accGroup) return;
+  state.accGroup.position.set(state.accOffset.x || 0, state.accOffset.y || 0, state.accOffset.z || 0);
+  state.accGroup.rotation.set(
+    THREE.MathUtils.degToRad(state.accRot.x || 0),
+    THREE.MathUtils.degToRad(state.accRot.y || 0),
+    THREE.MathUtils.degToRad(state.accRot.z || 0)
+  );
+  state.accGroup.scale.setScalar(state.accScale || 1);
+}
+
+async function rebuildAllParts() {
+  for (const p of state.accParts) {
+    if (p.mesh) { if (p.mesh.parent) p.mesh.parent.remove(p.mesh); disposeMesh(p.mesh); }
+  }
+  const newEntries = [];
+  for (const p of state.accParts) {
+    const mesh = await buildPartMesh(p.data);
+    applyPartTransform(mesh, p.data);
+    state.accGroup.add(mesh);
+    newEntries.push({ id: p.id, data: p.data, mesh });
+  }
+  state.accParts = newEntries;
+  if (state.selectedPartId && !state.accParts.find(p => p.id === state.selectedPartId)) state.selectedPartId = null;
+  updateSelection();
+  renderPartsList();
+}
+
+function disposeMesh(mesh) {
+  mesh.traverse(o => {
+    if (o.isMesh) {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => { m.map?.dispose?.(); m.dispose(); });
+        else { o.material.map?.dispose?.(); o.material.dispose(); }
+      }
+    }
+  });
+}
+
+function selectPart(partId) {
+  state.selectedPartId = partId;
+  updateSelection();
+  renderPartsList();
+  syncInputsFromSelection();
+  updateEditPanelVisibility();
+  updateBadge();
+}
+
+function updateSelection() {
+  const gizmo = state.gizmo, helper = state.selectionHelper;
+  if (!gizmo || !helper) return;
+  if (state.selectedPartId) {
+    const entry = state.accParts.find(p => p.id === state.selectedPartId);
+    if (entry && entry.mesh) {
+      gizmo.attach(entry.mesh); helper.setFromObject(entry.mesh); helper.visible = true;
+      for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, p.id === state.selectedPartId ? 1.0 : 0.55);
+      return;
+    }
+  }
+  gizmo.attach(state.accGroup); helper.setFromObject(state.accGroup); helper.visible = true;
+  for (const p of state.accParts) if (p.mesh) setMeshOpacity(p.mesh, 1.0);
+}
+
+function setMeshOpacity(mesh, opacity) {
+  mesh.traverse(o => {
+    if (o.isMesh && o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) { m.transparent = opacity < 1; m.opacity = opacity; m.needsUpdate = true; }
+    }
+  });
+}
+
+function syncInputsFromSelection() {
+  if (state.selectedPartId) {
+    const entry = state.accParts.find(p => p.id === state.selectedPartId);
+    if (!entry || !entry.mesh) return;
+    const m = entry.mesh;
+    entry.data.position = { x: m.position.x, y: m.position.y, z: m.position.z };
+    entry.data.rotation = { x: THREE.MathUtils.radToDeg(m.rotation.x), y: THREE.MathUtils.radToDeg(m.rotation.y), z: THREE.MathUtils.radToDeg(m.rotation.z) };
+    entry.data.scale = m.scale.x;
+    $('part-pos-x').value = m.position.x.toFixed(2);
+    $('part-pos-y').value = m.position.y.toFixed(2);
+    $('part-pos-z').value = m.position.z.toFixed(2);
+    $('part-rot-x').value = Math.round(entry.data.rotation.x);
+    $('part-rot-y').value = Math.round(entry.data.rotation.y);
+    $('part-rot-z').value = Math.round(entry.data.rotation.z);
+    $('part-scale').value = m.scale.x.toFixed(2);
+  } else if (state.accGroup) {
+    const g = state.accGroup;
+    state.accOffset = { x: g.position.x, y: g.position.y, z: g.position.z };
+    state.accRot = { x: THREE.MathUtils.radToDeg(g.rotation.x), y: THREE.MathUtils.radToDeg(g.rotation.y), z: THREE.MathUtils.radToDeg(g.rotation.z) };
+    state.accScale = g.scale.x;
+    $('grp-pos-x').value = g.position.x.toFixed(2);
+    $('grp-pos-y').value = g.position.y.toFixed(2);
+    $('grp-pos-z').value = g.position.z.toFixed(2);
+    $('grp-rot-x').value = Math.round(state.accRot.x);
+    $('grp-rot-y').value = Math.round(state.accRot.y);
+    $('grp-rot-z').value = Math.round(state.accRot.z);
+    $('grp-scale').value = g.scale.x.toFixed(2);
+  }
+}
+
+function syncGroupInputs() {
+  $('grp-attach').value = state.accAttach;
+  $('grp-pos-x').value = state.accOffset.x.toFixed(2);
+  $('grp-pos-y').value = state.accOffset.y.toFixed(2);
+  $('grp-pos-z').value = state.accOffset.z.toFixed(2);
+  $('grp-rot-x').value = Math.round(state.accRot.x);
+  $('grp-rot-y').value = Math.round(state.accRot.y);
+  $('grp-rot-z').value = Math.round(state.accRot.z);
+  $('grp-scale').value = state.accScale.toFixed(2);
+}
+
+function renderPartsList() {
+  const list = $('parts-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const grpEntry = document.createElement('div');
+  grpEntry.className = 'part-item is-group' + (state.selectedPartId === null ? ' active' : '');
+  grpEntry.innerHTML = '<div class="part-item-icon"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="#4a7ab8" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="#4a7ab8"/></svg></div><div class="part-item-info"><div class="part-item-name">Group</div><div class="part-item-type">' + esc(state.accAttach) + '</div></div>';
+  grpEntry.addEventListener('click', () => selectPart(null));
+  list.appendChild(grpEntry);
+  for (let i = 0; i < state.accParts.length; i++) {
+    const entry = state.accParts[i];
+    const item = document.createElement('div');
+    item.className = 'part-item' + (state.selectedPartId === entry.id ? ' active' : '');
+    const icon = document.createElement('div');
+    icon.className = 'part-item-icon';
+    icon.innerHTML = shapeIconSvg(entry.data.shape || 'box', entry.data.color || '#4a7ab8');
+    const info = document.createElement('div');
+    info.className = 'part-item-info';
+    info.innerHTML = '<div class="part-item-name">Part ' + (i + 1) + '</div><div class="part-item-type">' + ((entry.data.model_url || entry.data._pendingFile) ? 'MODEL' : (entry.data.shape || 'box')) + '</div>';
+    const actions = document.createElement('div');
+    actions.className = 'part-item-actions';
+    const upBtn = document.createElement('button'); upBtn.textContent = '\u25B2'; upBtn.disabled = i === 0;
+    upBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPart(i, i - 1); });
+    const downBtn = document.createElement('button'); downBtn.textContent = '\u25BC'; downBtn.disabled = i === state.accParts.length - 1;
+    downBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPart(i, i + 1); });
+    const dupBtn = document.createElement('button'); dupBtn.textContent = 'C';
+    dupBtn.addEventListener('click', (e) => { e.stopPropagation(); duplicatePart(i); });
+    const delBtn = document.createElement('button'); delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deletePart(i); });
+    actions.appendChild(upBtn); actions.appendChild(downBtn); actions.appendChild(dupBtn); actions.appendChild(delBtn);
+    item.appendChild(icon); item.appendChild(info); item.appendChild(actions);
+    item.addEventListener('click', () => selectPart(entry.id));
+    list.appendChild(item);
+  }
+  $('parts-count').textContent = state.accParts.length;
+}
+
+function shapeIconSvg(shape, color) {
+  const c = color || '#4a7ab8';
+  const dark = shade(c, -30);
+  const map = {
+    box: '<rect x="6" y="6" width="20" height="20" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    sphere: '<circle cx="16" cy="16" r="10" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    cylinder: '<ellipse cx="16" cy="8" rx="8" ry="3" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/><path d="M8 8v16a8 3 0 0 0 16 0V8" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    cone: '<path d="M16 4 L26 26 L6 26 Z" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    torus: '<circle cx="16" cy="16" r="11" fill="none" stroke="'+c+'" stroke-width="6"/><circle cx="16" cy="16" r="11" fill="none" stroke="'+dark+'" stroke-width="1.5"/>',
+    hat_top: '<ellipse cx="16" cy="24" rx="13" ry="3" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/><rect x="10" y="6" width="12" height="16" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    cap: '<path d="M6 20 Q6 8 16 8 Q26 8 26 20 Z" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/><path d="M4 20 L28 20 L28 23 L4 23 Z" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    crown: '<path d="M6 22 L6 12 L11 18 L16 10 L21 18 L26 12 L26 22 Z" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>',
+    glasses: '<rect x="4" y="13" width="10" height="6" rx="2" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/><rect x="18" y="13" width="10" height="6" rx="2" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/><line x1="14" y1="16" x2="18" y2="16" stroke="'+dark+'" stroke-width="2"/>',
+    cape: '<path d="M10 6 L22 6 L26 26 L16 24 L6 26 Z" fill="'+c+'" stroke="'+dark+'" stroke-width="1.5"/>'
+  };
+  return '<svg viewBox="0 0 32 32">' + (map[shape] || map.box) + '</svg>';
+}
+
+function shade(hex, percent) {
+  hex = String(hex).replace('#','');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const num = parseInt(hex, 16);
+  let r = (num >> 16) + percent, g = ((num >> 8) & 0xff) + percent, b = (num & 0xff) + percent;
+  r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+  return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+}
+
+async function addPart() {
+  const data = defaultPartData();
+  const entry = { id: data.id, data, mesh: null };
+  state.accParts.push(entry);
+  await rebuildAllParts();
+  selectPart(entry.id);
+  showToast('Part added', 'success');
+}
+
+async function deletePart(index) {
+  if (index < 0 || index >= state.accParts.length) return;
+  if (state.accParts.length <= 1) { showToast('Cannot delete the last part', 'error'); return; }
+  const entry = state.accParts[index];
+  if (!confirm('Delete Part ' + (index + 1) + '?')) return;
+  state.accParts.splice(index, 1);
+  if (state.selectedPartId === entry.id) state.selectedPartId = null;
+  await rebuildAllParts();
+  selectPart(null);
+}
+
+async function duplicatePart(index) {
+  if (index < 0 || index >= state.accParts.length) return;
+  const orig = state.accParts[index];
+  const clone = {
+    id: uid(), shape: orig.data.shape, color: orig.data.color,
+    position: { x: (orig.data.position.x || 0) + 0.3, y: orig.data.position.y || 0, z: orig.data.position.z || 0 },
+    rotation: { ...(orig.data.rotation || { x:0,y:0,z:0 }) },
+    scale: orig.data.scale || 1,
+    model_url: orig.data.model_url, _pendingFile: orig.data._pendingFile || null
+  };
+  const entry = { id: clone.id, data: clone, mesh: null };
+  state.accParts.splice(index + 1, 0, entry);
+  await rebuildAllParts();
+  selectPart(entry.id);
+}
+
+async function reorderPart(from, to) {
+  if (from === to || from < 0 || to < 0) return;
+  if (from >= state.accParts.length || to >= state.accParts.length) return;
+  const [entry] = state.accParts.splice(from, 1);
+  state.accParts.splice(to, 0, entry);
+  await rebuildAllParts();
+  selectPart(entry.id);
+}
+
+function updateEditPanelVisibility() {
+  $('group-props').style.display = state.selectedPartId ? 'none' : 'block';
+  $('part-props').style.display = state.selectedPartId ? 'block' : 'none';
+}
+
+function updateBadge() {
+  const nameEl = $('badge-name');
+  if (state.selectedPartId) {
+    const idx = state.accParts.findIndex(p => p.id === state.selectedPartId);
+    nameEl.textContent = 'Part ' + (idx + 1) + ' of ' + state.accParts.length;
+  } else {
+    nameEl.textContent = state.accName || 'Group (' + state.accAttach + ')';
+  }
+}
+
+/* ============================================================
+   TABS
+   ============================================================ */
+document.querySelectorAll('.tab[data-tab]').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab[data-tab]').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('#panel-edit, #panel-library').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.tab));
+    if (t.dataset.tab === 'library') renderAccessoriesList();
+  });
+});
+document.querySelectorAll('.tab[data-ctab]').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab[data-ctab]').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('#panel-ctools, #panel-clibrary').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.ctab));
+    if (t.dataset.ctab === 'library') renderAccessoriesList2D();
+  });
+});
+document.querySelectorAll('.tab[data-ftab]').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab[data-ftab]').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('#panel-feditor, #panel-flibrary').forEach(p => p.classList.toggle('active', p.id === 'panel-' + t.dataset.ftab));
+    if (t.dataset.ftab === 'library') renderFacesList();
+  });
+});
+document.querySelectorAll('.mode-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.mode-tab').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('.mode').forEach(m => m.classList.toggle('active', m.id === 'mode-' + t.dataset.mode));
+    if (t.dataset.mode === '3d') {
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
+      stopClothingLoop();
+    } else if (t.dataset.mode === '2d') {
+      requestAnimationFrame(() => startClothingLoop());
+    } else if (t.dataset.mode === 'face') {
+      stopClothingLoop();
+      renderFacesList();
+    }
+  });
+});
+
+/* ============================================================
+   3D ACCESSORY BINDINGS
+   ============================================================ */
+document.querySelectorAll('.shape-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (!state.selectedPartId) { showToast('Select a part first', 'error'); return; }
+    const entry = state.accParts.find(p => p.id === state.selectedPartId);
+    if (!entry) return;
+    document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    entry.data.shape = btn.dataset.shape;
+    if (entry.data._pendingFile || entry.data.model_url) {
+      entry.data._pendingFile = null; entry.data.model_url = null;
+      $('part-file-name').textContent = 'No model — using shape';
+      $('part-file-name').classList.remove('has');
+    }
+    await rebuildAllParts();
+    selectPart(entry.id);
+  });
+});
+
+$('grp-attach').addEventListener('change', () => {
+  state.accAttach = $('grp-attach').value;
+  attachGroupToPart();
+  renderPartsList();
+  updateBadge();
+});
+
+['grp-pos-x','grp-pos-y','grp-pos-z'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    state.accOffset.x = parseFloat($('grp-pos-x').value) || 0;
+    state.accOffset.y = parseFloat($('grp-pos-y').value) || 0;
+    state.accOffset.z = parseFloat($('grp-pos-z').value) || 0;
+    applyGroupInputs();
+  });
+});
+['grp-rot-x','grp-rot-y','grp-rot-z'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    state.accRot.x = parseFloat($('grp-rot-x').value) || 0;
+    state.accRot.y = parseFloat($('grp-rot-y').value) || 0;
+    state.accRot.z = parseFloat($('grp-rot-z').value) || 0;
+    applyGroupInputs();
+  });
+});
+$('grp-scale').addEventListener('input', () => {
+  state.accScale = parseFloat($('grp-scale').value) || 1;
+  applyGroupInputs();
+});
+
+['part-pos-x','part-pos-y','part-pos-z'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    if (!state.selectedPartId) return;
+    const entry = state.accParts.find(p => p.id === state.selectedPartId);
+    if (!entry) return;
+    entry.data.position.x = parseFloat($('part-pos-x').value) || 0;
+    entry.data.position.y = parseFloat($('part-pos-y').value) || 0;
+    entry.data.position.z = parseFloat($('part-pos-z').value) || 0;
+    applyPartTransform(entry.mesh, entry.data);
+  });
+});
+['part-rot-x','part-rot-y','part-rot-z'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    if (!state.selectedPartId) return;
+    const entry = state.accParts.find(p => p.id === state.selectedPartId);
+    if (!entry) return;
+    entry.data.rotation.x = parseFloat($('part-rot-x').value) || 0;
+    entry.data.rotation.y = parseFloat($('part-rot-y').value) || 0;
+    entry.data.rotation.z = parseFloat($('part-rot-z').value) || 0;
+    applyPartTransform(entry.mesh, entry.data);
+  });
+});
+$('part-scale').addEventListener('input', () => {
+  if (!state.selectedPartId) return;
+  const entry = state.accParts.find(p => p.id === state.selectedPartId);
+  if (!entry) return;
+  entry.data.scale = parseFloat($('part-scale').value) || 1;
+  applyPartTransform(entry.mesh, entry.data);
+});
+$('part-color').addEventListener('input', () => {
+  if (!state.selectedPartId) return;
+  const entry = state.accParts.find(p => p.id === state.selectedPartId);
+  if (!entry) return;
+  const color = $('part-color').value;
+  $('part-color-hex').textContent = color;
+  entry.data.color = color;
+  if (entry.mesh) {
+    entry.mesh.traverse(o => {
+      if (o.isMesh && o.material && o.material.color) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.color?.set(color));
+        else o.material.color.set(color);
+      }
+    });
+  }
+  renderPartsList();
+});
+
+$('part-file-btn').addEventListener('click', () => {
+  if (!state.selectedPartId) { showToast('Select a part first', 'error'); return; }
+  $('part-file-input').click();
+});
+$('part-file-input').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f || !state.selectedPartId) return;
+  const entry = state.accParts.find(p => p.id === state.selectedPartId);
+  if (!entry) return;
+  entry.data._pendingFile = f; entry.data.model_url = null;
+  await rebuildAllParts();
+  selectPart(entry.id);
+  $('part-file-name').textContent = f.name + ' (ready)';
+  $('part-file-name').classList.add('has');
+  e.target.value = '';
+});
+$('part-clear-model').addEventListener('click', async () => {
+  if (!state.selectedPartId) return;
+  const entry = state.accParts.find(p => p.id === state.selectedPartId);
+  if (!entry) return;
+  entry.data._pendingFile = null; entry.data.model_url = null;
+  await rebuildAllParts();
+  selectPart(entry.id);
+  $('part-file-name').textContent = 'No model — using shape';
+  $('part-file-name').classList.remove('has');
+});
+
+function setGizmoMode(mode) {
+  if (!state.gizmo) return;
+  state.gizmo.setMode(mode);
+  state.gizmoMode = mode;
+  document.querySelectorAll('.vtool').forEach(b => b.classList.remove('active'));
+  const el = $('vtool-' + mode); if (el) el.classList.add('active');
+  $('badge-mode').textContent = { translate: 'T', rotate: 'R', scale: 'S' }[mode];
+}
+$('vtool-translate').addEventListener('click', () => setGizmoMode('translate'));
+$('vtool-rotate').addEventListener('click', () => setGizmoMode('rotate'));
+$('vtool-scale').addEventListener('click', () => setGizmoMode('scale'));
+$('vtool-reset').addEventListener('click', () => {
+  if (!state.camera || !state.orbit) return;
+  state.camera.position.set(4, 5, 8);
+  state.orbit.target.set(0, 2.5, 0);
+  state.orbit.update();
+});
+
+$('add-part-btn').addEventListener('click', () => addPart());
+
+$('acc-name').addEventListener('input', () => {
+  state.accName = $('acc-name').value.trim() || 'New Accessory';
+  updateBadge();
+});
+$('acc-price').addEventListener('input', () => { state.accPrice = parseInt($('acc-price').value) || 0; });
+$('acc-publish').addEventListener('change', () => { state.accPublish = $('acc-publish').checked; });
+
+$('acc-save').addEventListener('click', async () => {
+  const name = $('acc-name').value.trim();
+  if (!name) { showToast('Give it a name', 'error'); return; }
+  if (!state.accParts.length) { showToast('Add at least one part', 'error'); return; }
+  const btn = $('acc-save');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    for (const p of state.accParts) {
+      if (!p.mesh) continue;
+      p.data.position = { x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z };
+      p.data.rotation = { x: THREE.MathUtils.radToDeg(p.mesh.rotation.x), y: THREE.MathUtils.radToDeg(p.mesh.rotation.y), z: THREE.MathUtils.radToDeg(p.mesh.rotation.z) };
+      p.data.scale = p.mesh.scale.x;
+    }
+    const serializedParts = [];
+    for (const p of state.accParts) {
+      let modelUrl = p.data.model_url || null;
+      if (p.data._pendingFile) {
+        const f = p.data._pendingFile;
+        const ext = (f.name.split('.').pop() || 'glb').toLowerCase();
+        const safeExt = ['glb','gltf'].includes(ext) ? ext : 'glb';
+        const path = state.user.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + safeExt;
+        const { error: upErr } = await sb.storage.from('accessory-models').upload(path, f, { cacheControl: '3600', upsert: false, contentType: f.type || 'model/gltf-binary' });
+        if (upErr) throw new Error('Upload failed: ' + upErr.message);
+        const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
+        modelUrl = urlData.publicUrl;
+      }
+      serializedParts.push({
+        id: p.id, shape: p.data.shape || 'box', color: p.data.color || '#ff8800',
+        position: { x: Number(p.data.position.x) || 0, y: Number(p.data.position.y) || 0, z: Number(p.data.position.z) || 0 },
+        rotation: { x: Number(p.data.rotation.x) || 0, y: Number(p.data.rotation.y) || 0, z: Number(p.data.rotation.z) || 0 },
+        scale: Number(p.data.scale) || 1, model_url: modelUrl
+      });
+    }
+    const firstPart = serializedParts[0];
+    const row = {
+      user_id: state.user.id, name,
+      attach_part: state.accAttach,
+      offset_x: state.accOffset.x, offset_y: state.accOffset.y, offset_z: state.accOffset.z,
+      rot_x: state.accRot.x, rot_y: state.accRot.y, rot_z: state.accRot.z,
+      scale: state.accScale,
+      shape: firstPart.shape, color: firstPart.color, model_url: firstPart.model_url,
+      parts: serializedParts, category: 'accessory',
+      price: state.accPrice || 0, is_published: !!state.accPublish, is_public: true
+    };
+    if (state.editingId) {
+      const { data, error } = await sb.from('custom_accessories').update(row).eq('id', state.editingId).select().single();
+      if (error) throw error;
+      const idx = state.accessories.findIndex(a => a.id === state.editingId);
+      if (idx >= 0) state.accessories[idx] = data;
+      showToast('Saved!', 'success');
+    } else {
+      const { data, error } = await sb.from('custom_accessories').insert(row).select().single();
+      if (error) throw error;
+      state.accessories.push(data);
+      state.editingId = data.id;
+      showToast('Created!', 'success');
+    }
+    for (const p of state.accParts) p.data._pendingFile = null;
+    renderAccessoriesList();
+  } catch (err) {
+    console.error(err);
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save';
+  }
+});
+
+$('acc-new').addEventListener('click', () => {
+  if (!confirm('Start a new accessory? Unsaved work lost.')) return;
+  resetToNew3D();
+});
+
+function resetToNew3D() {
+  state.editingId = null;
+  state.accName = 'New Accessory';
+  state.accAttach = 'Head';
+  state.accOffset = { x: 0, y: 0, z: 0 };
+  state.accRot = { x: 0, y: 0, z: 0 };
+  state.accScale = 1; state.accPrice = 0; state.accPublish = false;
+  state.accParts = []; state.selectedPartId = null;
+  $('acc-name').value = '';
+  $('acc-price').value = 0;
+  $('acc-publish').checked = false;
+  $('grp-attach').value = 'Head';
+  syncGroupInputs();
+  $('part-file-name').textContent = 'No model — using shape';
+  $('part-file-name').classList.remove('has');
+  const data = defaultPartData(); data.color = '#ff8800';
+  state.accParts.push({ id: data.id, data, mesh: null });
+  attachGroupToPart();
+  rebuildAllParts().then(() => selectPart(null));
+}
+
+async function loadAccessoryIntoEditor(acc) {
+  state.editingId = acc.id;
+  state.accName = acc.name || 'Untitled';
+  state.accAttach = acc.attach_part || 'Head';
+  state.accOffset = { x: acc.offset_x || 0, y: acc.offset_y || 0, z: acc.offset_z || 0 };
+  state.accRot = { x: acc.rot_x || 0, y: acc.rot_y || 0, z: acc.rot_z || 0 };
+  state.accScale = acc.scale || 1;
+  state.accPrice = acc.price || 0;
+  state.accPublish = !!acc.is_published;
+  state.selectedPartId = null;
+  let parts = acc.parts;
+  if (typeof parts === 'string') { try { parts = JSON.parse(parts); } catch { parts = []; } }
+  if (!Array.isArray(parts)) parts = [];
+  if (!parts.length && (acc.shape || acc.model_url)) {
+    parts = [{ id: uid(), shape: acc.shape || 'box', color: acc.color || '#ff8800', position: { x:0, y:0, z:0 }, rotation: { x:0, y:0, z:0 }, scale: 1, model_url: acc.model_url || null }];
+    state.accOffset = { x: 0, y: 0, z: 0 }; state.accRot = { x: 0, y: 0, z: 0 }; state.accScale = 1;
+  }
+  if (!parts.length) parts = [{ id: uid(), shape: 'box', color: '#ff8800', position: { x:0, y:0, z:0 }, rotation: { x:0, y:0, z:0 }, scale: 1, model_url: null }];
+  state.accParts = parts.map(p => ({
+    id: p.id || uid(),
+    data: {
+      id: p.id || uid(), shape: p.shape || 'box', color: p.color || '#ff8800',
+      position: { x: Number(p.position?.x) || 0, y: Number(p.position?.y) || 0, z: Number(p.position?.z) || 0 },
+      rotation: { x: Number(p.rotation?.x) || 0, y: Number(p.rotation?.y) || 0, z: Number(p.rotation?.z) || 0 },
+      scale: Number(p.scale) || 1, model_url: p.model_url || null, _pendingFile: null
+    },
+    mesh: null
+  }));
+  $('acc-name').value = state.accName;
+  $('acc-price').value = state.accPrice;
+  $('acc-publish').checked = state.accPublish;
+  $('grp-attach').value = state.accAttach;
+  attachGroupToPart();
+  syncGroupInputs();
+  await rebuildAllParts();
+  selectPart(null);
+  showToast('Loaded: ' + state.accName);
+}
+
+function renderAccessoriesList() {
+  const listEl = $('acc-list');
+  if (!listEl) return;
+  const threeD = state.accessories.filter(a => (a.category || 'accessory') === 'accessory');
+  if (!threeD.length) { listEl.innerHTML = '<div class="acc-list-empty">No 3D accessories yet.</div>'; return; }
+  listEl.innerHTML = '';
+  const sorted = [...threeD].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  for (const acc of sorted) {
+    const item = document.createElement('div');
+    item.className = 'acc-item' + (state.editingId === acc.id ? ' selected' : '');
+    const thumbEl = document.createElement('div'); thumbEl.className = 'acc-item-thumb';
+    const infoEl = document.createElement('div'); infoEl.className = 'acc-item-info';
+    const partCount = (Array.isArray(acc.parts) ? acc.parts.length : 1);
+    infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.attach_part || 'Head') + ' · ' + partCount + ' parts' + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
+    const actionsEl = document.createElement('div'); actionsEl.className = 'acc-item-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'edit'; editBtn.textContent = 'E';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); loadAccessoryIntoEditor(acc); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete "' + acc.name + '"?')) return;
+      const { error } = await sb.from('custom_accessories').delete().eq('id', acc.id);
+      if (error) { showToast('Error', 'error'); return; }
+      state.accessories = state.accessories.filter(a => a.id !== acc.id);
+      if (state.editingId === acc.id) resetToNew3D();
+      renderAccessoriesList();
+    });
+    actionsEl.appendChild(editBtn); actionsEl.appendChild(delBtn);
+    item.appendChild(thumbEl); item.appendChild(infoEl); item.appendChild(actionsEl);
+    item.addEventListener('click', () => loadAccessoryIntoEditor(acc));
+    listEl.appendChild(item);
+    mountAccThumb(thumbEl, acc);
+  }
+}
+
+function mountAccThumb(container, acc) {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'width:100%;height:100%;display:block';
+  container.appendChild(canvas);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+  camera.position.set(2.5, 2, 3.5); camera.lookAt(0, 0, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 1.1));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(5, 6, 4); scene.add(dl);
+  const group = new THREE.Group(); scene.add(group);
+  let parts = acc.parts;
+  if (typeof parts === 'string') { try { parts = JSON.parse(parts); } catch { parts = []; } }
+  if (!Array.isArray(parts) || !parts.length) parts = [{ shape: acc.shape || 'box', color: acc.color || '#ff8800', position: { x:0,y:0,z:0 }, rotation: { x:0,y:0,z:0 }, scale: 1 }];
+  for (const p of parts) {
+    const g = buildShapeMesh(p.shape || 'box', p.color || '#ff8800');
+    g.position.set(Number(p.position?.x) || 0, Number(p.position?.y) || 0, Number(p.position?.z) || 0);
+    g.rotation.set(
+      THREE.MathUtils.degToRad(Number(p.rotation?.x) || 0),
+      THREE.MathUtils.degToRad(Number(p.rotation?.y) || 0),
+      THREE.MathUtils.degToRad(Number(p.rotation?.z) || 0)
+    );
+    g.scale.setScalar(Number(p.scale) || 1);
+    group.add(g);
+  }
+  const resize = () => {
+    const r = container.getBoundingClientRect();
+    if (!r.width) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  };
+  setTimeout(resize, 30);
+  let alive = true, t = 0;
+  const tick = () => {
+    if (!alive) return;
+    requestAnimationFrame(tick);
+    t += 0.02;
+    group.rotation.y = t;
+    renderer.render(scene, camera);
+  };
+  tick();
+}
+
+/* ============================================================
+   CLOTHING MODE
+   ============================================================ */
+const CL_PART_NAMES = ['torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
+
+function createPaintCanvas(fillColor) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = fillColor || '#ffffff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+function baseColorForPart(part) {
+  const c = normalizeColors(state.profile?.avatar_colors);
+  switch (part) {
+    case 'torso': return c.torso;
+    case 'leftArm': return c.leftArm;
+    case 'rightArm': return c.rightArm;
+    case 'leftLeg': return c.leftLeg;
+    case 'rightLeg': return c.rightLeg;
+    default: return '#ffffff';
+  }
+}
+
+function clothingPartsForType() {
+  if (state.clType === 'shirt') return ['torso', 'leftArm', 'rightArm'];
+  if (state.clType === 'pants') return ['leftLeg', 'rightLeg'];
+  return ['torso'];
+}
+
+function initClothingScene() {
+  if (state.clScene) return;
+  const wrap = $('clothing-viewport');
+  if (!wrap) return;
+
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;outline:none;touch-action:none';
+  wrap.insertBefore(canvas, wrap.firstChild);
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xbfe3ff);
+
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  camera.position.set(0, 0, 8);
+  camera.lookAt(0, 0, 0);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x405060, 1.05));
+  const dl1 = new THREE.DirectionalLight(0xffffff, 0.85);
+  dl1.position.set(4, 6, 8); dl1.castShadow = true;
+  dl1.shadow.mapSize.set(1024, 1024);
+  dl1.shadow.camera.left = -6; dl1.shadow.camera.right = 6;
+  dl1.shadow.camera.top = 8; dl1.shadow.camera.bottom = -8;
+  scene.add(dl1);
+  const dl2 = new THREE.DirectionalLight(0xffffff, 0.35);
+  dl2.position.set(-5, 4, -6); scene.add(dl2);
+
+  const colors = normalizeColors(state.profile?.avatar_colors);
+
+  state.clPartData = {};
+
+  function makePartData(part) {
+    const canvases = [];
+    const textures = [];
+    const materials = [];
+    for (let face = 0; face < 6; face++) {
+      const c = createPaintCanvas(baseColorForPart(part));
+      canvases.push(c);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      textures.push(tex);
+      materials.push(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75, color: 0xffffff }));
+    }
+    return { canvases, textures, materials };
+  }
+
+  function attachPart(part, mesh) {
+    mesh.userData.part = part;
+    mesh.userData.paintable = true;
+  }
+
+  const root = new THREE.Group();
+  root.position.y = -2.625;
+
+  const torsoData = makePartData('torso');
+  state.clPartData.torso = torsoData;
+  const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 1), torsoData.materials);
+  torsoMesh.position.set(0, 3, 0);
+  torsoMesh.castShadow = true; torsoMesh.receiveShadow = true;
+  attachPart('torso', torsoMesh);
+  root.add(torsoMesh);
+  state.clParts.torso = torsoMesh;
+
+  const headMat = new THREE.MeshStandardMaterial({ color: hexNum(colors.head), roughness: 0.7 });
+  const headMesh = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.25, 1.25), headMat);
+  headMesh.position.set(0, 4.625, 0);
+  headMesh.castShadow = true;
+  const fc = document.createElement('canvas'); fc.width = fc.height = 128;
+  const fx = fc.getContext('2d');
+  fx.fillStyle = colors.head; fx.fillRect(0, 0, 128, 128);
+  fx.fillStyle = '#1a1a1a';
+  fx.beginPath(); fx.ellipse(44, 52, 8, 11, 0, 0, Math.PI*2); fx.fill();
+  fx.beginPath(); fx.ellipse(84, 52, 8, 11, 0, 0, Math.PI*2); fx.fill();
+  fx.strokeStyle = '#1a1a1a'; fx.lineWidth = 7; fx.lineCap = 'round';
+  fx.beginPath(); fx.arc(64, 60, 28, 0.14*Math.PI, 0.86*Math.PI); fx.stroke();
+  const faceTex = new THREE.CanvasTexture(fc);
+  faceTex.colorSpace = THREE.SRGBColorSpace;
+  headMesh.material = [headMat, headMat, headMat, headMat, new THREE.MeshStandardMaterial({ map: faceTex, roughness: 0.7 }), headMat];
+  root.add(headMesh);
+  state.clParts.head = headMesh;
+
+  const legLGroup = new THREE.Group();
+  legLGroup.position.set(-0.5, 2, 0);
+  const legLData = makePartData('leftLeg');
+  state.clPartData.leftLeg = legLData;
+  const legLMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), legLData.materials);
+  legLMesh.position.set(0, -1, 0);
+  legLMesh.castShadow = true; legLMesh.receiveShadow = true;
+  attachPart('leftLeg', legLMesh);
+  legLGroup.add(legLMesh);
+  root.add(legLGroup);
+  state.clParts.leftLeg = legLMesh;
+  state.clParts.legLGroup = legLGroup;
+
+  const legRGroup = new THREE.Group();
+  legRGroup.position.set(0.5, 2, 0);
+  const legRData = makePartData('rightLeg');
+  state.clPartData.rightLeg = legRData;
+  const legRMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), legRData.materials);
+  legRMesh.position.set(0, -1, 0);
+  legRMesh.castShadow = true; legRMesh.receiveShadow = true;
+  attachPart('rightLeg', legRMesh);
+  legRGroup.add(legRMesh);
+  root.add(legRGroup);
+  state.clParts.rightLeg = legRMesh;
+  state.clParts.legRGroup = legRGroup;
+
+  const armLGroup = new THREE.Group();
+  armLGroup.position.set(-1.5, 4, 0);
+  const armLData = makePartData('leftArm');
+  state.clPartData.leftArm = armLData;
+  const armLMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), armLData.materials);
+  armLMesh.position.set(0, -1, 0);
+  armLMesh.castShadow = true; armLMesh.receiveShadow = true;
+  attachPart('leftArm', armLMesh);
+  armLGroup.add(armLMesh);
+  root.add(armLGroup);
+  state.clParts.leftArm = armLMesh;
+  state.clParts.armLGroup = armLGroup;
+
+  const armRGroup = new THREE.Group();
+  armRGroup.position.set(1.5, 4, 0);
+  const armRData = makePartData('rightArm');
+  state.clPartData.rightArm = armRData;
+  const armRMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), armRData.materials);
+  armRMesh.position.set(0, -1, 0);
+  armRMesh.castShadow = true; armRMesh.receiveShadow = true;
+  attachPart('rightArm', armRMesh);
+  armRGroup.add(armRMesh);
+  root.add(armRGroup);
+  state.clParts.rightArm = armRMesh;
+  state.clParts.armRGroup = armRGroup;
+
+  scene.add(root);
+  state.clGroup = root;
+
+  const orbit = new OrbitControls(camera, renderer.domElement);
+  orbit.enableDamping = true; orbit.dampingFactor = 0.1;
+  orbit.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  orbit.target.set(0, 0, 0);
+  orbit.enablePan = false;
+  orbit.minDistance = 4;
+  orbit.maxDistance = 20;
+  orbit.update();
+  state.clOrbit = orbit;
+
+  const resize = () => {
+    const r = wrap.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  };
+  const ro = new ResizeObserver(resize);
+  ro.observe(wrap); resize();
+  setTimeout(resize, 60); setTimeout(resize, 300);
+  state.clResizeObserver = ro;
+
+  state.clScene = scene; state.clCamera = camera; state.clRenderer = renderer;
+
+  canvas.addEventListener('pointerdown', clOnPointerDown);
+  canvas.addEventListener('pointermove', clOnPointerMove);
+  window.addEventListener('pointerup', clOnPointerUp);
+  canvas.addEventListener('pointerleave', clOnPointerUp);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  buildPalette();
+  applyClothingPose();
+  updateClothingBadge();
+}
+
+function buildPalette() {
+  const pal = $('cl-palette');
+  if (!pal) return;
+  pal.innerHTML = '';
+  const swatches = ['#ffffff','#e0e0e0','#222222','#c0392b','#e74c3c','#f39c12','#f1c40f',
+                    '#f5cd30','#2ecc71','#4b974b','#1abc9c','#3498db','#0d69ac','#8e44ad',
+                    '#9b59b6','#e67e22','#7f8c8d','#2c3e50','#bdc3c7','#16a085'];
+  for (const c of swatches) {
+    const b = document.createElement('button');
+    b.className = 'swatch';
+    b.style.background = c;
+    b.addEventListener('click', () => {
+      state.clColor = c;
+      $('cl-color').value = c;
+      $('cl-color-hex').textContent = c;
+      document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s === b));
+    });
+    pal.appendChild(b);
+  }
+}
+
+function clRaycast(e) {
+  if (!state.clRenderer || !state.clCamera) return null;
+  const canvas = state.clRenderer.domElement;
+  const r = canvas.getBoundingClientRect();
+  const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+  const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
+  state.clRaycaster.setFromCamera({ x: nx, y: ny }, state.clCamera);
+
+  const meshes = [];
+  for (const part of CL_PART_NAMES) {
+    const m = state.clParts[part];
+    if (m) meshes.push(m);
+  }
+  const hits = state.clRaycaster.intersectObjects(meshes, false);
+  return hits.length ? hits[0] : null;
+}
+
+function clOnPointerDown(e) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  state.clPointerDown = true;
+  state.clLastPaint = null;
+  clTryPaint(e);
+}
+
+function clOnPointerMove(e) {
+  clUpdateHover(e);
+  if (!state.clPointerDown || e.buttons !== 1) return;
+  e.preventDefault();
+  clTryPaint(e);
+}
+
+function clOnPointerUp() {
+  state.clPointerDown = false;
+  state.clLastPaint = null;
+}
+
+function clUpdateHover(e) {
+  const hit = clRaycast(e);
+  const part = hit ? hit.object.userData.part : null;
+  state.clHoveredPart = part;
+  const badge = $('cl-badge');
+  if (badge) {
+    if (part && clothingPartsForType().includes(part)) {
+      badge.textContent = 'Ready to paint: ' + part.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+    } else if (part) {
+      badge.textContent = part.replace(/([A-Z])/g, ' $1') + ' is not part of this clothing';
+    } else {
+      badge.textContent = 'Paint directly on the model';
+    }
+  }
+}
+
+function clTryPaint(e) {
+  const hit = clRaycast(e);
+  if (!hit) return;
+  const part = hit.object.userData.part;
+  if (!part) return;
+  if (!clothingPartsForType().includes(part)) return;
+  if (!hit.uv) return;
+  const faceIndex = (hit.face && typeof hit.face.materialIndex === 'number') ? hit.face.materialIndex : 0;
+  const partData = state.clPartData[part];
+  if (!partData) return;
+  const canvas = partData.canvases[faceIndex];
+  if (!canvas) return;
+
+  if (state.clTool === 'brush') {
+    clPaintBrush(part, faceIndex, hit.uv);
+  } else if (state.clTool === 'eraser') {
+    clPaintBrush(part, faceIndex, hit.uv, true);
+  } else if (state.clTool === 'fill') {
+    clFillFace(part, faceIndex, state.clColor);
+    state.clLastPaint = null;
+  } else if (state.clTool === 'picker') {
+    clPickColor(part, faceIndex, hit.uv);
+    state.clLastPaint = null;
+  } else if (state.clTool === 'image') {
+    if (!state.clImage) { $('cl-image-input').click(); return; }
+    clFillFaceWithImage(part, faceIndex, state.clImage);
+    state.clLastPaint = null;
+  }
+}
+
+function clPaintBrush(part, faceIndex, uv, isEraser) {
+  const partData = state.clPartData[part];
+  if (!partData) return;
+  const canvas = partData.canvases[faceIndex];
+  const ctx = canvas.getContext('2d');
+  const x = uv.x * canvas.width;
+  const y = (1 - uv.y) * canvas.height;
+  const r = state.clSize / 2;
+  const color = isEraser ? baseColorForPart(part) : state.clColor;
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = state.clSize;
+
+  const last = state.clLastPaint;
+  if (last && last.part === part && last.faceIndex === faceIndex) {
+    const dx = x - last.x;
+    const dy = y - last.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < canvas.width * 0.45) {
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  state.clLastPaint = { part, faceIndex, x, y };
+  markClothingTextureDirty(part, faceIndex);
+}
+
+function clFillFace(part, faceIndex, color) {
+  const partData = state.clPartData[part];
+  if (!partData) return;
+  const canvas = partData.canvases[faceIndex];
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  markClothingTextureDirty(part, faceIndex);
+}
+
+function clFillFaceWithImage(part, faceIndex, img) {
+  const partData = state.clPartData[part];
+  if (!partData) return;
+  const canvas = partData.canvases[faceIndex];
+  const ctx = canvas.getContext('2d');
+  const pattern = ctx.createPattern(img, 'repeat');
+  if (pattern) {
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
+  markClothingTextureDirty(part, faceIndex);
+}
+
+function clPickColor(part, faceIndex, uv) {
+  const partData = state.clPartData[part];
+  if (!partData) return;
+  const canvas = partData.canvases[faceIndex];
+  const ctx = canvas.getContext('2d');
+  const x = Math.max(0, Math.min(canvas.width - 1, Math.floor(uv.x * canvas.width)));
+  const y = Math.max(0, Math.min(canvas.height - 1, Math.floor((1 - uv.y) * canvas.height)));
+  const px = ctx.getImageData(x, y, 1, 1).data;
+  const hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  state.clColor = hex;
+  $('cl-color').value = hex;
+  $('cl-color-hex').textContent = hex;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  state.clTool = 'brush';
+  document.querySelectorAll('[data-cltool]').forEach(b => b.classList.toggle('active', b.dataset.cltool === 'brush'));
+  updateClothingBadge();
+}
+
+const _dirtyClothingTextures = new Set();
+let _clothingRafScheduled = false;
+
+function markClothingTextureDirty(part, faceIndex) {
+  _dirtyClothingTextures.add(part + '|' + faceIndex);
+  if (_clothingRafScheduled) return;
+  _clothingRafScheduled = true;
+  requestAnimationFrame(() => {
+    _clothingRafScheduled = false;
+    for (const key of _dirtyClothingTextures) {
+      const [p, fi] = key.split('|');
+      const fi2 = parseInt(fi);
+      const data = state.clPartData[p];
+      if (data && data.textures[fi2]) data.textures[fi2].needsUpdate = true;
+    }
+    _dirtyClothingTextures.clear();
+  });
+}
+
+function applyClothingPose() {
+  const groups = state.clParts;
+  if (!groups || !groups.armLGroup) return;
+  const poses = {
+    front:  { armL: { x: 0,    z: 0 },    armR: { x: 0,    z: 0 },    legL: { x: 0 },    legR: { x: 0 } },
+    apose:  { armL: { x: 0,    z: -0.45 },armR: { x: 0,    z: 0.45 }, legL: { x: 0 },    legR: { x: 0 } },
+    armsup: { armL: { x: 0,    z: -2.7 }, armR: { x: 0,    z: 2.7 },  legL: { x: 0 },    legR: { x: 0 } },
+    walk:   { armL: { x: -0.6, z: 0 },    armR: { x: 0.6,  z: 0 },    legL: { x: 0.4 },  legR: { x: -0.4 } },
+  };
+  const p = poses[state.clPose] || poses.front;
+  groups.armLGroup.rotation.set(p.armL.x, 0, p.armL.z);
+  groups.armRGroup.rotation.set(p.armR.x, 0, p.armR.z);
+  groups.legLGroup.rotation.set(p.legL.x, 0, 0);
+  groups.legRGroup.rotation.set(p.legR.x, 0, 0);
+}
+
+function updateClothingBadge() {
+  const el = $('cl-badge-tool');
+  if (el) el.textContent = state.clTool.toUpperCase();
+}
+
+let _clTickStarted = false;
+function startClothingLoop() {
+  initClothingScene();
+  if (_clTickStarted) return;
+  _clTickStarted = true;
+  const tick = () => {
+    if (!_clTickStarted || !state.clAlive) return;
+    state.clRaf = requestAnimationFrame(tick);
+    if (state.clOrbit) state.clOrbit.update();
+    if (state.clRenderer && state.clScene && state.clCamera) {
+      state.clRenderer.render(state.clScene, state.clCamera);
+    }
+  };
+  tick();
+}
+
+function stopClothingLoop() {
+  _clTickStarted = false;
+  if (state.clRaf) { cancelAnimationFrame(state.clRaf); state.clRaf = 0; }
+}
+
+/* ============================================================
+   CLOTHING UI BINDINGS
+   ============================================================ */
+document.querySelectorAll('[data-cltool]').forEach(b => {
+  b.addEventListener('click', () => {
+    state.clTool = b.dataset.cltool;
+    document.querySelectorAll('[data-cltool]').forEach(x => x.classList.toggle('active', x === b));
+    updateClothingBadge();
+    if (state.clTool === 'image' && !state.clImage) $('cl-image-input').click();
+  });
+});
+
+document.querySelectorAll('[data-cltype]').forEach(b => {
+  b.addEventListener('click', () => {
+    state.clType = b.dataset.cltype;
+    document.querySelectorAll('[data-cltype]').forEach(x => x.classList.toggle('active', x === b));
+    const note = $('cl-type-note');
+    if (state.clType === 'shirt') note.textContent = 'Shirt: paint the torso and both arms.';
+    else if (state.clType === 'tshirt') note.textContent = 'T-Shirt: paint only the torso.';
+    else note.textContent = 'Pants: paint both legs.';
+  });
+});
+
+document.querySelectorAll('[data-clpose]').forEach(b => {
+  b.addEventListener('click', () => {
+    state.clPose = b.dataset.clpose;
+    document.querySelectorAll('[data-clpose]').forEach(x => x.classList.toggle('active', x === b));
+    applyClothingPose();
+  });
+});
+
+$('cl-color').addEventListener('input', () => {
+  state.clColor = $('cl-color').value;
+  $('cl-color-hex').textContent = state.clColor;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+});
+$('cl-size').addEventListener('input', () => {
+  state.clSize = parseInt($('cl-size').value) || 28;
+  $('cl-size-val').textContent = state.clSize;
+});
+$('cl-name').addEventListener('input', () => { state.clName = $('cl-name').value.trim() || 'New Clothing'; });
+$('cl-price').addEventListener('input', () => { state.clPrice = parseInt($('cl-price').value) || 0; });
+$('cl-publish').addEventListener('change', () => { state.clPublish = $('cl-publish').checked; });
+
+$('cl-image-input').addEventListener('change', (e) => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => {
+    state.clImage = img;
+    state.clTool = 'image';
+    document.querySelectorAll('[data-cltool]').forEach(x => x.classList.toggle('active', x.dataset.cltool === 'image'));
+    updateClothingBadge();
+    $('cl-image-status').textContent = 'Loaded ' + f.name + '. Click a part on the model to fill it.';
+  };
+  img.src = URL.createObjectURL(f);
+  e.target.value = '';
+});
+
+$('cl-reset-all').addEventListener('click', () => {
+  if (!confirm('Clear all painted parts?')) return;
+  for (const part of Object.keys(state.clPartData)) {
+    const data = state.clPartData[part];
+    const base = baseColorForPart(part);
+    for (let fi = 0; fi < 6; fi++) {
+      const ctx = data.canvases[fi].getContext('2d');
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+      data.textures[fi].needsUpdate = true;
+    }
+  }
+});
+
+$('cl-reset-selected').addEventListener('click', () => {
+  const part = state.clHoveredPart;
+  if (!part) { showToast('Hover a body part first', 'error'); return; }
+  if (!clothingPartsForType().includes(part)) { showToast('This part is not active', 'error'); return; }
+  const data = state.clPartData[part];
+  if (!data) return;
+  const base = baseColorForPart(part);
+  for (let fi = 0; fi < 6; fi++) {
+    const ctx = data.canvases[fi].getContext('2d');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+    data.textures[fi].needsUpdate = true;
+  }
+});
+
+$('cl-cam-reset').addEventListener('click', () => {
+  if (!state.clCamera || !state.clOrbit) return;
+  state.clCamera.position.set(0, 0, 8);
+  state.clOrbit.target.set(0, 0, 0);
+  state.clOrbit.update();
+});
+
+$('cl-new').addEventListener('click', () => {
+  if (!confirm('Start new clothing? Current painting will be lost.')) return;
+  resetToNewClothing();
+});
+
+function resetToNewClothing() {
+  state.clEditingId = null;
+  state.clName = 'New Clothing';
+  state.clType = 'shirt';
+  state.clPose = 'front';
+  state.clTool = 'brush';
+  state.clColor = '#ff8800';
+  state.clSize = 28;
+  state.clImage = null;
+  state.clPrice = 0;
+  state.clPublish = false;
+  $('cl-name').value = '';
+  $('cl-price').value = 0;
+  $('cl-publish').checked = false;
+  $('cl-color').value = '#ff8800';
+  $('cl-color-hex').textContent = '#ff8800';
+  $('cl-size').value = 28;
+  $('cl-size-val').textContent = '28';
+  $('cl-image-status').textContent = 'Hover a body part on the model to see it highlighted. Click and drag to paint.';
+  document.querySelectorAll('[data-cltool]').forEach(x => x.classList.toggle('active', x.dataset.cltool === 'brush'));
+  document.querySelectorAll('[data-cltype]').forEach(x => x.classList.toggle('active', x.dataset.cltype === 'shirt'));
+  document.querySelectorAll('[data-clpose]').forEach(x => x.classList.toggle('active', x.dataset.clpose === 'front'));
+  applyClothingPose();
+  for (const part of Object.keys(state.clPartData)) {
+    const data = state.clPartData[part];
+    const base = baseColorForPart(part);
+    for (let fi = 0; fi < 6; fi++) {
+      const ctx = data.canvases[fi].getContext('2d');
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, data.canvases[fi].width, data.canvases[fi].height);
+      data.textures[fi].needsUpdate = true;
+    }
+  }
+  $('cl-type-note').textContent = 'Shirt: paint the torso and both arms.';
+  updateClothingBadge();
+}
+
+function combineToAtlas(part) {
+  const data = state.clPartData[part];
+  if (!data) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const cellW = 512 / 2;
+  const cellH = 512 / 3;
+  const layout = [
+    { col: 1, row: 1 },
+    { col: 0, row: 1 },
+    { col: 0, row: 0 },
+    { col: 1, row: 0 },
+    { col: 0, row: 2 },
+    { col: 1, row: 2 },
+  ];
+  for (let f = 0; f < 6; f++) {
+    const { col, row } = layout[f];
+    ctx.drawImage(data.canvases[f], col * cellW, row * cellH, cellW, cellH);
+  }
+  return canvas;
+}
+
+$('cl-save').addEventListener('click', async () => {
+  const name = $('cl-name').value.trim();
+  if (!name) { showToast('Give it a name', 'error'); return; }
+  const btn = $('cl-save');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const includedParts = clothingPartsForType();
+    const partsArray = [];
+    for (const part of includedParts) {
+      const atlas = combineToAtlas(part);
+      if (!atlas) continue;
+      const blob = await new Promise((res, rej) => atlas.toBlob(b => b ? res(b) : rej(new Error('Export failed')), 'image/png'));
+      const path = state.user.id + '/clothing/' + Date.now() + '-' + part + '-' + Math.random().toString(36).slice(2,8) + '.png';
+      const { error: upErr } = await sb.storage.from('accessory-models').upload(path, blob, { cacheControl: '3600', upsert: false, contentType: 'image/png' });
+      if (upErr) throw new Error('Upload failed: ' + upErr.message);
+      const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
+      partsArray.push({ part, atlas_url: urlData.publicUrl });
+    }
+    const row = {
+      user_id: state.user.id,
+      name,
+      attach_part: 'Torso',
+      offset_x: 0, offset_y: 0, offset_z: 0,
+      rot_x: 0, rot_y: 0, rot_z: 0,
+      scale: 1,
+      shape: null, color: null, model_url: null,
+      parts: partsArray,
+      category: state.clType,
+      texture_url: partsArray[0]?.atlas_url || null,
+      price: state.clPrice || 0,
+      is_published: !!state.clPublish,
+      is_public: true
+    };
+    if (state.clEditingId) {
+      const { data, error } = await sb.from('custom_accessories').update(row).eq('id', state.clEditingId).select().single();
+      if (error) throw error;
+      const idx = state.accessories.findIndex(a => a.id === state.clEditingId);
+      if (idx >= 0) state.accessories[idx] = data;
+      showToast('Clothing updated!', 'success');
+    } else {
+      const { data, error } = await sb.from('custom_accessories').insert(row).select().single();
+      if (error) throw error;
+      state.accessories.push(data);
+      state.clEditingId = data.id;
+      showToast('Clothing saved!', 'success');
+    }
+    renderAccessoriesList2D();
+  } catch (err) {
+    console.error(err);
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Clothing';
+  }
+});
+
+function renderAccessoriesList2D() {
+  const listEl = $('acc-list-2d');
+  if (!listEl) return;
+  const clothing = state.accessories.filter(a => ['shirt','tshirt','pants'].includes(a.category));
+  if (!clothing.length) { listEl.innerHTML = '<div class="acc-list-empty">No clothing yet.</div>'; return; }
+  listEl.innerHTML = '';
+  const sorted = [...clothing].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  for (const acc of sorted) {
+    const item = document.createElement('div');
+    item.className = 'acc-item';
+    const thumbEl = document.createElement('div'); thumbEl.className = 'acc-item-thumb';
+    if (acc.texture_url) { const img = document.createElement('img'); img.src = acc.texture_url; thumbEl.appendChild(img); }
+    const infoEl = document.createElement('div'); infoEl.className = 'acc-item-info';
+    infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + esc(acc.category) + (acc.is_published ? ' · PUBLIC' : '') + '</div>';
+    const actionsEl = document.createElement('div'); actionsEl.className = 'acc-item-actions';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete?')) return;
+      const { error } = await sb.from('custom_accessories').delete().eq('id', acc.id);
+      if (error) { showToast('Error', 'error'); return; }
+      state.accessories = state.accessories.filter(a => a.id !== acc.id);
+      renderAccessoriesList2D();
+    });
+    actionsEl.appendChild(delBtn);
+    item.appendChild(thumbEl); item.appendChild(infoEl); item.appendChild(actionsEl);
+    listEl.appendChild(item);
+  }
+}
+
+/* ============================================================
+   FACE EDITOR
+   ============================================================ */
+function resetFacePreview() {
+  const img = $('face-preview-img');
+  const def = $('face-preview-default');
+  if (!img || !def) return;
+  img.style.display = 'none';
+  img.style.backgroundImage = '';
+  def.style.display = 'block';
+}
+
+function setFacePreviewFromUrl(url) {
+  const img = $('face-preview-img');
+  const def = $('face-preview-default');
+  if (!img || !def) return;
+  if (!url) { resetFacePreview(); return; }
+  const safe = String(url).replace(/["\\\n\r]/g, ch => ({'"':'%22','\\':'%5C','\n':'','\r':''})[ch] || ch);
+  img.style.backgroundImage = 'url("' + safe + '")';
+  img.style.display = 'block';
+  def.style.display = 'none';
+}
+
+function resetToNewFace() {
+  state.faceEditingId = null;
+  state.faceName = 'New Face';
+  state.facePrice = 0;
+  state.facePublish = false;
+  state.faceImageFile = null;
+  state.faceImageUrl = null;
+  $('face-name').value = '';
+  $('face-price').value = 0;
+  $('face-publish').checked = false;
+  $('face-file-name').textContent = 'No image — using default';
+  $('face-file-name').classList.remove('has');
+  resetFacePreview();
+  renderFacesList();
+}
+
+function loadFaceIntoEditor(acc) {
+  state.faceEditingId = acc.id;
+  state.faceName = acc.name || 'Untitled';
+  state.facePrice = acc.price || 0;
+  state.facePublish = !!acc.is_published;
+  state.faceImageFile = null;
+  state.faceImageUrl = acc.texture_url || null;
+  $('face-name').value = state.faceName;
+  $('face-price').value = state.facePrice;
+  $('face-publish').checked = state.facePublish;
+  if (state.faceImageUrl) {
+    $('face-file-name').textContent = 'Using saved image';
+    $('face-file-name').classList.add('has');
+    setFacePreviewFromUrl(state.faceImageUrl);
+  } else {
+    $('face-file-name').textContent = 'No image — using default';
+    $('face-file-name').classList.remove('has');
+    resetFacePreview();
+  }
+  showToast('Loaded: ' + state.faceName);
+}
+
+function renderFacesList() {
+  const listEl = $('acc-list-face');
+  if (!listEl) return;
+  const faces = state.accessories.filter(a => a.category === 'face');
+  if (!faces.length) { listEl.innerHTML = '<div class="acc-list-empty">No faces yet. Create one in the editor.</div>'; return; }
+  listEl.innerHTML = '';
+  const sorted = [...faces].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  for (const acc of sorted) {
+    const item = document.createElement('div');
+    item.className = 'acc-item' + (state.faceEditingId === acc.id ? ' selected' : '');
+    const thumbEl = document.createElement('div');
+    thumbEl.className = 'acc-item-thumb';
+    thumbEl.style.background = '#f5cd30';
+    thumbEl.style.position = 'relative';
+    if (acc.texture_url) {
+      const img = document.createElement('img');
+      img.src = acc.texture_url;
+      img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+      thumbEl.appendChild(img);
+    }
+    const infoEl = document.createElement('div');
+    infoEl.className = 'acc-item-info';
+    infoEl.innerHTML = '<div class="acc-item-name">' + esc(acc.name) + '</div><div class="acc-item-meta">' + (acc.is_published ? 'PUBLIC' : 'DRAFT') + ' · ' + (acc.price || 0) + ' Blox</div>';
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'acc-item-actions';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'edit'; editBtn.textContent = 'E';
+    editBtn.title = 'Edit';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); loadFaceIntoEditor(acc); });
+    const delBtn = document.createElement('button');
+    delBtn.className = 'del'; delBtn.textContent = 'X';
+    delBtn.title = 'Delete';
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete "' + acc.name + '"?')) return;
+      const { error } = await sb.from('custom_accessories').delete().eq('id', acc.id);
+      if (error) { showToast('Error', 'error'); return; }
+      state.accessories = state.accessories.filter(a => a.id !== acc.id);
+      if (state.faceEditingId === acc.id) resetToNewFace();
+      renderFacesList();
+    });
+    actionsEl.appendChild(editBtn);
+    actionsEl.appendChild(delBtn);
+    item.appendChild(thumbEl);
+    item.appendChild(infoEl);
+    item.appendChild(actionsEl);
+    item.addEventListener('click', () => loadFaceIntoEditor(acc));
+    listEl.appendChild(item);
+  }
+}
+
+$('face-name').addEventListener('input', () => { state.faceName = $('face-name').value.trim() || 'New Face'; });
+$('face-price').addEventListener('input', () => { state.facePrice = parseInt($('face-price').value) || 0; });
+$('face-publish').addEventListener('change', () => { state.facePublish = $('face-publish').checked; });
+
+$('face-file-btn').addEventListener('click', () => $('face-file-input').click());
+
+$('face-file-input').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (!f.type.startsWith('image/')) { showToast('Must be an image', 'error'); e.target.value = ''; return; }
+  if (f.size > 5 * 1024 * 1024) { showToast('Image too large (max 5MB)', 'error'); e.target.value = ''; return; }
+  state.faceImageFile = f;
+  state.faceImageUrl = null;
+  const reader = new FileReader();
+  reader.onload = (ev) => setFacePreviewFromUrl(ev.target.result);
+  reader.readAsDataURL(f);
+  $('face-file-name').textContent = f.name + ' (ready)';
+  $('face-file-name').classList.add('has');
+  e.target.value = '';
+});
+
+$('face-clear-image').addEventListener('click', () => {
+  state.faceImageFile = null;
+  state.faceImageUrl = null;
+  $('face-file-name').textContent = 'No image — using default';
+  $('face-file-name').classList.remove('has');
+  resetFacePreview();
+});
+
+$('face-save').addEventListener('click', async () => {
+  const name = $('face-name').value.trim();
+  if (!name) { showToast('Give it a name', 'error'); return; }
+  if (!state.faceImageFile && !state.faceImageUrl) { showToast('Upload a face image first', 'error'); return; }
+
+  const btn = $('face-save');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    let textureUrl = state.faceImageUrl;
+
+    if (state.faceImageFile) {
+      const f = state.faceImageFile;
+      const ext = (f.name.split('.').pop() || 'png').toLowerCase();
+      const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? ext : 'png';
+      const path = state.user.id + '/faces/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.' + safeExt;
+      const { error: upErr } = await sb.storage
+        .from('accessory-models')
+        .upload(path, f, { cacheControl: '3600', upsert: false, contentType: f.type || 'image/png' });
+      if (upErr) throw new Error('Upload failed: ' + upErr.message);
+      const { data: urlData } = sb.storage.from('accessory-models').getPublicUrl(path);
+      textureUrl = urlData.publicUrl;
+    }
+
+    const row = {
+      user_id: state.user.id,
+      name,
+      attach_part: 'Head',
+      offset_x: 0, offset_y: 0, offset_z: 0,
+      rot_x: 0, rot_y: 0, rot_z: 0,
+      scale: 1,
+      shape: null,
+      color: null,
+      model_url: null,
+      parts: [],
+      category: 'face',
+      texture_url: textureUrl,
+      price: state.facePrice || 0,
+      is_published: !!state.facePublish,
+      is_public: true
+    };
+
+    if (state.faceEditingId) {
+      const { data, error } = await sb.from('custom_accessories').update(row).eq('id', state.faceEditingId).select().single();
+      if (error) throw error;
+      const idx = state.accessories.findIndex(a => a.id === state.faceEditingId);
+      if (idx >= 0) state.accessories[idx] = data;
+      showToast('Face updated!', 'success');
+    } else {
+      const { data, error } = await sb.from('custom_accessories').insert(row).select().single();
+      if (error) throw error;
+      state.accessories.push(data);
+      state.faceEditingId = data.id;
+      showToast('Face created!', 'success');
+    }
+
+    state.faceImageFile = null;
+    state.faceImageUrl = textureUrl;
+    renderFacesList();
+  } catch (err) {
+    console.error(err);
+    showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Face';
+  }
+});
+
+$('face-new').addEventListener('click', () => {
+  if (!confirm('Start a new face? Unsaved work will be lost.')) return;
+  resetToNewFace();
+});
+
+/* ============================================================
+   HEADER AVATAR
+   ============================================================ */
+function mountHeaderAvatar() {
+  const host = $('header-avatar');
+  if (!host) return;
+  host.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  host.appendChild(canvas);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
+  camera.position.set(0, 4.1, 6.2); camera.lookAt(0, 3.7, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x405060, 1.1));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(3, 6, 4); scene.add(dl);
+  const colors = normalizeColors(state.profile?.avatar_colors);
+  const matTorso = new THREE.MeshStandardMaterial({ color: hexNum(colors.torso), roughness: 0.75 });
+  const matHead = new THREE.MeshStandardMaterial({ color: hexNum(colors.head), roughness: 0.7 });
+  const group = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 1), matTorso); torso.position.set(0, 3, 0); group.add(torso);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.25, 1.25), matHead); head.position.set(0, 4.625, 0); group.add(head);
+  scene.add(group);
+  const resize = () => {
+    const r = host.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  };
+  resize();
+  let raf = 0, alive = true;
+  const tick = () => { if (!alive) return; group.rotation.y += 0.012; renderer.render(scene, camera); raf = requestAnimationFrame(tick); };
+  tick();
+  state.headerAvatarViewer = { dispose() { alive = false; if (raf) cancelAnimationFrame(raf); torso.geometry.dispose(); matTorso.dispose(); head.geometry.dispose(); matHead.dispose(); renderer.dispose(); } };
+}
+
+/* ============================================================
+   KEYBOARD
+   ============================================================ */
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (!$('mode-3d').classList.contains('active')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'w') setGizmoMode('translate');
+  if (k === 'e') setGizmoMode('rotate');
+  if (k === 'r') setGizmoMode('scale');
+  if (k === 'delete' && state.selectedPartId) {
+    const idx = state.accParts.findIndex(p => p.id === state.selectedPartId);
+    if (idx >= 0) deletePart(idx);
+  }
+});
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session || !session.user) {
+    $('loading-screen').classList.add('hidden');
+    $('auth-screen').classList.add('active');
+    return;
+  }
+  state.user = session.user;
+  const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+  state.profile = profile;
+  $('header-username').textContent = profile?.username || 'Player';
+  const { data: accs } = await sb.from('custom_accessories').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false });
+  state.accessories = accs || [];
+  $('app').classList.add('active');
+  initAccessoryScene();
+  mountHeaderAvatar();
+  resetToNew3D();
+  resetToNewClothing();
+  renderAccessoriesList();
+  renderAccessoriesList2D();
+  renderFacesList();
+  resetToNewFace();
+  setTimeout(() => $('loading-screen').classList.add('hidden'), 300);
+}
+
+$('back-btn').addEventListener('click', () => { location.href = 'index.html'; });
+$('logo-btn').addEventListener('click', () => { location.href = 'index.html'; });
+window.addEventListener('beforeunload', () => {
+  state.alive = false;
+  state.clAlive = false;
+  if (state.raf) cancelAnimationFrame(state.raf);
+  if (state.clRaf) cancelAnimationFrame(state.clRaf);
+  if (state.resizeObserver) state.resizeObserver.disconnect();
+  if (state.clResizeObserver) state.clResizeObserver.disconnect();
+  if (state.headerAvatarViewer) state.headerAvatarViewer.dispose();
+});
+
+boot();
+</script>
+</body>
+</html>

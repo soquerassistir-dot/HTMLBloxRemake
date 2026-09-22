@@ -3,6 +3,7 @@
    ============================================================ */
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /* ============================================================
    SUPABASE
@@ -52,6 +53,337 @@ const DEFAULT_AVATAR = {
   leftArm: '#f5cd30', rightArm: '#f5cd30',
   leftLeg: '#4b974b', rightLeg: '#4b974b'
 };
+
+const ATTACH_SLOTS = ['Head', 'Torso', 'Back', 'LeftArm', 'RightArm', 'LeftLeg', 'RightLeg'];
+const FACE_SLOT = 'face';
+
+const DEFAULT_FACE = {
+  id: 'default_face',
+  name: 'Default Face',
+  category: 'face',
+  texture_url: null,
+  price: 0,
+  is_default: true,
+  user_id: null,
+  author_name: 'HTMLBlox',
+  is_published: true,
+  is_public: true
+};
+
+/* ============================================================
+   STORE CACHE — All published accessories
+   ============================================================ */
+let __storeCache = null;
+let __storePromise = null;
+const __storeMap = new Map();
+
+async function loadStoreItems(client) {
+  if (__storeCache) return __storeCache;
+  if (__storePromise) return __storePromise;
+  __storePromise = (async () => {
+    try {
+      const { data, error } = await client
+        .from('custom_accessories')
+        .select('*')
+        .eq('is_published', true);
+      if (error) throw error;
+
+      const authorIds = [...new Set((data || []).map(i => i.user_id).filter(Boolean))];
+      let authorMap = {};
+      if (authorIds.length) {
+        const { data: profs } = await client
+          .from('profiles')
+          .select('id,username')
+          .in('id', authorIds);
+        for (const p of (profs || [])) authorMap[p.id] = p.username;
+      }
+
+      __storeCache = (data || []).map(i => ({
+        ...i,
+        author_name: authorMap[i.user_id] || 'unknown'
+      }));
+      __storeMap.clear();
+      for (const it of __storeCache) __storeMap.set(it.id, it);
+      __storeMap.set('default_face', DEFAULT_FACE);
+      console.log('[store] loaded', __storeCache.length, 'items');
+      return __storeCache;
+    } catch (e) {
+      console.warn('[store] load failed:', e);
+      __storeCache = [];
+      return __storeCache;
+    }
+  })();
+  return __storePromise;
+}
+
+function getStoreItemById(id) {
+  if (!id) return null;
+  if (id === 'default_face') return DEFAULT_FACE;
+  return __storeMap.get(id) || null;
+}
+
+/* ============================================================
+   MIGRATION — old flat equipped → arrays per slot
+   ============================================================ */
+function migrateEquipped(raw) {
+  const out = {
+    Head: [], Torso: [], Back: [],
+    LeftArm: [], RightArm: [], LeftLeg: [], RightLeg: [],
+    face: 'default_face',
+    shirt: null, tshirt: null, pants: null
+  };
+  if (!raw || typeof raw !== 'object') return out;
+
+  const legacyMap = {
+    hat: 'Head', torso_acc: 'Torso', cape: 'Back',
+    leftarm_acc: 'LeftArm', rightarm_acc: 'RightArm',
+    leftleg_acc: 'LeftLeg', rightleg_acc: 'RightLeg',
+    acc: 'Head'
+  };
+
+  for (const key of Object.keys(raw)) {
+    const val = raw[key];
+    if (!val) continue;
+
+    if (key === 'face') {
+      out.face = (typeof val === 'string' && val) ? val : 'default_face';
+    } else if (['shirt', 'tshirt', 'pants'].includes(key)) {
+      out[key] = typeof val === 'string' ? val : null;
+    } else if (legacyMap[key]) {
+      const target = legacyMap[key];
+      if (typeof val === 'string') out[target].push(val);
+      else if (Array.isArray(val)) out[target] = out[target].concat(val.filter(x => typeof x === 'string'));
+    } else if (ATTACH_SLOTS.includes(key)) {
+      if (typeof val === 'string') out[key].push(val);
+      else if (Array.isArray(val)) out[key] = out[key].concat(val.filter(x => typeof x === 'string'));
+    }
+  }
+
+  if (!out.face) out.face = 'default_face';
+  for (const slot of ATTACH_SLOTS) out[slot] = [...new Set(out[slot])];
+  return out;
+}
+
+/* ============================================================
+   ATLAS UV REMAP
+   ============================================================ */
+const CL_ATLAS_LAYOUT = [
+  { col: 1, row: 1 }, // +X
+  { col: 0, row: 1 }, // -X
+  { col: 0, row: 0 }, // +Y
+  { col: 1, row: 0 }, // -Y
+  { col: 0, row: 2 }, // +Z (front)
+  { col: 1, row: 2 }  // -Z (back)
+];
+
+function applyClothingAtlasUV(geo) {
+  const uv = geo.attributes.uv;
+  if (!uv) return;
+  const cols = 2, rows = 3;
+  for (let f = 0; f < 6; f++) {
+    const base = f * 4;
+    const { col, row } = CL_ATLAS_LAYOUT[f];
+    const u0 = col / cols, u1 = (col + 1) / cols;
+    const v0 = (2 - row) / rows, v1 = (3 - row) / rows;
+    for (let i = 0; i < 4; i++) {
+      const origU = uv.getX(base + i);
+      const origV = uv.getY(base + i);
+      uv.setXY(base + i, origU < 0.5 ? u0 : u1, origV < 0.5 ? v0 : v1);
+    }
+  }
+  uv.needsUpdate = true;
+}
+
+function getClothingAtlasForPart(item, partName) {
+  if (!item) return null;
+  const parts = item.parts;
+  if (Array.isArray(parts)) {
+    const hit = parts.find(p => (p.part || '').toLowerCase() === partName.toLowerCase());
+    if (hit) return hit.atlas_url || hit.texture_url || null;
+  } else if (parts && typeof parts === 'object') {
+    const v = parts[partName];
+    if (typeof v === 'string') return v;
+    if (v && typeof v === 'object') return v.atlas_url || v.texture_url || null;
+  }
+  return item.texture_url || null;
+}
+
+/* ============================================================
+   BUILD SHAPE MESH
+   ============================================================ */
+function buildShapeMesh(shape, color) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(color || '#888888'),
+    roughness: 0.55, metalness: 0.05
+  });
+  const g = new THREE.Group();
+  switch (shape) {
+    case 'box': g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat)); break;
+    case 'sphere': g.add(new THREE.Mesh(new THREE.SphereGeometry(0.6, 24, 16), mat)); break;
+    case 'cylinder': g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 24), mat)); break;
+    case 'cone': g.add(new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.1, 20), mat)); break;
+    case 'torus': g.add(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.2, 12, 24), mat)); break;
+    case 'hat_top': {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.3, 16), mat);
+      b.position.y = 0.75; g.add(b);
+      const br = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.1, 16), mat);
+      br.position.y = 0.1; g.add(br);
+      break;
+    }
+    case 'cap': {
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat));
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.72), mat);
+      bl.position.set(0, -0.02, -0.55);
+      g.add(bl);
+      break;
+    }
+    case 'crown': {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.45, 20), mat);
+      base.position.y = 0.22; g.add(base);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.55, 8), mat);
+        sp.position.set(Math.cos(a) * 0.6, 0.72, Math.sin(a) * 0.6);
+        g.add(sp);
+      }
+      const gem = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0xff2255, emissive: 0x661122, roughness: 0.3 })
+      );
+      gem.position.set(0, 0.25, 0.72); g.add(gem);
+      break;
+    }
+    case 'glasses': {
+      const m = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(color || '#333333'),
+        roughness: 0.3, metalness: 0.4
+      });
+      const lL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06), m);
+      lL.position.set(-0.35, 0, 0); g.add(lL);
+      const rL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.06), m);
+      rL.position.set(0.35, 0, 0); g.add(rL);
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.06), m));
+      break;
+    }
+    case 'cape': {
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.6, 2.4),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(color || '#cc0000'),
+          roughness: 0.85, side: THREE.DoubleSide
+        })
+      );
+      plane.position.set(0, 1.2, 0); g.add(plane);
+      break;
+    }
+    default: g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat));
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
+}
+
+/* ============================================================
+   GLTF + TEXTURE CACHES
+   ============================================================ */
+const __gltfCache = new Map();
+const __textureCache = new Map();
+
+async function loadGLTFCloned(url) {
+  if (__gltfCache.has(url)) {
+    const cached = __gltfCache.get(url);
+    return cached.scene.clone(true);
+  }
+  const loader = new GLTFLoader();
+  const gltf = await new Promise((res, rej) => loader.load(url, res, undefined, rej));
+  __gltfCache.set(url, gltf);
+  return gltf.scene.clone(true);
+}
+
+function loadTextureCached(url) {
+  if (!url) return Promise.resolve(null);
+  if (__textureCache.has(url)) return Promise.resolve(__textureCache.get(url));
+  return new Promise((resolve) => {
+    const loader = new THREE.TextureLoader();
+    loader.load(url, (t) => {
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.minFilter = THREE.LinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      t.generateMipmaps = false;
+      __textureCache.set(url, t);
+      resolve(t);
+    }, undefined, () => {
+      console.warn('[game] texture load failed:', url);
+      resolve(null);
+    });
+  });
+}
+
+/* ============================================================
+   BUILD ACCESSORY GROUP from item data
+   ============================================================ */
+async function buildAccessoryGroup(item) {
+  const group = new THREE.Group();
+  if (!item) return group;
+  if (['shirt', 'tshirt', 'pants', 'face'].includes(item.category)) return group;
+
+  const parts = Array.isArray(item.parts) && item.parts.length
+    ? item.parts
+    : (item.shape || item.model_url ? [{
+        shape: item.shape,
+        color: item.color,
+        model_url: item.model_url,
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: 1
+      }] : []);
+
+  for (const p of parts) {
+    let partGroup = null;
+
+    if (p.model_url) {
+      try {
+        const model = await loadGLTFCloned(p.model_url);
+        if (model) {
+          const box = new THREE.Box3().setFromObject(model);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          model.scale.setScalar(1.5 / maxDim);
+          const box2 = new THREE.Box3().setFromObject(model);
+          const center = box2.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+          if (p.color) {
+            model.traverse(o => {
+              if (o.isMesh && o.material && o.material.color && !o.material.map) {
+                if (Array.isArray(o.material)) o.material.forEach(m => m.color?.set(p.color));
+                else o.material.color.set(p.color);
+              }
+            });
+          }
+          model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          partGroup = new THREE.Group();
+          partGroup.add(model);
+        }
+      } catch (e) {
+        console.warn('[game] GLTF load failed, using shape fallback:', p.model_url);
+      }
+    }
+
+    if (!partGroup) {
+      partGroup = buildShapeMesh(p.shape || 'box', p.color || '#888888');
+    }
+
+    partGroup.position.set(p.position?.x || 0, p.position?.y || 0, p.position?.z || 0);
+    partGroup.rotation.set(
+      THREE.MathUtils.degToRad(p.rotation?.x || 0),
+      THREE.MathUtils.degToRad(p.rotation?.y || 0),
+      THREE.MathUtils.degToRad(p.rotation?.z || 0)
+    );
+    partGroup.scale.setScalar(p.scale || 1);
+    group.add(partGroup);
+  }
+
+  return group;
+}
 
 /* ============================================================
    2. UTILS
@@ -233,14 +565,18 @@ class PhysicsWorld {
 /* ============================================================
    4. CHARACTER
    ============================================================ */
-const SHARED_GEO = {
-  leg:   new THREE.BoxGeometry(1, 2, 1),
-  arm:   new THREE.BoxGeometry(1, 2, 1),
-  torso: new THREE.BoxGeometry(2, 2, 1),
-  head:  new THREE.BoxGeometry(1.25, 1.25, 1.25)
-};
+const SHARED_GEO = (() => {
+  const leg = new THREE.BoxGeometry(1, 2, 1);
+  applyClothingAtlasUV(leg);
+  const arm = new THREE.BoxGeometry(1, 2, 1);
+  applyClothingAtlasUV(arm);
+  const torso = new THREE.BoxGeometry(2, 2, 1);
+  applyClothingAtlasUV(torso);
+  const head = new THREE.BoxGeometry(1.25, 1.25, 1.25);
+  return { leg, arm, torso, head };
+})();
 
-/* ---------- Plain materials (cache) ---------- */
+/* ---------- Plain materials cache ---------- */
 const materialCache = new Map();
 function getPlainMaterial(color) {
   if (!materialCache.has(color)) {
@@ -249,7 +585,7 @@ function getPlainMaterial(color) {
   return materialCache.get(color);
 }
 
-/* ---------- Head materials (face only on the front) ---------- */
+/* ---------- Head materials (face only on front) ---------- */
 const faceMaterialCache = new Map();
 function getFaceMaterials(headColorHex) {
   if (faceMaterialCache.has(headColorHex)) return faceMaterialCache.get(headColorHex);
@@ -283,10 +619,14 @@ function getFaceMaterials(headColorHex) {
 }
 
 class Character {
-  constructor({ name, colors, isLocal = false, subtitle = 'ONLINE', subtitleColor = '#6fe36f' }) {
+  constructor({ name, colors, equippedItems, isLocal = false, subtitle = 'ONLINE', subtitleColor = '#6fe36f' }) {
     this.name = name;
     this.isLocal = isLocal;
     this.colors = Object.assign({}, NOOB_COLORS, colors || {});
+    this.equippedItems = equippedItems || null;
+    this._equipmentLoaded = false;
+    this._equipmentLoading = false;
+
     this.body = {
       pos: new THREE.Vector3(0, 0, 0),
       vel: new THREE.Vector3(0, 0, 0),
@@ -304,13 +644,15 @@ class Character {
     this.health = this.maxHealth;
     this.dead = false;
     this.lastDamageTime = -Infinity;
-    this.idleTime = Math.random() * 10; // desync idle between players
+    this.idleTime = Math.random() * 10;
 
     this._buildBody();
     this._buildNameTag(subtitle, subtitleColor);
   }
+
   _buildBody() {
     const c = this.colors, g = this.group;
+
     const matHead = getFaceMaterials(c.head);
     const matArmL = getPlainMaterial(c.leftArm);
     const matArmR = getPlainMaterial(c.rightArm);
@@ -319,33 +661,46 @@ class Character {
     const matLegR = getPlainMaterial(c.rightLeg);
 
     this.legL = new THREE.Group(); this.legL.position.set(-0.5, 2, 0);
-    const legLMesh = new THREE.Mesh(SHARED_GEO.leg, matLegL); legLMesh.position.y = -1;
+    const legLMesh = new THREE.Mesh(SHARED_GEO.leg, matLegL);
+    legLMesh.position.y = -1;
     legLMesh.castShadow = true; legLMesh.receiveShadow = true;
     this.legL.add(legLMesh); g.add(this.legL);
+    this._legLMesh = legLMesh;
 
     this.legR = new THREE.Group(); this.legR.position.set(0.5, 2, 0);
-    const legRMesh = new THREE.Mesh(SHARED_GEO.leg, matLegR); legRMesh.position.y = -1;
+    const legRMesh = new THREE.Mesh(SHARED_GEO.leg, matLegR);
+    legRMesh.position.y = -1;
     legRMesh.castShadow = true; legRMesh.receiveShadow = true;
     this.legR.add(legRMesh); g.add(this.legR);
+    this._legRMesh = legRMesh;
 
     const torso = new THREE.Mesh(SHARED_GEO.torso, matTorso);
-    torso.position.set(0, 3, 0); torso.castShadow = true; torso.receiveShadow = true;
-    g.add(torso); this.torsoMesh = torso;
+    torso.position.set(0, 3, 0);
+    torso.castShadow = true; torso.receiveShadow = true;
+    g.add(torso);
+    this.torsoMesh = torso;
 
     this.armL = new THREE.Group(); this.armL.position.set(-1.5, 4, 0);
-    const armLMesh = new THREE.Mesh(SHARED_GEO.arm, matArmL); armLMesh.position.y = -1;
+    const armLMesh = new THREE.Mesh(SHARED_GEO.arm, matArmL);
+    armLMesh.position.y = -1;
     armLMesh.castShadow = true; armLMesh.receiveShadow = true;
     this.armL.add(armLMesh); g.add(this.armL);
+    this._armLMesh = armLMesh;
 
     this.armR = new THREE.Group(); this.armR.position.set(1.5, 4, 0);
-    const armRMesh = new THREE.Mesh(SHARED_GEO.arm, matArmR); armRMesh.position.y = -1;
+    const armRMesh = new THREE.Mesh(SHARED_GEO.arm, matArmR);
+    armRMesh.position.y = -1;
     armRMesh.castShadow = true; armRMesh.receiveShadow = true;
     this.armR.add(armRMesh); g.add(this.armR);
+    this._armRMesh = armRMesh;
 
     const head = new THREE.Mesh(SHARED_GEO.head, matHead);
-    head.position.set(0, 4.625, 0); head.castShadow = true; head.receiveShadow = true;
-    g.add(head); this.headMesh = head;
+    head.position.set(0, 4.625, 0);
+    head.castShadow = true; head.receiveShadow = true;
+    g.add(head);
+    this.headMesh = head;
   }
+
   _buildNameTag(subtitle, subtitleColor) {
     const sprite = createNameSprite(this.name, {
       isLocal: this.isLocal,
@@ -355,6 +710,171 @@ class Character {
     this.group.add(sprite);
     this.nameSprite = sprite;
   }
+
+  /* ============================================================
+     EQUIPMENT LOADING
+     ============================================================ */
+  _getAttachPart(name) {
+    switch (name) {
+      case 'Head':     return this.headMesh;
+      case 'Torso':    return this.torsoMesh;
+      case 'Back':     return this.torsoMesh;
+      case 'LeftArm':  return this.armL;
+      case 'RightArm': return this.armR;
+      case 'LeftLeg':  return this.legL;
+      case 'RightLeg': return this.legR;
+      default:         return this.headMesh;
+    }
+  }
+
+  _applyClothingTexture(partKey, texture) {
+    let mesh = null;
+    switch (partKey) {
+      case 'torso':    mesh = this.torsoMesh; break;
+      case 'leftArm':  mesh = this._armLMesh; break;
+      case 'rightArm': mesh = this._armRMesh; break;
+      case 'leftLeg':  mesh = this._legLMesh; break;
+      case 'rightLeg': mesh = this._legRMesh; break;
+    }
+    if (!mesh || !texture) return;
+    const mat = mesh.material;
+    if (Array.isArray(mat)) {
+      mat.forEach(m => {
+        m.map = texture;
+        m.color.set(0xffffff);
+        m.needsUpdate = true;
+      });
+    } else {
+      mat.map = texture;
+      mat.color.set(0xffffff);
+      mat.needsUpdate = true;
+    }
+  }
+
+  async _applyFace(textureUrl) {
+    if (!this.headMesh || !textureUrl) return;
+    const headColorCss = '#' + this.colors.head.toString(16).padStart(6, '0');
+
+    const tex = await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = headColorCss;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const t = new THREE.CanvasTexture(canvas);
+          t.colorSpace = THREE.SRGBColorSpace;
+          t.minFilter = THREE.LinearFilter;
+          t.magFilter = THREE.LinearFilter;
+          t.generateMipmaps = false;
+          resolve(t);
+        } catch (e) {
+          console.warn('[game] face composite failed (CORS?)', e);
+          resolve(null);
+        }
+      };
+      img.onerror = () => {
+        console.warn('[game] face load failed:', textureUrl);
+        resolve(null);
+      };
+      img.src = textureUrl;
+    });
+
+    if (!tex) return;
+    const mats = this.headMesh.material;
+    if (Array.isArray(mats) && mats.length === 6) {
+      const newMats = mats.slice();
+      newMats[4] = new THREE.MeshLambertMaterial({ map: tex });
+      this.headMesh.material = newMats;
+    }
+  }
+
+  async loadEquipment() {
+    if (this._equipmentLoaded || this._equipmentLoading) return;
+    if (!this.equippedItems) { this._equipmentLoaded = true; return; }
+    this._equipmentLoading = true;
+
+    try {
+      const equipped = migrateEquipped(this.equippedItems);
+
+      /* ---- Face ---- */
+      const faceId = equipped.face;
+      if (faceId && faceId !== 'default_face') {
+        const faceItem = getStoreItemById(faceId);
+        if (faceItem && faceItem.texture_url) {
+          await this._applyFace(faceItem.texture_url);
+        }
+      }
+
+      /* ---- Clothing ---- */
+      const shirtId = equipped.shirt;
+      const tshirtId = equipped.tshirt;
+      const pantsId = equipped.pants;
+
+      const shirtItem = shirtId ? getStoreItemById(shirtId) : null;
+      const tshirtItem = tshirtId ? getStoreItemById(tshirtId) : null;
+      const pantsItem = pantsId ? getStoreItemById(pantsId) : null;
+
+      if (tshirtItem) {
+        const tex = await loadTextureCached(getClothingAtlasForPart(tshirtItem, 'torso'));
+        if (tex) this._applyClothingTexture('torso', tex);
+      } else if (shirtItem) {
+        const torsoTex = await loadTextureCached(getClothingAtlasForPart(shirtItem, 'torso'));
+        const armLTex = await loadTextureCached(getClothingAtlasForPart(shirtItem, 'leftArm'));
+        const armRTex = await loadTextureCached(getClothingAtlasForPart(shirtItem, 'rightArm'));
+        if (torsoTex) this._applyClothingTexture('torso', torsoTex);
+        if (armLTex) this._applyClothingTexture('leftArm', armLTex);
+        if (armRTex) this._applyClothingTexture('rightArm', armRTex);
+      }
+
+      if (pantsItem) {
+        const legLTex = await loadTextureCached(getClothingAtlasForPart(pantsItem, 'leftLeg'));
+        const legRTex = await loadTextureCached(getClothingAtlasForPart(pantsItem, 'rightLeg'));
+        if (legLTex) this._applyClothingTexture('leftLeg', legLTex);
+        if (legRTex) this._applyClothingTexture('rightLeg', legRTex);
+      }
+
+      /* ---- 3D accessories (MULTIPLE per slot) ---- */
+      for (const slot of ATTACH_SLOTS) {
+        const raw = equipped[slot];
+        const ids = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        for (const itemId of ids) {
+          if (!itemId) continue;
+          const item = getStoreItemById(itemId);
+          if (!item) continue;
+          if (['shirt', 'tshirt', 'pants', 'face'].includes(item.category)) continue;
+          try {
+            const accGroup = await buildAccessoryGroup(item);
+            accGroup.position.set(item.offset_x || 0, item.offset_y || 0, item.offset_z || 0);
+            accGroup.rotation.set(
+              THREE.MathUtils.degToRad(item.rot_x || 0),
+              THREE.MathUtils.degToRad(item.rot_y || 0),
+              THREE.MathUtils.degToRad(item.rot_z || 0)
+            );
+            accGroup.scale.setScalar(item.scale || 1);
+            const parent = this._getAttachPart(item.attach_part || slot);
+            if (parent) parent.add(accGroup);
+          } catch (e) {
+            console.warn('[game] accessory load failed:', itemId, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[game] loadEquipment error:', e);
+    }
+
+    this._equipmentLoaded = true;
+    this._equipmentLoading = false;
+  }
+
+  /* ============================================================
+     POSITION / VISIBILITY
+     ============================================================ */
   setPosition(x, y, z) {
     this.body.pos.set(x, y, z);
     this.body.vel.set(0, 0, 0);
@@ -363,7 +883,9 @@ class Character {
   setYaw(y) { this.visualYaw = y; this.targetYaw = y; this.group.rotation.y = y; }
   setVisible(v) { this.group.visible = v; }
 
-  /* ---------- HEALTH ---------- */
+  /* ============================================================
+     HEALTH
+     ============================================================ */
   takeDamage(amount) {
     if (this.dead) return false;
     const amt = Number(amount) || 0;
@@ -372,7 +894,7 @@ class Character {
     this.lastDamageTime = performance.now() / 1000;
     if (this.health <= CONFIG.health.deathThreshold) {
       this.health = 0;
-      return true; // died
+      return true;
     }
     return false;
   }
@@ -388,7 +910,9 @@ class Character {
     this.lastDamageTime = -Infinity;
   }
 
-  /* ---------- ANIMATION ---------- */
+  /* ============================================================
+     ANIMATION
+     ============================================================ */
   updateVisual(dt, horizontalSpeed) {
     const diff = shortAngleDist(this.visualYaw, this.targetYaw);
     this.visualYaw += diff * Math.min(1, dt * 12);
@@ -442,7 +966,7 @@ class Character {
 }
 
 /* ============================================================
-   4.5 RAGDOLL — detached parts with simple collision
+   4.5 RAGDOLL
    ============================================================ */
 class Ragdoll {
   constructor(character, scene, physics) {
@@ -599,7 +1123,7 @@ function createNameSprite(name, opts) {
 }
 
 /* ============================================================
-   6. STUD TEXTURE — Promise based, procedural fallback
+   6. STUD TEXTURE
    ============================================================ */
 const __texLoader = new THREE.TextureLoader();
 let __studBase = null;
@@ -687,22 +1211,8 @@ function getStudTexture(repeatX, repeatY) {
   return tex;
 }
 
-function makeStuddedMaterials(colorNum, sx, sz, transparency) {
-  const sideMat = new THREE.MeshLambertMaterial({ color: colorNum });
-  const topTex = getStudTexture(sx, sz);
-  const topMat = topTex
-    ? new THREE.MeshLambertMaterial({ color: colorNum, map: topTex })
-    : new THREE.MeshLambertMaterial({ color: colorNum });
-
-  if (transparency && transparency > 0) {
-    sideMat.transparent = true; sideMat.opacity = 1 - transparency;
-    topMat.transparent = true;  topMat.opacity = 1 - transparency;
-  }
-  return [sideMat, sideMat, topMat, sideMat, sideMat, sideMat];
-}
-
 /* ============================================================
-   GEOMETRY HELPERS — build correct geometry per Part kind
+   GEOMETRY HELPERS
    ============================================================ */
 function makeGeometryForPart(p) {
   const kind = p.kind || 'Part';
@@ -1153,25 +1663,33 @@ class RemotePlayer {
     this.isNPC = !!info.npc;
     this.isAdm = !!info.is_adm;
     this.colors = normalizeAvatarColors(info.avatar_colors || NOOB_COLORS);
+    this.equippedItems = info.equipped_items || null;
+
     this.character = new Character({
       name: info.name,
       colors: this.colors,
+      equippedItems: this.equippedItems,
       isLocal: false,
       subtitle: this.isNPC ? 'NPC' : (this.isAdm ? 'ADM' : 'ONLINE'),
       subtitleColor: this.isNPC ? '#8ac6ff' : (this.isAdm ? '#ff3b3b' : '#6fe36f')
     });
+
     this.character.setPosition(info.x, info.y, info.z);
     this.character.setYaw(info.yaw || 0);
     this.character.group.userData.playerId = info.id;
+
     this.targetPos = new THREE.Vector3(info.x, info.y, info.z);
     this.targetYaw = info.yaw || 0;
     this.hSpeed = 0;
     this.grounded = true;
 
-    /* remote health (not source of truth, just a visual mirror) */
     this.health = this.character.maxHealth;
     this.dead = false;
+
+    /* Load equipment asynchronously */
+    this.character.loadEquipment().catch(e => console.warn('[remote] equip load failed', e));
   }
+
   applyState(s) {
     this.targetPos.set(s.x, s.y, s.z);
     this.targetYaw = s.yaw;
@@ -1180,6 +1698,12 @@ class RemotePlayer {
     if (typeof s.hp === 'number') this.health = s.hp;
     if (typeof s.dead === 'boolean') this.dead = s.dead;
   }
+
+  applyEquipUpdate(equippedItems) {
+    this.equippedItems = equippedItems;
+    if (this.character) this.character.equippedItems = equippedItems;
+  }
+
   update(dt) {
     const c = this.character, body = c.body;
     const k = 1 - Math.exp(-14 * dt);
@@ -1190,7 +1714,10 @@ class RemotePlayer {
     body.vel.z = Math.cos(c.visualYaw) * this.hSpeed;
     c.updateVisual(dt, this.hSpeed);
   }
-  dispose(scene) { scene.remove(this.character.group); }
+
+  dispose(scene) {
+    scene.remove(this.character.group);
+  }
 }
 
 /* ============================================================
@@ -1207,6 +1734,7 @@ class Network {
     this.sendInterval = 0.05;
     this.username = 'Player';
     this.avatar_colors = null;
+    this.equipped_items = null;
     this.isAdm = false;
     this.room = 'default';
     this.userId = null;
@@ -1215,6 +1743,7 @@ class Network {
     this.onStatusChange = null;
     this.kicked = false;
   }
+
   connect() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${proto}//${location.host}/ws`;
@@ -1229,6 +1758,7 @@ class Network {
         type: 'join',
         name: this.username,
         avatar_colors: this.avatar_colors,
+        equipped_items: this.equipped_items || {},
         is_adm: this.isAdm,
         game: this.room,
         user_id: this.userId
@@ -1253,16 +1783,20 @@ class Network {
       }
     };
   }
+
   disconnect() {
     this.shouldReconnect = false;
     if (this.ws) { try { this.ws.close(); } catch {} }
   }
+
   _send(data) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try { this.ws.send(JSON.stringify(data)); } catch {}
     }
   }
+
   _setStatus(s) { if (this.onStatusChange) this.onStatusChange(s); }
+
   _handle(msg) {
     switch (msg.type) {
       case 'error':
@@ -1289,6 +1823,11 @@ class Network {
         this._removeRemote(msg.id);
         this.game._updateHudPlayers();
         break;
+      case 'player_equip': {
+        const rp = this.remotePlayers.get(msg.id);
+        if (rp) rp.applyEquipUpdate(msg.equipped_items);
+        break;
+      }
       case 'states':
         for (const s of msg.states) {
           if (s.id === this.id) continue;
@@ -1297,7 +1836,7 @@ class Network {
             rp = this._addRemote({
               id: s.id, name: 'Player_' + s.id, npc: s.npc,
               x: s.x, y: s.y, z: s.z, yaw: s.yaw,
-              avatar_colors: null, is_adm: false
+              avatar_colors: null, equipped_items: null, is_adm: false
             });
             this.game._updateHudPlayers();
           }
@@ -1309,6 +1848,7 @@ class Network {
         break;
     }
   }
+
   _addRemote(info) {
     const existing = this.remotePlayers.get(info.id);
     if (existing) return existing;
@@ -1317,12 +1857,14 @@ class Network {
     this.remotePlayers.set(info.id, rp);
     return rp;
   }
+
   _removeRemote(id) {
     const rp = this.remotePlayers.get(id);
     if (!rp) return;
     rp.dispose(this.game.scene);
     this.remotePlayers.delete(id);
   }
+
   sendState() {
     const p = this.game.player.body;
     this._send({
@@ -1336,7 +1878,9 @@ class Network {
       dead: !!this.game.player.dead
     });
   }
+
   sendChat(text) { this._send({ type: 'chat', text }); }
+
   update(dt) {
     for (const rp of this.remotePlayers.values()) rp.update(dt);
     if (this.connected) {
@@ -1344,6 +1888,7 @@ class Network {
       if (this.sendTimer >= this.sendInterval) { this.sendTimer = 0; this.sendState(); }
     }
   }
+
   get realPlayerCount() {
     let n = 0;
     for (const rp of this.remotePlayers.values()) if (!rp.isNPC) n++;
@@ -1352,18 +1897,27 @@ class Network {
 }
 
 /* ============================================================
-   10. CHAT (with command support)
+   10. CHAT (with scroll fix)
    ============================================================ */
 class ChatSystem {
   constructor() {
     this.el = document.getElementById('chat');
     this.messagesEl = document.getElementById('chat-messages');
     this.inputEl = document.getElementById('chat-input');
-    this.maxMessages = 9;
+    this.maxMessages = 200;
     this.onOpen = null;
     this.onClose = null;
     this.onPlayerMessage = null;
     this.onCommand = null;
+    this._userScrolled = false;
+    this._scrollThreshold = 40;
+
+    /* Track when user scrolls up so we don't auto-scroll and steal their position */
+    this.messagesEl.addEventListener('scroll', () => {
+      const el = this.messagesEl;
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      this._userScrolled = distanceFromBottom > this._scrollThreshold;
+    });
 
     this.inputEl.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -1391,7 +1945,9 @@ class ChatSystem {
       }
     });
   }
+
   isFocused() { return document.activeElement === this.inputEl; }
+
   open() {
     this.el.classList.add('open');
     this.inputEl.value = '';
@@ -1399,11 +1955,13 @@ class ChatSystem {
     if (document.pointerLockElement) document.exitPointerLock();
     if (this.onOpen) this.onOpen();
   }
+
   close() {
     this.el.classList.remove('open');
     this.inputEl.blur();
     if (this.onClose) this.onClose();
   }
+
   addMessage(name, text, color = '#ffffff') {
     const div = document.createElement('div');
     div.className = 'chat-msg';
@@ -1413,10 +1971,18 @@ class ChatSystem {
     nameSpan.textContent = name + ': ';
     const textSpan = document.createElement('span');
     textSpan.textContent = text;
-    div.appendChild(nameSpan); div.appendChild(textSpan);
+    div.appendChild(nameSpan);
+    div.appendChild(textSpan);
     this.messagesEl.appendChild(div);
+
+    /* Trim old messages to prevent unbounded growth */
     while (this.messagesEl.children.length > this.maxMessages) {
       this.messagesEl.removeChild(this.messagesEl.firstChild);
+    }
+
+    /* Auto-scroll only if the user hasn't scrolled up */
+    if (!this._userScrolled) {
+      this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
     }
   }
 }
@@ -1476,6 +2042,7 @@ class EscMenu {
     this.isOpen = false;
     this._bind();
   }
+
   _bind() {
     document.getElementById('esc-close').addEventListener('click', () => this.hide());
     document.querySelectorAll('.esc-tab').forEach(t => {
@@ -1529,22 +2096,26 @@ class EscMenu {
       if (h) h.style.visibility = fps.checked ? 'visible' : 'hidden';
     });
   }
+
   _selectTab(name) {
     document.querySelectorAll('.esc-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     document.querySelectorAll('.esc-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
     if (name === 'players') this._renderPlayers();
   }
+
   show() {
     this.isOpen = true;
     this.el.classList.add('open');
     if (document.pointerLockElement) document.exitPointerLock();
     this._selectTab('players');
   }
+
   hide() {
     this.isOpen = false;
     this.el.classList.remove('open');
     this.game._requestLock();
   }
+
   toggle() { this.isOpen ? this.hide() : this.show(); }
 
   async _renderPlayers() {
@@ -1846,8 +2417,6 @@ class TouchControls {
     }
     this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
 
-    // X maps directly (right = strafe right)
-    // Y is INVERTED: pushing up (negative dy) = forward (positive touchMoveZ)
     this.game.input.touchMoveX = dx / max;
     this.game.input.touchMoveZ = -dy / max;
   }
@@ -2010,9 +2579,12 @@ class Game {
 
   _setupPlayer() {
     const colors = avatarColorsFromProfile(this.profile);
+    const equippedItems = this.profile?.equipped_items || null;
+
     this.player = new Character({
       name: this.username,
       colors,
+      equippedItems,
       isLocal: true,
       subtitle: this.profile?.is_adm ? 'ADM' : 'YOU',
       subtitleColor: this.profile?.is_adm ? '#ff3b3b' : '#ffd24a'
@@ -2020,6 +2592,9 @@ class Game {
     this.player.setPosition(0, 3, 12);
     this.player.setYaw(Math.PI);
     this.scene.add(this.player.group);
+
+    /* Load equipment (async, non-blocking) */
+    this.player.loadEquipment().catch(e => console.warn('[game] equipment load failed', e));
   }
 
   _setupNetwork() {
@@ -2027,6 +2602,7 @@ class Game {
     this.network.onStatusChange = (s) => this.hud.setConnection(s);
     this.network.username = this.username;
     this.network.avatar_colors = this.profile?.avatar_colors || null;
+    this.network.equipped_items = migrateEquipped(this.profile?.equipped_items);
     this.network.isAdm = !!this.profile?.is_adm;
     this.network.room = this.gameRow.slug || 'default';
     this.network.userId = this.profile?.id || null;
@@ -2078,10 +2654,6 @@ class Game {
     this.hud.setPlayers(1 + remote);
   }
 
-  /* ============================================================
-     HEALTH BAR (dynamically created, Roblox-style)
-     — positioned on the RIGHT side of the screen
-     ============================================================ */
   _setupHealthBar() {
     if (document.getElementById('health-bar')) {
       this.healthFill = document.getElementById('health-fill');
@@ -2133,9 +2705,6 @@ class Game {
     else               this.healthFill.style.background = 'linear-gradient(180deg,#ff7b7b 0%,#b02020 100%)';
   }
 
-  /* ============================================================
-     Particle burst
-     ============================================================ */
   _spawnBurst(pos, count = 40) {
     const colors = [0xf5cd30, 0x0d69ac, 0x4b974b, 0xa3a2a5, 0xff4444];
     for (let i = 0; i < count; i++) {
@@ -2159,9 +2728,6 @@ class Game {
     }
   }
 
-  /* ============================================================
-     DAMAGE / DEATH / RESPAWN
-     ============================================================ */
   damagePlayer(amount) {
     if (!this.player || this.player.dead) return;
     const died = this.player.takeDamage(amount);
@@ -2174,14 +2740,11 @@ class Game {
     this.player.dead = true;
     this.input.clear();
 
-    // Spawn ragdoll
     if (this.ragdoll) { try { this.ragdoll.dispose(); } catch(_) {} this.ragdoll = null; }
     this.ragdoll = new Ragdoll(this.player, this.scene, this.physics);
 
-    // Hide original body (name tag goes with it)
     this.player.setVisible(false);
 
-    // Particle burst at death point
     const p = this.player.body.pos.clone();
     p.y += 3;
     this._spawnBurst(p, 50);
@@ -2211,9 +2774,6 @@ class Game {
     this._requestLock();
   }
 
-  /* ============================================================
-     Chat commands
-     ============================================================ */
   _handleChatCommand(cmd, args) {
     if (cmd === 'damage' || cmd === 'dmg') {
       const amt = parseFloat(args[0]);
@@ -2425,7 +2985,6 @@ class Game {
     if (len > 0.01) this.player.targetYaw = Math.atan2(moveX, moveZ);
   }
 
-  /* Passive health regeneration */
   _updateHealthRegen(dt) {
     if (!this.player || this.player.dead) return;
     if (this.player.health >= this.player.maxHealth) return;
@@ -2579,6 +3138,9 @@ class Game {
       setTimeout(() => { location.href = 'index.html'; }, 1800);
       return;
     }
+
+    statusEl.textContent = 'Loading store items...';
+    await loadStoreItems(sb);
 
     statusEl.textContent = 'Starting engine...';
     const game = new Game({ gameRow, profile });

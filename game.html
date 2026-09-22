@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en>
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -10,7 +10,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
 </script>
 
 <style>
@@ -33,7 +38,6 @@
   #no-inspect{position:fixed;inset:0;background:#0a0a0f;color:#ff5555;z-index:99999;display:none;align-items:center;justify-content:center;font-family:'Arial Black',sans-serif;font-size:22px;text-align:center;padding:40px}
   #no-inspect.show{display:flex}
 
-  /* Error overlay */
   #error-overlay{position:fixed;inset:0;background:rgba(10,14,24,.9);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px;font-family:Verdana,Arial,sans-serif}
   #error-overlay.show{display:flex}
   .error-box{background:#161b26;border:3px outset #4a7ab8;border-radius:10px;max-width:520px;width:100%;padding:28px 26px;box-shadow:0 20px 60px rgba(0,0,0,.8);text-align:center;color:#e6ecf5}
@@ -44,7 +48,6 @@
   .error-box button:hover{filter:brightness(1.08)}
   .error-box button:active{border-style:inset}
 
-  /* ESC MENU */
   #esc-menu{position:fixed;inset:0;background:rgba(6,12,22,.82);z-index:200;display:none;align-items:center;justify-content:center;padding:20px;font-family:Verdana,Arial,sans-serif}
   #esc-menu.open{display:flex}
   .esc-box{background:#161b26;border:2px solid #2c3648;border-radius:10px;width:100%;max-width:820px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;color:#e6ecf5;box-shadow:0 20px 60px rgba(0,0,0,.75)}
@@ -100,9 +103,6 @@
   .esc-empty{text-align:center;padding:30px;color:#6d7d94;font-style:italic;font-size:13px}
   .esc-hint{color:#8fa3bf;font-size:12px;margin-bottom:14px;line-height:1.6}
 
-  /* ============================================================
-     TOUCH CONTROLS (mobile only)
-     ============================================================ */
   #touch-controls {
     display: none;
     position: fixed;
@@ -113,7 +113,6 @@
   }
   body.touch-mode #touch-controls { display: block; }
 
-  /* Joystick touch area — bottom-left */
   #joystick-zone {
     position: absolute;
     left: 0; bottom: 0;
@@ -122,7 +121,6 @@
     touch-action: none;
   }
 
-  /* Camera drag area — right half */
   #camera-zone {
     position: absolute;
     right: 0; top: 0;
@@ -131,7 +129,6 @@
     touch-action: none;
   }
 
-  /* Floating joystick base */
   #joystick-base {
     position: absolute;
     width: 140px; height: 140px;
@@ -158,7 +155,6 @@
     will-change: transform;
   }
 
-  /* Buttons */
   .touch-btn {
     position: absolute;
     pointer-events: auto;
@@ -211,7 +207,6 @@
     border-radius: 10px;
   }
 
-  /* Hide keyboard hint + controls on mobile */
   body.touch-mode .hud-controls { display: none; }
   body.touch-mode #crosshair { opacity: .7; }
   body.touch-mode #chat-hint { display: none; }
@@ -237,7 +232,6 @@
   }
   body.touch-mode #hud .hud-key { font-size: 10px; }
 
-  /* ESC menu on mobile */
   @media (max-width: 780px) {
     .esc-box { max-width: 100%; max-height: 96vh; border-radius: 6px; }
     .esc-header { padding: 10px 14px; }
@@ -259,7 +253,6 @@
     .esc-player .pbtn { padding: 7px 10px; font-size: 10px; }
   }
 
-  /* Small phones */
   @media (max-width: 420px) {
     #btn-jump { width: 92px; height: 92px; bottom: 22px; right: 22px; font-size: 14px; }
     #btn-chat { width: 46px; height: 46px; top: 12px; right: 68px; font-size: 18px; }
@@ -307,9 +300,6 @@
   <input id="chat-input" type="text" maxlength="90" autocomplete="off" spellcheck="false" placeholder="Type a message..." />
 </div>
 
-<!-- ============================================================
-     TOUCH CONTROLS (shown only on mobile / touch devices)
-     ============================================================ -->
 <div id="touch-controls">
   <div id="joystick-zone"></div>
   <div id="camera-zone"></div>
@@ -321,7 +311,6 @@
   <button id="btn-menu" class="touch-btn" aria-label="Menu">☰</button>
 </div>
 
-<!-- ============ ERROR OVERLAY ============ -->
 <div id="error-overlay">
   <div class="error-box">
     <div class="icon">!</div>
@@ -331,7 +320,6 @@
   </div>
 </div>
 
-<!-- ============ ESC MENU ============ -->
 <div id="esc-menu">
   <div class="esc-box">
     <div class="esc-header">
@@ -420,7 +408,6 @@
 
 <script type="module" src="game.js"></script>
 <script>
-/* Anti-inspect */
 /*(function(){
  const block=document.getElementById('no-inspect');let triggered=false;
   const trigger=()=>{if(triggered)return;triggered=true;block.classList.add('show');try{document.body.innerHTML=''}catch(e){}try{window.location.replace('about:blank')}catch(e){}setTimeout(()=>{try{window.close()}catch(e){}},100)};
@@ -434,9 +421,8 @@
   setInterval(()=>{const t0=performance.now();debugger;if(performance.now()-t0>120)trigger()},1200);
   let lW=window.outerWidth-window.innerWidth,lH=window.outerHeight-window.innerHeight;
   setInterval(()=>{const w=window.outerWidth-window.innerWidth,h=window.outerHeight-window.innerHeight;if((w>200&&w!==lW)||(h>200&&h!==lH))trigger();lW=w;lH=h},1500);
-})();
+})();*/
 
-/* Error overlay back button */
 document.getElementById('error-back').addEventListener('click', () => {
   window.location.href = 'index.html';
 });
