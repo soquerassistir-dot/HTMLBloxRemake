@@ -123,7 +123,7 @@ function getStoreItemById(id) {
 }
 
 /* ============================================================
-   MIGRATION — old flat equipped → arrays per slot
+   MIGRATION
    ============================================================ */
 function migrateEquipped(raw) {
   const out = {
@@ -168,12 +168,12 @@ function migrateEquipped(raw) {
    ATLAS UV REMAP
    ============================================================ */
 const CL_ATLAS_LAYOUT = [
-  { col: 1, row: 1 }, // +X
-  { col: 0, row: 1 }, // -X
-  { col: 0, row: 0 }, // +Y
-  { col: 1, row: 0 }, // -Y
-  { col: 0, row: 2 }, // +Z (front)
-  { col: 1, row: 2 }  // -Z (back)
+  { col: 1, row: 1 },
+  { col: 0, row: 1 },
+  { col: 0, row: 0 },
+  { col: 1, row: 0 },
+  { col: 0, row: 2 },
+  { col: 1, row: 2 }
 ];
 
 function applyClothingAtlasUV(geo) {
@@ -319,7 +319,7 @@ function loadTextureCached(url) {
 }
 
 /* ============================================================
-   BUILD ACCESSORY GROUP from item data
+   BUILD ACCESSORY GROUP
    ============================================================ */
 async function buildAccessoryGroup(item) {
   const group = new THREE.Group();
@@ -576,20 +576,19 @@ const SHARED_GEO = (() => {
   return { leg, arm, torso, head };
 })();
 
-/* ---------- Plain materials cache ---------- */
-const materialCache = new Map();
+/* ============================================================
+   MATERIAL FACTORIES
+   ============================================================
+   IMPORTANTE: cada chamada DEVE retornar um material NOVO.
+   Nunca cachear por cor, senão aplicar uma textura em uma parte
+   afeta todas as outras partes com a mesma cor base.
+   ============================================================ */
 function getPlainMaterial(color) {
-  if (!materialCache.has(color)) {
-    materialCache.set(color, new THREE.MeshLambertMaterial({ color }));
-  }
-  return materialCache.get(color);
+  return new THREE.MeshLambertMaterial({ color });
 }
 
-/* ---------- Head materials (face only on front) ---------- */
-const faceMaterialCache = new Map();
-function getFaceMaterials(headColorHex) {
-  if (faceMaterialCache.has(headColorHex)) return faceMaterialCache.get(headColorHex);
-
+/* Face materials factory — array sempre novo */
+function makeFaceMaterials(headColorHex) {
   const c = document.createElement('canvas');
   c.width = 128; c.height = 128;
   const ctx = c.getContext('2d');
@@ -611,11 +610,38 @@ function getFaceMaterials(headColorHex) {
   const faceMat  = new THREE.MeshLambertMaterial({ map: tex });
   const plainMat = new THREE.MeshLambertMaterial({ color: headColorHex });
 
-  // BoxGeometry face order: +X, -X, +Y, -Y, +Z (front), -Z (back)
-  const mats = [plainMat, plainMat, plainMat, plainMat, faceMat, plainMat];
+  return [plainMat, plainMat, plainMat, plainMat, faceMat, plainMat];
+}
 
-  faceMaterialCache.set(headColorHex, mats);
-  return mats;
+/* ============================================================
+   FACE COMPOSITE
+   ============================================================ */
+function compositeFaceOnHeadColor(faceUrl, headColorCss, size = 256) {
+  return new Promise((resolve) => {
+    if (!faceUrl) { resolve(null); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = headColorCss || '#f5cd30';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas);
+      } catch (e) {
+        console.warn('[game] face composite failed (CORS?)', e);
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      console.warn('[game] face load failed:', faceUrl);
+      resolve(null);
+    };
+    img.src = faceUrl;
+  });
 }
 
 class Character {
@@ -653,7 +679,8 @@ class Character {
   _buildBody() {
     const c = this.colors, g = this.group;
 
-    const matHead = getFaceMaterials(c.head);
+    /* Cada parte tem seus PRÓPRIOS materiais (sem cache) */
+    const matHeadArr = makeFaceMaterials(c.head);
     const matArmL = getPlainMaterial(c.leftArm);
     const matArmR = getPlainMaterial(c.rightArm);
     const matTorso = getPlainMaterial(c.torso);
@@ -694,7 +721,7 @@ class Character {
     this.armR.add(armRMesh); g.add(this.armR);
     this._armRMesh = armRMesh;
 
-    const head = new THREE.Mesh(SHARED_GEO.head, matHead);
+    const head = new THREE.Mesh(SHARED_GEO.head, matHeadArr);
     head.position.set(0, 4.625, 0);
     head.castShadow = true; head.receiveShadow = true;
     g.add(head);
@@ -737,17 +764,27 @@ class Character {
       case 'rightLeg': mesh = this._legRMesh; break;
     }
     if (!mesh || !texture) return;
-    const mat = mesh.material;
-    if (Array.isArray(mat)) {
-      mat.forEach(m => {
-        m.map = texture;
-        m.color.set(0xffffff);
-        m.needsUpdate = true;
-      });
+
+    /* Substitui o material por um novo com a textura aplicada */
+    const oldMat = mesh.material;
+    const newMat = new THREE.MeshLambertMaterial({
+      map: texture,
+      color: 0xffffff
+    });
+
+    /* Se for array (head), preserva os outros slots */
+    if (Array.isArray(oldMat)) {
+      const newMats = oldMat.map(m => m);
+      newMats[0] = newMat;
+      newMats[1] = newMat;
+      newMats[2] = newMat;
+      newMats[3] = newMat;
+      newMats[4] = newMat;
+      newMats[5] = newMat;
+      mesh.material = newMats;
     } else {
-      mat.map = texture;
-      mat.color.set(0xffffff);
-      mat.needsUpdate = true;
+      if (oldMat && oldMat.map) oldMat.map.dispose();
+      mesh.material = newMat;
     }
   }
 
@@ -755,39 +792,18 @@ class Character {
     if (!this.headMesh || !textureUrl) return;
     const headColorCss = '#' + this.colors.head.toString(16).padStart(6, '0');
 
-    const tex = await new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = 256;
-          canvas.height = 256;
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = headColorCss;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const t = new THREE.CanvasTexture(canvas);
-          t.colorSpace = THREE.SRGBColorSpace;
-          t.minFilter = THREE.LinearFilter;
-          t.magFilter = THREE.LinearFilter;
-          t.generateMipmaps = false;
-          resolve(t);
-        } catch (e) {
-          console.warn('[game] face composite failed (CORS?)', e);
-          resolve(null);
-        }
-      };
-      img.onerror = () => {
-        console.warn('[game] face load failed:', textureUrl);
-        resolve(null);
-      };
-      img.src = textureUrl;
-    });
+    const faceCanvas = await compositeFaceOnHeadColor(textureUrl, headColorCss, 256);
+    if (!faceCanvas) return;
 
-    if (!tex) return;
+    const tex = new THREE.CanvasTexture(faceCanvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+
     const mats = this.headMesh.material;
     if (Array.isArray(mats) && mats.length === 6) {
+      /* Cria um array NOVO apenas para esta cabeça */
       const newMats = mats.slice();
       newMats[4] = new THREE.MeshLambertMaterial({ map: tex });
       this.headMesh.material = newMats;
@@ -839,7 +855,7 @@ class Character {
         if (legRTex) this._applyClothingTexture('rightLeg', legRTex);
       }
 
-      /* ---- 3D accessories (MULTIPLE per slot) ---- */
+      /* ---- 3D accessories (multiple per slot) ---- */
       for (const slot of ATTACH_SLOTS) {
         const raw = equipped[slot];
         const ids = Array.isArray(raw) ? raw : (raw ? [raw] : []);
@@ -945,7 +961,6 @@ class Character {
       this.armL.rotation.z = damp(this.armL.rotation.z, 0, 8, dt);
       this.armR.rotation.z = damp(this.armR.rotation.z, 0, 8, dt);
     } else {
-      /* ---------- IDLE ---------- */
       this.idleTime += dt;
       const breath = Math.sin(this.idleTime * 1.9) * 0.05;
       const swayX  = Math.sin(this.idleTime * 0.8) * 0.07;
@@ -1686,7 +1701,6 @@ class RemotePlayer {
     this.health = this.character.maxHealth;
     this.dead = false;
 
-    /* Load equipment asynchronously */
     this.character.loadEquipment().catch(e => console.warn('[remote] equip load failed', e));
   }
 
@@ -1897,7 +1911,7 @@ class Network {
 }
 
 /* ============================================================
-   10. CHAT (with scroll fix)
+   10. CHAT
    ============================================================ */
 class ChatSystem {
   constructor() {
@@ -1912,7 +1926,6 @@ class ChatSystem {
     this._userScrolled = false;
     this._scrollThreshold = 40;
 
-    /* Track when user scrolls up so we don't auto-scroll and steal their position */
     this.messagesEl.addEventListener('scroll', () => {
       const el = this.messagesEl;
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -1975,12 +1988,10 @@ class ChatSystem {
     div.appendChild(textSpan);
     this.messagesEl.appendChild(div);
 
-    /* Trim old messages to prevent unbounded growth */
     while (this.messagesEl.children.length > this.maxMessages) {
       this.messagesEl.removeChild(this.messagesEl.firstChild);
     }
 
-    /* Auto-scroll only if the user hasn't scrolled up */
     if (!this._userScrolled) {
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
     }
@@ -2593,7 +2604,6 @@ class Game {
     this.player.setYaw(Math.PI);
     this.scene.add(this.player.group);
 
-    /* Load equipment (async, non-blocking) */
     this.player.loadEquipment().catch(e => console.warn('[game] equipment load failed', e));
   }
 
