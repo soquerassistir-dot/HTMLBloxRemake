@@ -363,6 +363,109 @@
     .purchase-thumb{height:130px}
   }
   @media(max-width:420px){.game-grid,.friends-grid,.requests-grid,.item-grid{grid-template-columns:1fr}}
+
+  /* ============================================================
+     PROFILE BADGES
+     ============================================================ */
+  .profile-badges{
+    margin-top:20px;
+    background:#fff;
+    border:1px solid #c8c8c8;
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .profile-badges-title{
+    background:linear-gradient(180deg,#4a7ab8 0%,#356198 100%);
+    color:#fff;
+    font-size:12px;
+    font-weight:bold;
+    padding:9px 14px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    border-bottom:1px solid #0a2450;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .profile-badges-title .count{
+    color:#cfe0f5;
+    font-size:10px;
+    font-weight:normal;
+    text-transform:none;
+    letter-spacing:0;
+  }
+  .profile-badges-body{
+    padding:18px;
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    align-items:flex-start;
+  }
+  .profile-badge-card{
+    width:120px;
+    min-height:146px;
+    padding:12px 8px 10px;
+    background:linear-gradient(180deg,#fff 0%,#f0f0f0 100%);
+    border:1px solid #c8c8c8;
+    border-radius:6px;
+    text-align:center;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    transition:.12s;
+  }
+  .profile-badge-card:hover{
+    border-color:#4a7ab8;
+    background:#f5f9fe;
+    box-shadow:0 0 0 2px rgba(74,122,184,.18);
+    transform:translateY(-2px);
+  }
+  .profile-badge-icon-wrap{
+    width:82px;
+    height:82px;
+    margin-bottom:9px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .profile-badge-icon{
+    width:82px;
+    height:82px;
+    display:block;
+    object-fit:contain;
+  }
+  .profile-badge-name{
+    width:100%;
+    color:#003366;
+    font-size:11px;
+    line-height:1.2;
+    font-weight:bold;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .profile-badge-desc{
+    width:100%;
+    margin-top:4px;
+    color:#777;
+    font-size:8px;
+    line-height:1.25;
+  }
+  .profile-badges-empty{
+    padding:22px;
+    color:#888;
+    font-size:11px;
+    font-style:italic;
+    width:100%;
+    text-align:center;
+  }
+  @media(max-width:600px){
+    .profile-badges-body{justify-content:center;padding:14px}
+    .profile-badge-card{width:112px;min-height:140px}
+    .profile-badge-icon-wrap,.profile-badge-icon{width:76px;height:76px}
+  }
+
 </style>
 </head>
 <body>
@@ -612,6 +715,16 @@
                 </div>
               </div>
             </div>
+
+            <section class="profile-badges" id="profile-badges-section">
+              <div class="profile-badges-title">
+                <span>Badges</span>
+                <span class="count" id="profile-badges-count">0 badges</span>
+              </div>
+              <div class="profile-badges-body" id="profile-badges-list">
+                <div class="profile-badges-empty">Loading badges...</div>
+              </div>
+            </section>
           </div>
         </section>
       </div>
@@ -707,6 +820,16 @@
                   <span style="font-size:11px;font-family:inherit;font-weight:bold">Blox</span>
                 </div>
                 <div class="userpage-actions" id="userprofile-actions"></div>
+
+                <section class="profile-badges" id="userprofile-badges-section">
+                  <div class="profile-badges-title">
+                    <span>Badges</span>
+                    <span class="count" id="userprofile-badges-count">0 badges</span>
+                  </div>
+                  <div class="profile-badges-body" id="userprofile-badges-list">
+                    <div class="profile-badges-empty">Loading badges...</div>
+                  </div>
+                </section>
 
                 <div class="userpage-section">
                   <div class="userpage-section-title">
@@ -2185,6 +2308,81 @@ $('detail-play').addEventListener('click',()=>{
   window.location.href='/game.html?game='+encodeURIComponent(g.slug);
 });
 
+
+/* ============================================================
+   PROFILE BADGES
+   ============================================================ */
+const BADGE_DEFINITIONS = {
+  administrator: {
+    name: 'Administrator',
+    description: 'Official HTMLBlox administrator',
+    icon: 'badges/administrator.png'
+  },
+  official: {
+    name: 'Official',
+    description: 'Official HTMLBlox team member',
+    icon: 'badges/official.png'
+  },
+  veteran: {
+    name: 'Veteran',
+    description: 'Member of HTMLBlox for 1 year',
+    icon: 'badges/veteran.png'
+  },
+  famous: {
+    name: 'Famous',
+    description: 'A game reached 100+ visits',
+    icon: 'badges/famous.png'
+  },
+  developer: {
+    name: 'Developer',
+    description: 'Published at least one game',
+    icon: 'badges/developer.png'
+  }
+};
+
+function renderProfileBadges(containerId,countId,badges){
+  const container=$(containerId);
+  const countEl=$(countId);
+  if(!container)return;
+
+  const earned=Object.entries(BADGE_DEFINITIONS)
+    .filter(([key])=>badges && badges[key]===true);
+
+  if(countEl){
+    countEl.textContent=earned.length+' '+(earned.length===1?'badge':'badges');
+  }
+
+  if(!earned.length){
+    container.innerHTML='<div class="profile-badges-empty">No badges earned yet.</div>';
+    return;
+  }
+
+  container.innerHTML=earned.map(([key,b])=>
+    '<div class="profile-badge-card" title="'+esc(b.description)+'">'+
+      '<div class="profile-badge-icon-wrap">'+
+        '<img class="profile-badge-icon" src="'+esc(b.icon)+'" alt="'+esc(b.name)+'" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.textContent=\'BADGE\'">'+
+      '</div>'+
+      '<div class="profile-badge-name">'+esc(b.name)+'</div>'+
+      '<div class="profile-badge-desc">'+esc(b.description)+'</div>'+
+    '</div>'
+  ).join('');
+}
+
+async function loadProfileBadges(profileId){
+  if(!profileId)return{};
+  try{
+    const {data,error}=await sb.rpc('get_profile_badges',{p_profile_id:profileId});
+    if(error){
+      console.warn('Badge RPC failed:',error.message);
+      return{};
+    }
+    return data || {};
+  }catch(e){
+    console.warn('Badge loading failed:',e);
+    return{};
+  }
+}
+
 async function renderProfilePage(){
   if(!state.profile)return;
   const p=state.profile;
@@ -2195,6 +2393,9 @@ async function renderProfilePage(){
   await mountAvatar3D($('profile-avatar-3d'),p.avatar_colors,{autoRotate:true,interactive:true,equipped:state.equipped});
   $('profile-blox').textContent = state.blox;
   $('profile-streak').textContent = p.daily_streak || 0;
+
+  const badges=await loadProfileBadges(p.id);
+  renderProfileBadges('profile-badges-list','profile-badges-count',badges);
 }
 
 let _editorViewer=null,_editorRot=0;
@@ -2845,6 +3046,9 @@ async function renderUserProfilePage(userIdOrDisplayId, pushUrl = true) {
   $('userprofile-id').textContent = '#' + (prof.display_id || '0');
   $('userprofile-joined').textContent = fmtDate(prof.created_at);
   $('userprofile-blox').textContent = (prof.blox || 0).toLocaleString();
+
+  const publicBadges=await loadProfileBadges(prof.id);
+  renderProfileBadges('userprofile-badges-list','userprofile-badges-count',publicBadges);
 
   state.avatarViewers.get(avEl)?.dispose?.();
   state.avatarViewers.delete(avEl);
